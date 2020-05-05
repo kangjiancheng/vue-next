@@ -58,6 +58,7 @@ const packageConfigs = process.env.PROD_ONLY
   ? []
   : packageFormats.map(format => createConfig(format, outputConfigs[format]))
 
+// 创建 xxx.prod.js 版本（构建工具如webpack 执行构建时，判断NODE_ENV='production'时，调用已构建压缩的prod.js版本）
 if (process.env.NODE_ENV === 'production') {
   packageFormats.forEach(format => {
     if (packageOptions.prod === false) {
