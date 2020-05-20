@@ -10,7 +10,8 @@ import {
   isSameVNodeType,
   Static,
   VNodeNormalizedRef,
-  VNodeHook
+  VNodeHook,
+  isVNode
 } from './vnode'
 import {
   ComponentInternalInstance,
@@ -33,7 +34,8 @@ import {
   ShapeFlags,
   NOOP,
   hasOwn,
-  invokeArrayFns
+  invokeArrayFns,
+  isArray
 } from '@vue/shared'
 import {
   queueJob,
@@ -114,7 +116,7 @@ export interface RendererOptions<
     parent: HostElement,
     anchor: HostNode | null,
     isSVG: boolean
-  ): HostElement
+  ): HostElement[]
 }
 
 // Renderer Node can technically be any object in the context of core renderer
@@ -352,6 +354,11 @@ function baseCreateRenderer(
       n1 = null
     }
 
+    if (n2.patchFlag === PatchFlags.BAIL) {
+      optimized = false
+      n2.dynamicChildren = null
+    }
+
     const { type, ref, shapeFlag } = n2
     switch (type) {
       case Text:
@@ -363,7 +370,9 @@ function baseCreateRenderer(
       case Static:
         if (n1 == null) {
           mountStaticNode(n2, container, anchor, isSVG)
-        } // static nodes are noop on patch
+        } else if (__DEV__) {
+          patchStaticNode(n1, n2, container, isSVG)
+        }
         break
       case Fragment:
         processFragment(
@@ -476,18 +485,72 @@ function baseCreateRenderer(
     anchor: RendererNode | null,
     isSVG: boolean
   ) => {
-    if (n2.el && hostCloneNode !== undefined) {
-      hostInsert(hostCloneNode(n2.el), container, anchor)
-    } else {
-      // static nodes are only present when used with compiler-dom/runtime-dom
-      // which guarantees presence of hostInsertStaticContent.
-      n2.el = hostInsertStaticContent!(
+    // static nodes are only present when used with compiler-dom/runtime-dom
+    // which guarantees presence of hostInsertStaticContent.
+    ;[n2.el, n2.anchor] = hostInsertStaticContent!(
+      n2.children as string,
+      container,
+      anchor,
+      isSVG
+    )
+  }
+
+  /**
+   * Dev / HMR only
+   */
+  const patchStaticNode = (
+    n1: VNode,
+    n2: VNode,
+    container: RendererElement,
+    isSVG: boolean
+  ) => {
+    // static nodes are only patched during dev for HMR
+    if (n2.children !== n1.children) {
+      const anchor = hostNextSibling(n1.anchor!)
+      // remove existing
+      removeStaticNode(n1)
+      // insert new
+      ;[n2.el, n2.anchor] = hostInsertStaticContent!(
         n2.children as string,
         container,
         anchor,
         isSVG
       )
+    } else {
+      n2.el = n1.el
+      n2.anchor = n1.anchor
     }
+  }
+
+  /**
+   * Dev / HMR only
+   */
+  const moveStaticNode = (
+    vnode: VNode,
+    container: RendererElement,
+    anchor: RendererNode | null
+  ) => {
+    let cur = vnode.el
+    const end = vnode.anchor!
+    while (cur && cur !== end) {
+      const next = hostNextSibling(cur)
+      hostInsert(cur, container, anchor)
+      cur = next
+    }
+    hostInsert(end, container, anchor)
+  }
+
+  /**
+   * Dev / HMR only
+   */
+  const removeStaticNode = (vnode: VNode) => {
+    let cur = vnode.el
+    while (cur && cur !== vnode.anchor) {
+      const next = hostNextSibling(cur)
+      hostRemove(cur)
+      cur = next
+    }
+    hostRemove(vnode.anchor!)
   }
 
   const processElement = (
@@ -756,6 +819,9 @@ function baseCreateRenderer(
         parentSuspense,
         areChildrenSVG
       )
+      if (__DEV__ && parentComponent && parentComponent.type.__hmrId) {
+        traverseStaticChildren(n1, n2)
+      }
     } else if (!optimized) {
       // full diff
       patchChildren(
@@ -905,7 +971,11 @@ function baseCreateRenderer(
         optimized
       )
     } else {
-      if (patchFlag & PatchFlags.STABLE_FRAGMENT && dynamicChildren) {
+      if (
+        patchFlag > 0 &&
+        patchFlag & PatchFlags.STABLE_FRAGMENT &&
+        dynamicChildren
+      ) {
         // a stable fragment (template root or <template v-for>) doesn't need to
         // patch children order, but it may contain dynamicChildren.
         patchBlockChildren(
@@ -916,6 +986,9 @@ function baseCreateRenderer(
           parentSuspense,
           isSVG
         )
+        if (__DEV__ && parentComponent && parentComponent.type.__hmrId) {
+          traverseStaticChildren(n1, n2)
+        }
       } else {
         // keyed / unkeyed, or manual fragments.
         // for keyed & unkeyed, since they are compiler generated from v-for,
@@ -1245,6 +1318,9 @@ function baseCreateRenderer(
     nextVNode: VNode,
     optimized: boolean
   ) => {
+    if (__DEV__ && instance.type.__hmrId) {
+      optimized = false
+    }
     nextVNode.component = instance
     const prevProps = instance.vnode.props
     instance.vnode = nextVNode
@@ -1268,9 +1344,6 @@ function baseCreateRenderer(
     const c2 = n2.children
 
     const { patchFlag, shapeFlag } = n2
-    if (patchFlag === PatchFlags.BAIL) {
-      optimized = false
-    }
     // fast path
     if (patchFlag > 0) {
       if (patchFlag & PatchFlags.KEYED_FRAGMENT) {
@@ -1431,7 +1504,7 @@ function baseCreateRenderer(
           n1,
           n2,
           container,
-          parentAnchor,
+          null,
           parentComponent,
           parentSuspense,
           isSVG,
@@ -1456,7 +1529,7 @@ function baseCreateRenderer(
           n1,
           n2,
           container,
-          parentAnchor,
+          null,
           parentComponent,
           parentSuspense,
           isSVG,
@@ -1667,6 +1740,12 @@ function baseCreateRenderer(
       return
     }
 
+    // static node move can only happen when force updating HMR
+    if (__DEV__ && type === Static) {
+      moveStaticNode(vnode, container, anchor)
+      return
+    }
+
     // single nodes
     const needTransition =
       moveType !== MoveType.REORDER &&
@@ -1703,8 +1782,18 @@ function baseCreateRenderer(
     parentSuspense,
     doRemove = false
   ) => {
-    const { props, ref, children, dynamicChildren, shapeFlag, dirs } = vnode
+    const {
+      type,
+      props,
+      ref,
+      children,
+      dynamicChildren,
+      shapeFlag,
+      patchFlag,
+      dirs
+    } = vnode
     const shouldInvokeDirs = shapeFlag & ShapeFlags.ELEMENT && dirs
+    const shouldKeepAlive = shapeFlag & ShapeFlags.COMPONENT_SHOULD_KEEP_ALIVE
     let vnodeHook: VNodeHook | undefined | null
 
     // unset ref
@@ -1712,12 +1801,12 @@ function baseCreateRenderer(
       setRef(ref, null, parentComponent, null)
     }
 
-    if ((vnodeHook = props && props.onVnodeBeforeUnmount)) {
+    if ((vnodeHook = props && props.onVnodeBeforeUnmount) && !shouldKeepAlive) {
       invokeVNodeHook(vnodeHook, parentComponent, vnode)
     }
 
     if (shapeFlag & ShapeFlags.COMPONENT) {
-      if (shapeFlag & ShapeFlags.COMPONENT_SHOULD_KEEP_ALIVE) {
+      if (shouldKeepAlive) {
         ;(parentComponent!.ctx as KeepAliveContext).deactivate(vnode)
       } else {
         unmountComponent(vnode.component!, parentSuspense, doRemove)
@@ -1732,7 +1821,12 @@ function baseCreateRenderer(
         invokeDirectiveHook(vnode, null, parentComponent, 'beforeUnmount')
       }
 
-      if (dynamicChildren) {
+      if (
+        dynamicChildren &&
+        // #1153: fast path should not be taken for non-stable (v-for) fragments
+        (type !== Fragment ||
+          (patchFlag > 0 && patchFlag & PatchFlags.STABLE_FRAGMENT))
+      ) {
         // fast path for block nodes: only need to unmount dynamic children.
         unmountChildren(dynamicChildren, parentComponent, parentSuspense)
       } else if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
@@ -1749,7 +1843,10 @@ function baseCreateRenderer(
       }
     }
 
-    if ((vnodeHook = props && props.onVnodeUnmounted) || shouldInvokeDirs) {
+    if (
+      ((vnodeHook = props && props.onVnodeUnmounted) || shouldInvokeDirs) &&
+      !shouldKeepAlive
+    ) {
       queuePostRenderEffect(() => {
         vnodeHook && invokeVNodeHook(vnodeHook, parentComponent, vnode)
         shouldInvokeDirs &&
@@ -1762,6 +1859,11 @@ function baseCreateRenderer(
     const { type, el, anchor, transition } = vnode
     if (type === Fragment) {
       removeFragment(el!, anchor!)
+      return
+    }
+
+    if (__DEV__ && type === Static) {
+      removeStaticNode(vnode)
       return
     }
 
@@ -1838,9 +1940,9 @@ function baseCreateRenderer(
     ) {
       queuePostRenderEffect(da, parentSuspense)
     }
-    queuePostFlushCb(() => {
+    queuePostRenderEffect(() => {
       instance.isUnmounted = true
-    })
+    }, parentSuspense)
 
     // A component with async dep inside a pending suspense is unmounted before
     // its async dep resolves. This should remove the dep from the suspense, and
@@ -1923,6 +2025,36 @@ function baseCreateRenderer(
       callWithErrorHandling(ref, parent, ErrorCodes.FUNCTION_REF, [value, refs])
     } else if (__DEV__) {
       warn('Invalid template ref type:', value, `(${typeof value})`)
+    }
+  }
+
+  /**
+   * #1156
+   * When a component is HMR-enabled, we need to make sure that all static nodes
+   * inside a block also inherit the DOM element from the previous tree so that
+   * HMR updates (which are full updates) can retrieve the element for patching.
+   *
+   * Dev only.
+   */
+  const traverseStaticChildren = (n1: VNode, n2: VNode) => {
+    const ch1 = n1.children
+    const ch2 = n2.children
+    if (isArray(ch1) && isArray(ch2)) {
+      for (let i = 0; i < ch1.length; i++) {
+        const c1 = ch1[i]
+        const c2 = ch2[i]
+        if (
+          isVNode(c1) &&
+          isVNode(c2) &&
+          c2.shapeFlag & ShapeFlags.ELEMENT &&
+          !c2.dynamicChildren
+        ) {
+          if (c2.patchFlag <= 0) {
+            c2.el = c1.el
+          }
+          traverseStaticChildren(c1, c2)
+        }
+      }
     }
   }
 
