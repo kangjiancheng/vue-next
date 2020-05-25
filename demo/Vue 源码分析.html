@@ -10,15 +10,18 @@
       margin: 0;
       padding: 0;
     }
+    .red-class {
+      color: red;
+    }
+    .blue-class {
+      color: blue;
+    }
   </style>
 </head>
 <body>
 <div id="app">
   <h1>Hello Vue 3!</h1>
-  <button @click="inc">Clicked {{ count }} times.</button>
-  <div>state.foo: {{ state.foo }}</div>
-  {{ tempJSX }}
-  <my-component sex="man" />
+  <button :class="count > 1 ? redClass: blueClass" @click="inc">Clicked {{ count }} times.</button>
 </div>
 
 <script src="../packages/vue/dist/vue.global.js"></script>
@@ -28,32 +31,15 @@
     ref,
     reactive,
     onMounted,
-    defineComponent,
   } = Vue
 
-  const myComponent = defineComponent({
-    name: 'my-component',
-    props: {
-      sex: String,
-    },
-    setup (props, context) {
-      console.log('props.sex: ', props.sex)
-      const reactList = reactive([1, 2, 3])
-      return {
-        reactList,
-      };
-    }
-  })
 
   const App = {
     props: {
       age: Number,
     },
     // props 不可通过解构来获取对应值
-    //
     setup(props, context ) {
-      console.log('props.age: ', props.age)
-
       const count = ref(0)
       const state = reactive({ foo: 1 })
 
@@ -63,17 +49,16 @@
       }
 
       onMounted(() => {
-        // the DOM element will be assigned to the ref after initial render
         console.log(1)
       })
 
-      let tempJSX = '<div>{{props.age}}</div>'
 
       return {
         count,
         state,
         inc,
-        tempJSX,
+        redClass: 'red-class',
+        blueClass: 'blue-class',
       }
     }
   }
