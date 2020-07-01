@@ -36,6 +36,10 @@ export type RawSlots = {
   // normalizeChildren when the component vnode is created.
   _ctx?: ComponentInternalInstance | null
   // internal, indicates compiler generated slots
+  // we use a reserved property instead of a vnode patchFlag because the slots
+  // object may be directly passed down to a child component in a manual
+  // render funciton, and the optimization hint need to be on the slot object
+  // itself to be preserved.
   _?: 1
 }
 
@@ -103,6 +107,8 @@ export const initSlots = (
   if (instance.vnode.shapeFlag & ShapeFlags.SLOTS_CHILDREN) {
     if ((children as RawSlots)._ === 1) {
       instance.slots = children as InternalSlots
+      // make compiler marker non-enumerable
+      def(children as InternalSlots, '_', 1)
     } else {
       normalizeObjectSlots(children as RawSlots, (instance.slots = {}))
     }
