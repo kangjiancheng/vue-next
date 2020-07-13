@@ -113,6 +113,10 @@ function normalizeContainer(container: Element | string): Element | null {
   return container
 }
 
+// SFC CSS utilities
+export { useCssModule } from './helpers/useCssModule'
+export { useCssVars } from './helpers/useCssVars'
+
 // DOM-only components
 export { Transition, TransitionProps } from './components/Transition'
 export {
