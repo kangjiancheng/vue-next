@@ -62,6 +62,10 @@ export interface ComponentInternalOptions {
   /**
    * @internal
    */
+  __emits?: ObjectEmitsOptions
+  /**
+   * @internal
+   */
   __scopeId?: string
   /**
    * @internal
@@ -242,6 +246,8 @@ export interface ComponentInternalInstance {
   slots: InternalSlots
   refs: Data
   emit: EmitFn
+  // used for keeping track of .once event handlers on components
+  emitted: Record<string, boolean> | null
 
   /**
    * setup related
@@ -392,7 +398,8 @@ export function createComponentInstance(
     rtg: null,
     rtc: null,
     ec: null,
-    emit: null as any // to be set immediately
+    emit: null as any, // to be set immediately
+    emitted: null
   }
   if (__DEV__) {
     instance.ctx = createRenderContext(instance)
