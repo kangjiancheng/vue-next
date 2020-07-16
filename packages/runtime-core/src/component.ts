@@ -62,6 +62,10 @@ export interface ComponentInternalOptions {
   /**
    * @internal
    */
+  __emits?: ObjectEmitsOptions
+  /**
+   * @internal
+   */
   __scopeId?: string
   /**
    * @internal
@@ -77,10 +81,8 @@ export interface ComponentInternalOptions {
   __file?: string
 }
 
-export interface FunctionalComponent<
-  P = {},
-  E extends EmitsOptions = {}
-> extends ComponentInternalOptions {
+export interface FunctionalComponent<P = {}, E extends EmitsOptions = {}>
+  extends ComponentInternalOptions {
   // use of any here is intentional so it can be a valid JSX Element constructor
   (props: P, ctx: SetupContext<E>): any
   props?: ComponentPropsOptions<P>
@@ -130,7 +132,7 @@ export const enum LifecycleHooks {
   ERROR_CAPTURED = 'ec'
 }
 
-export interface SetupContext<E = ObjectEmitsOptions> {
+export interface SetupContext<E = EmitsOptions> {
   attrs: Data
   slots: Slots
   emit: EmitFn<E>
@@ -142,7 +144,12 @@ export interface SetupContext<E = ObjectEmitsOptions> {
 export type InternalRenderFunction = {
   (
     ctx: ComponentPublicInstance,
-    cache: ComponentInternalInstance['renderCache']
+    cache: ComponentInternalInstance['renderCache'],
+    // for compiler-optimized bindings
+    $props: ComponentInternalInstance['props'],
+    $setup: ComponentInternalInstance['setupState'],
+    $data: ComponentInternalInstance['data'],
+    $options: ComponentInternalInstance['ctx']
   ): VNodeChild
   _rc?: boolean // isRuntimeCompiled
 }
@@ -239,6 +246,8 @@ export interface ComponentInternalInstance {
   slots: InternalSlots
   refs: Data
   emit: EmitFn
+  // used for keeping track of .once event handlers on components
+  emitted: Record<string, boolean> | null
 
   /**
    * setup related
@@ -389,7 +398,8 @@ export function createComponentInstance(
     rtg: null,
     rtc: null,
     ec: null,
-    emit: null as any // to be set immediately
+    emit: null as any, // to be set immediately
+    emitted: null
   }
   if (__DEV__) {
     instance.ctx = createRenderContext(instance)
@@ -680,6 +690,7 @@ const classifyRE = /(?:^|[-_])(\w)/g
 const classify = (str: string): string =>
   str.replace(classifyRE, c => c.toUpperCase()).replace(/[-_]/g, '')
 
+/* istanbul ignore next */
 export function formatComponentName(
   instance: ComponentInternalInstance | null,
   Component: Component,
