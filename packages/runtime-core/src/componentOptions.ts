@@ -72,6 +72,8 @@ export interface ComponentCustomOptions {}
 
 export type RenderFunction = () => VNodeChild
 
+export type UnwrapAsyncBindings<T> = T extends Promise<infer S> ? S : T
+
 export interface ComponentOptionsBase<
   Props,
   RawBindings,
@@ -273,7 +275,7 @@ type ComponentInjectOptions =
   | string[]
   | Record<
       string | symbol,
-      string | symbol | { from: string | symbol; default?: unknown }
+      string | symbol | { from?: string | symbol; default?: unknown }
     >
 
 interface LegacyOptions<
@@ -314,7 +316,11 @@ interface LegacyOptions<
   updated?(): void
   activated?(): void
   deactivated?(): void
+  /** @deprecated use `beforeUnmount` instead */
+  beforeDestroy?(): void
   beforeUnmount?(): void
+  /** @deprecated use `unmounted` instead */
+  destroyed?(): void
   unmounted?(): void
   renderTracked?: DebuggerHook
   renderTriggered?: DebuggerHook
@@ -391,7 +397,9 @@ export function applyOptions(
     updated,
     activated,
     deactivated,
+    beforeDestroy,
     beforeUnmount,
+    destroyed,
     unmounted,
     render,
     renderTracked,
@@ -458,7 +466,7 @@ export function applyOptions(
         const opt = injectOptions[key]
         if (isObject(opt)) {
           ctx[key] = inject(
-            opt.from,
+            opt.from || key,
             opt.default,
             true /* treat default function as factory */
           )
@@ -629,8 +637,14 @@ export function applyOptions(
   if (renderTriggered) {
     onRenderTriggered(renderTriggered.bind(publicThis))
   }
+  if (__DEV__ && beforeDestroy) {
+    warn(`\`beforeDestroy\` has been renamed to \`beforeUnmount\`.`)
+  }
   if (beforeUnmount) {
     onBeforeUnmount(beforeUnmount.bind(publicThis))
+  }
+  if (__DEV__ && destroyed) {
+    warn(`\`destroyed\` has been renamed to \`unmounted\`.`)
   }
   if (unmounted) {
     onUnmounted(unmounted.bind(publicThis))
