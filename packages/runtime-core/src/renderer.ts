@@ -44,7 +44,6 @@ import {
   flushPostFlushCbs,
   invalidateJob,
   flushPreFlushCbs,
-  SchedulerJob,
   SchedulerCb
 } from './scheduler'
 import { effect, stop, ReactiveEffectOptions, isRef } from '@vue/reactivity'
@@ -261,7 +260,9 @@ export const enum MoveType {
 }
 
 const prodEffectOptions = {
-  scheduler: queueJob
+  scheduler: queueJob,
+  // #1801, #2043 component render effects should allow recursive updates
+  allowRecurse: true
 }
 
 function createDevEffectOptions(
@@ -269,6 +270,7 @@ function createDevEffectOptions(
 ): ReactiveEffectOptions {
   return {
     scheduler: queueJob,
+    allowRecurse: true,
     onTrack: instance.rtc ? e => invokeArrayFns(instance.rtc!, e) : void 0,
     onTrigger: instance.rtg ? e => invokeArrayFns(instance.rtg!, e) : void 0
   }
@@ -778,7 +780,7 @@ function baseCreateRenderer(
     // #1583 For inside suspense + suspense not resolved case, enter hook should call when suspense resolved
     // #1689 For inside suspense + suspense resolved case, just call it
     const needCallTransitionHooks =
-      (!parentSuspense || (parentSuspense && parentSuspense!.isResolved)) &&
+      (!parentSuspense || (parentSuspense && !parentSuspense.pendingBranch)) &&
       transition &&
       !transition.persisted
     if (needCallTransitionHooks) {
@@ -1153,9 +1155,16 @@ function baseCreateRenderer(
           parentSuspense,
           isSVG
         )
-        // #2080 if the stable fragment has a key, it's a <template v-for> that may
-        //  get moved around. Make sure all root level vnodes inherit el.
-        if (n2.key != null) {
+        if (__DEV__ && parentComponent && parentComponent.type.__hmrId) {
+          traverseStaticChildren(n1, n2)
+        } else if (
+          // #2080 if the stable fragment has a key, it's a <template v-for> that may
+          //  get moved around. Make sure all root level vnodes inherit el.
+          // #2134 or if it's a component root, it may also get moved around
+          // as the component is being moved.
+          n2.key != null ||
+          (parentComponent && n2 === parentComponent.subTree)
+        ) {
           traverseStaticChildren(n1, n2, true /* shallow */)
         }
       } else {
@@ -1253,14 +1262,10 @@ function baseCreateRenderer(
     // setup() is async. This component relies on async logic to be resolved
     // before proceeding
     if (__FEATURE_SUSPENSE__ && instance.asyncDep) {
-      if (!parentSuspense) {
-        if (__DEV__) warn('async setup() is used without a suspense boundary!')
-        return
-      }
-
-      parentSuspense.registerDep(instance, setupRenderEffect)
+      parentSuspense && parentSuspense.registerDep(instance, setupRenderEffect)
 
       // Give it a placeholder if this is not hydration
+      // TODO handle self-defined fallback
       if (!initialVNode.el) {
         const placeholder = (instance.subTree = createVNode(Comment))
         processCommentNode(null, placeholder, container!, anchor)
@@ -1493,8 +1498,6 @@ function baseCreateRenderer(
         }
       }
     }, __DEV__ ? createDevEffectOptions(instance) : prodEffectOptions)
-    // #1801 mark it to allow recursive updates
-    ;(instance.update as SchedulerJob).allowRecurse = true
   }
 
   const updateComponentPreRender = (
@@ -2124,10 +2127,11 @@ function baseCreateRenderer(
     if (
       __FEATURE_SUSPENSE__ &&
       parentSuspense &&
-      !parentSuspense.isResolved &&
+      parentSuspense.pendingBranch &&
       !parentSuspense.isUnmounted &&
       instance.asyncDep &&
-      !instance.asyncResolved
+      !instance.asyncResolved &&
+      instance.suspenseId === parentSuspense.pendingId
     ) {
       parentSuspense.deps--
       if (parentSuspense.deps === 0) {

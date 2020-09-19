@@ -27,8 +27,7 @@ import {
   OptionTypesType,
   OptionTypesKeys,
   resolveMergedOptions,
-  isInBeforeCreate,
-  UnwrapAsyncBindings
+  isInBeforeCreate
 } from './componentOptions'
 import { EmitsOptions, EmitFn } from './componentEmits'
 import { Slots } from './componentSlots'
@@ -78,9 +77,11 @@ type MixinToOptionTypes<T> = T extends ComponentOptionsBase<
   infer M,
   infer Mixin,
   infer Extends,
-  any
+  any,
+  any,
+  infer Defaults
 >
-  ? OptionTypesType<P & {}, B & {}, D & {}, C & {}, M & {}> &
+  ? OptionTypesType<P & {}, B & {}, D & {}, C & {}, M & {}, Defaults & {}> &
       IntersectionMixin<Mixin> &
       IntersectionMixin<Extends>
   : never
@@ -102,7 +103,18 @@ type UnwrapMixinsType<
 type EnsureNonVoid<T> = T extends void ? {} : T
 
 export type ComponentPublicInstanceConstructor<
-  T extends ComponentPublicInstance = ComponentPublicInstance<any>
+  T extends ComponentPublicInstance<
+    Props,
+    RawBindings,
+    D,
+    C,
+    M
+  > = ComponentPublicInstance<any>,
+  Props = any,
+  RawBindings = any,
+  D = any,
+  C extends ComputedOptions = ComputedOptions,
+  M extends MethodOptions = MethodOptions
 > = {
   __isFragment?: never
   __isTeleport?: never
@@ -120,6 +132,8 @@ export type CreateComponentPublicInstance<
   Extends extends ComponentOptionsMixin = ComponentOptionsMixin,
   E extends EmitsOptions = {},
   PublicProps = P,
+  Defaults = {},
+  MakeDefaultsOptional extends boolean = false,
   PublicMixin = IntersectionMixin<Mixin> & IntersectionMixin<Extends>,
   PublicP = UnwrapMixinsType<PublicMixin, 'P'> & EnsureNonVoid<P>,
   PublicB = UnwrapMixinsType<PublicMixin, 'B'> & EnsureNonVoid<B>,
@@ -127,7 +141,9 @@ export type CreateComponentPublicInstance<
   PublicC extends ComputedOptions = UnwrapMixinsType<PublicMixin, 'C'> &
     EnsureNonVoid<C>,
   PublicM extends MethodOptions = UnwrapMixinsType<PublicMixin, 'M'> &
-    EnsureNonVoid<M>
+    EnsureNonVoid<M>,
+  PublicDefaults = UnwrapMixinsType<PublicMixin, 'Defaults'> &
+    EnsureNonVoid<Defaults>
 > = ComponentPublicInstance<
   PublicP,
   PublicB,
@@ -136,8 +152,11 @@ export type CreateComponentPublicInstance<
   PublicM,
   E,
   PublicProps,
-  ComponentOptionsBase<P, B, D, C, M, Mixin, Extends, E>
+  PublicDefaults,
+  MakeDefaultsOptional,
+  ComponentOptionsBase<P, B, D, C, M, Mixin, Extends, E, string, Defaults>
 >
+
 // public properties exposed on the proxy, which is used as the render context
 // in templates (as `this` in the render option)
 export type ComponentPublicInstance<
@@ -148,11 +167,15 @@ export type ComponentPublicInstance<
   M extends MethodOptions = {},
   E extends EmitsOptions = {},
   PublicProps = P,
-  Options = ComponentOptionsBase<any, any, any, any, any, any, any, any>
+  Defaults = {},
+  MakeDefaultsOptional extends boolean = false,
+  Options = ComponentOptionsBase<any, any, any, any, any, any, any, any, any>
 > = {
   $: ComponentInternalInstance
   $data: D
-  $props: P & PublicProps
+  $props: MakeDefaultsOptional extends true
+    ? Partial<Defaults> & Omit<P & PublicProps, keyof Defaults>
+    : P & PublicProps
   $attrs: Data
   $refs: Data
   $slots: Slots
@@ -169,7 +192,7 @@ export type ComponentPublicInstance<
     options?: WatchOptions
   ): WatchStopHandle
 } & P &
-  ShallowUnwrapRef<UnwrapAsyncBindings<B>> &
+  ShallowUnwrapRef<B> &
   D &
   ExtractComputedReturns<C> &
   M &
