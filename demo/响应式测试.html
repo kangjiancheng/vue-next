@@ -1,16 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <title>Vue 响应式测试 reactive()</title>
 </head>
+
 <body>
   <div id="app">
     <h3>Vue 响应式测试 reactive()</h3>
     <button @click="handleClick">点击</button>
     <output>结果：{{ state.name + ' - ' + state.age }} - {{ count }}</output>
   </div>
-  <script>console.time('Vue-Debugger')</script>
+  <script>
+    console.time('Vue-Debugger')
+  </script>
   <script src="../packages/vue/dist/vue.global.js"></script>
   <script>
 
@@ -22,7 +26,7 @@
     } = Vue
 
     const app = {
-      setup () {
+      setup() {
         // 接收基本类型
         const count = ref(0)
         // 接收对象
@@ -34,7 +38,7 @@
         const handleClick = function () {
           count.value++
 
-          if (count.value === 2) state.age ++
+          if (count.value === 2) state.age++
         }
 
         watchEffect(() => {
@@ -56,4 +60,5 @@
     console.timeEnd('Vue-Debugger')
   </script>
 </body>
+
 </html>
