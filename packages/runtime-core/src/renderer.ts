@@ -56,7 +56,11 @@ import {
   queueEffectWithSuspense,
   SuspenseImpl
 } from './components/Suspense'
-import { TeleportImpl, TeleportVNode } from './components/Teleport'
+import {
+  isTeleportDisabled,
+  TeleportImpl,
+  TeleportVNode
+} from './components/Teleport'
 import { isKeepAlive, KeepAliveContext } from './components/KeepAlive'
 import { registerHMR, unregisterHMR, isHmrUpdating } from './hmr'
 import {
@@ -213,7 +217,8 @@ type UnmountFn = (
   vnode: VNode,
   parentComponent: ComponentInternalInstance | null,
   parentSuspense: SuspenseBoundary | null,
-  doRemove?: boolean
+  doRemove?: boolean,
+  optimized?: boolean
 ) => void
 
 type RemoveFn = (vnode: VNode) => void
@@ -223,6 +228,7 @@ type UnmountChildrenFn = (
   parentComponent: ComponentInternalInstance | null,
   parentSuspense: SuspenseBoundary | null,
   doRemove?: boolean,
+  optimized?: boolean,
   start?: number
 ) => void
 
@@ -883,7 +889,7 @@ function baseCreateRenderer(
       invokeDirectiveHook(n2, n1, parentComponent, 'beforeUpdate')
     }
 
-    if (__DEV__ && isHmrUpdating) {
+    if (__DEV__ && (__BROWSER__ || __TEST__) && isHmrUpdating) {
       // HMR updated, force full diff
       patchFlag = 0
       optimized = false
@@ -984,7 +990,12 @@ function baseCreateRenderer(
         parentSuspense,
         areChildrenSVG
       )
-      if (__DEV__ && parentComponent && parentComponent.type.__hmrId) {
+      if (
+        __DEV__ &&
+        (__BROWSER__ || __TEST__) &&
+        parentComponent &&
+        parentComponent.type.__hmrId
+      ) {
         traverseStaticChildren(n1, n2)
       }
     } else if (!optimized) {
@@ -1236,7 +1247,7 @@ function baseCreateRenderer(
       parentSuspense
     ))
 
-    if (__DEV__ && instance.type.__hmrId) {
+    if (__DEV__ && (__BROWSER__ || __TEST__) && instance.type.__hmrId) {
       registerHMR(instance)
     }
 
@@ -1423,11 +1434,11 @@ function baseCreateRenderer(
         }
 
         if (next) {
+          next.el = vnode.el
           updateComponentPreRender(instance, next, optimized)
         } else {
           next = vnode
         }
-        next.el = vnode.el
 
         // beforeUpdate hook
         if (bu) {
@@ -1449,11 +1460,6 @@ function baseCreateRenderer(
         const prevTree = instance.subTree
         instance.subTree = nextTree
 
-        // reset refs
-        // only needed if previous patch had refs
-        if (instance.refs !== EMPTY_OBJ) {
-          instance.refs = {}
-        }
         if (__DEV__) {
           startMeasure(instance, `patch`)
         }
@@ -1647,7 +1653,14 @@ function baseCreateRenderer(
     }
     if (oldLength > newLength) {
       // remove old
-      unmountChildren(c1, parentComponent, parentSuspense, true, commonLength)
+      unmountChildren(
+        c1,
+        parentComponent,
+        parentSuspense,
+        true,
+        false,
+        commonLength
+      )
     } else {
       // mount new
       mountChildren(
@@ -1968,7 +1981,8 @@ function baseCreateRenderer(
     vnode,
     parentComponent,
     parentSuspense,
-    doRemove = false
+    doRemove = false,
+    optimized = false
   ) => {
     const {
       type,
@@ -2016,13 +2030,22 @@ function baseCreateRenderer(
           (patchFlag > 0 && patchFlag & PatchFlags.STABLE_FRAGMENT))
       ) {
         // fast path for block nodes: only need to unmount dynamic children.
-        unmountChildren(dynamicChildren, parentComponent, parentSuspense)
-      } else if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
+        unmountChildren(
+          dynamicChildren,
+          parentComponent,
+          parentSuspense,
+          false,
+          true
+        )
+      } else if (!optimized && shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
         unmountChildren(children as VNode[], parentComponent, parentSuspense)
       }
 
-      // an unmounted teleport should always remove its children
-      if (shapeFlag & ShapeFlags.TELEPORT) {
+      // an unmounted teleport should always remove its children if not disabled
+      if (
+        shapeFlag & ShapeFlags.TELEPORT &&
+        (doRemove || !isTeleportDisabled(vnode.props))
+      ) {
         ;(vnode.type as typeof TeleportImpl).remove(vnode, internals)
       }
 
@@ -2093,7 +2116,7 @@ function baseCreateRenderer(
     parentSuspense: SuspenseBoundary | null,
     doRemove?: boolean
   ) => {
-    if (__DEV__ && instance.type.__hmrId) {
+    if (__DEV__ && (__BROWSER__ || __TEST__) && instance.type.__hmrId) {
       unregisterHMR(instance)
     }
 
@@ -2149,10 +2172,11 @@ function baseCreateRenderer(
     parentComponent,
     parentSuspense,
     doRemove = false,
+    optimized = false,
     start = 0
   ) => {
     for (let i = start; i < children.length; i++) {
-      unmount(children[i], parentComponent, parentSuspense, doRemove)
+      unmount(children[i], parentComponent, parentSuspense, doRemove, optimized)
     }
   }
 
