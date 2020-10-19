@@ -1,3 +1,7 @@
+/**
+ * 设置 dom 标签 匹配情况
+ */
+
 // These tag configs are shared between compiler-dom and runtime-dom, so they
 // must be extracted in shared to avoid creating a dependency between the two.
 import { makeMap } from './makeMap'

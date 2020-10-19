@@ -23,9 +23,14 @@ export function normalizeStyle(value: unknown): NormalizedStyle | undefined {
   }
 }
 
+// 定界符/分隔符 ： 即 ';' 后边不能是 /[^(]*\)/ 即不能是 ';xxxx)'，但是如果后边 存在 '(' 则也匹配： ';x(xx)' 或者 ';xxxx' —— 匹配成功
 const listDelimiterRE = /;(?![^(]*\))/g
+// 属性分隔符
 const propertyDelimiterRE = /:(.+)/
 
+// 行内样式转换对象样式
+// 如：parseStringStyle('color: red;font-size: 12px;') =》 {color: "red", font-size: "12px"}
+// 注意：parseStringStyle('color: red;font-size: 12px;)') =》 {color: "red;font-size: 12px;)"} 错误写法，没有匹配的分隔符 ';'
 export function parseStringStyle(cssText: string): NormalizedStyle {
   const ret: NormalizedStyle = {}
   cssText.split(listDelimiterRE).forEach(item => {

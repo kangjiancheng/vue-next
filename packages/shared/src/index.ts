@@ -57,6 +57,9 @@ export const hasOwn = (
   key: string | symbol
 ): key is keyof typeof val => hasOwnProperty.call(val, key)
 
+/**
+ * 判断类型
+ */
 export const isArray = Array.isArray
 export const isMap = (val: unknown): val is Map<any, any> =>
   toTypeString(val) === '[object Map]'
@@ -160,6 +163,7 @@ export const toNumber = (val: any): any => {
   return isNaN(n) ? val : n
 }
 
+// 获取各个环境下 this 的值
 let _globalThis: any
 export const getGlobalThis = (): any => {
   return (

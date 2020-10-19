@@ -1,6 +1,11 @@
+/**
+ * 设置 dom 属性 匹配情况
+ */
+
 import { makeMap } from './makeMap'
 
 /**
+ * 客户端上，只需要为 那些name与对应dom属性不同的 布尔属性 提供特殊情况。
  * On the client we only need to offer special cases for boolean attributes that
  * have different names from their corresponding dom properties:
  * - itemscope -> N/A
@@ -11,10 +16,12 @@ import { makeMap } from './makeMap'
  * - novalidate -> noValidate
  * - readonly -> readOnly
  */
+// 在客户端上，dom 默认属性名格式：
 const specialBooleanAttrs = `itemscope,allowfullscreen,formnovalidate,ismap,nomodule,novalidate,readonly`
 export const isSpecialBooleanAttr = /*#__PURE__*/ makeMap(specialBooleanAttrs)
 
 /**
+ * 包括服务端渲染
  * The full list is needed during SSR to produce the correct initial markup.
  */
 export const isBooleanAttr = /*#__PURE__*/ makeMap(
@@ -38,6 +45,7 @@ export function isSSRSafeAttrName(name: string): boolean {
   return (attrValidationCache[name] = !isUnsafe)
 }
 
+// js prop 属性转换为 html dom 属性
 export const propsToAttrMap: Record<string, string | undefined> = {
   acceptCharset: 'accept-charset',
   className: 'class',
@@ -47,6 +55,7 @@ export const propsToAttrMap: Record<string, string | undefined> = {
 
 /**
  * CSS properties that accept plain numbers
+ * 可以设置为纯数值的css属性
  */
 export const isNoUnitNumericStyleProp = /*#__PURE__*/ makeMap(
   `animation-iteration-count,border-image-outset,border-image-slice,` +
