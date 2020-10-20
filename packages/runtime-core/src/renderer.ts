@@ -408,6 +408,9 @@ export function createHydrationRenderer(
   return baseCreateRenderer(options, createHydrationFunctions)
 }
 
+/**
+ * 重载: 区分ssr
+ */
 // overload 1: no hydration
 function baseCreateRenderer<
   HostNode = RendererNode,
@@ -421,6 +424,7 @@ function baseCreateRenderer(
 ): HydrationRenderer
 
 // implementation
+// 初始化 各个方法，返回 render() 和 createApp()
 function baseCreateRenderer(
   options: RendererOptions,
   createHydrationFns?: typeof createHydrationFunctions

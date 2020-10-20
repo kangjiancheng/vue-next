@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Vue 3.0 调试</title>
+  <title>Vue 3 调试</title>
   <style>
     body {
       margin: 0;
@@ -21,11 +21,15 @@
 <body>
 <div id="app">
   <h1>Hello Vue 3!</h1>
-  <button :class="count > 1 ? redClass: blueClass" @click="handleClick">Clicked {{ count }} times.</button>
+  <button :class="count > 1 ? redClass: blueClass" number="123" :test="testAttr" @click="handleClick">Clicked {{ count }} times.</button>
+  <span>age: {{ age }}</span>
 </div>
 
-<script>console.time('Vue-during')</script>
+<script>console.time('Vue App')</script>
+<!-- 开发模式 -->
 <script src="../packages/vue/dist/vue.global.js"></script>
+<!-- 生产模式-->
+<!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
 <script>
   console.log('---------- Start Demo ---------')
 
@@ -37,7 +41,7 @@
   } = Vue
 
 
-  const App = {
+  const rootComponent = {
     props: {
       age: Number,
     },
@@ -57,19 +61,26 @@
 
 
       return {
+        age: props.age,
         count,
         state,
         handleClick,
         redClass: 'red-class',
         blueClass: 'blue-class',
+        testAttr: 'abc',
       }
     }
   }
-  createApp(App).mount('#app')
+  const rootProps = {
+    age: 10
+  }
+
+  const app = createApp(rootComponent, rootProps)
+  app.mount('#app')
 
   console.log('---------- End Demo ---------')
 </script>
 
-<script>console.time('Vue-during')</script>
+<script>console.timeEnd('Vue App')</script>
 </body>
 </html>
