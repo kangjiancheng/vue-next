@@ -74,9 +74,10 @@
   const rootProps = {
     age: 10
   }
-
+  // debugger
   const app = createApp(rootComponent, rootProps)
-  app.mount('#app')
+  app.mount(document.querySelector('#app'))
+  // app.mount('#app')
 
   console.log('---------- End Demo ---------')
 </script>

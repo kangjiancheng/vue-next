@@ -270,6 +270,7 @@ export function isSameVNodeType(n1: VNode, n2: VNode): boolean {
   return n1.type === n2.type && n1.key === n2.key
 }
 
+// 声明变量，默认值 undefined
 let vnodeArgsTransformer:
   | ((
       args: Parameters<typeof _createVNode>,
@@ -287,11 +288,12 @@ export function transformVNodeArgs(transformer?: typeof vnodeArgsTransformer) {
   vnodeArgsTransformer = transformer
 }
 
+// 开发环境下，由此创建vnode
 const createVNodeWithArgsTransform = (
   ...args: Parameters<typeof _createVNode>
 ): VNode => {
   return _createVNode(
-    ...(vnodeArgsTransformer
+    ...(vnodeArgsTransformer // 一开始未定义 为 undefined
       ? vnodeArgsTransformer(args, currentRenderingInstance)
       : args)
   )
@@ -314,6 +316,7 @@ export const createVNode = (__DEV__
   ? createVNodeWithArgsTransform
   : _createVNode) as typeof _createVNode
 
+// 创建vdom
 function _createVNode(
   type: VNodeTypes | ClassComponent | typeof NULL_DYNAMIC_COMPONENT,
   props: (Data & VNodeProps) | null = null,
@@ -340,6 +343,7 @@ function _createVNode(
     return cloned
   }
 
+  // class 格式的组件
   // class component normalization.
   if (isClassComponent(type)) {
     type = type.__vccOpts
@@ -373,7 +377,7 @@ function _createVNode(
       : isTeleport(type)
         ? ShapeFlags.TELEPORT
         : isObject(type)
-          ? ShapeFlags.STATEFUL_COMPONENT
+          ? ShapeFlags.STATEFUL_COMPONENT // 当组件为一个对象时，是一个状态式组件：4
           : isFunction(type)
             ? ShapeFlags.FUNCTIONAL_COMPONENT
             : 0

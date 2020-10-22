@@ -30,7 +30,7 @@ let renderer: Renderer<Element> | HydrationRenderer
 
 let enabledHydration = false
 
-// 初始化 renderer 函数，返回 render() 与 createApp() 函数
+// 初始化 renderer 渲染器，返回 render() 与 createApp() 函数
 function ensureRenderer() {
   return renderer || (renderer = createRenderer<Node, Element>(rendererOptions))
 }
@@ -43,6 +43,7 @@ function ensureHydrationRenderer() {
   return renderer as HydrationRenderer
 }
 
+// 抛出渲染函数
 // use explicit type casts here to avoid import() calls in rolled-up d.ts
 export const render = ((...args) => {
   ensureRenderer().render(...args)
@@ -63,21 +64,29 @@ export const createApp = ((...args) => {
     injectNativeTagCheck(app)
   }
 
-  // 增强 mount 功能
+  // 针对客户端，增强 mount 功能
   const { mount } = app
+  // containerOrSelector: 挂载目标，dom节点实例 或 节点选择器
   app.mount = (containerOrSelector: Element | string): any => {
+    // 校验 挂载目标
     const container = normalizeContainer(containerOrSelector)
     if (!container) return
+
+    // app._component 即 rootComponent，由createApp(rootComponent)传递，是根组件选项。
     const component = app._component
+    // 默认情况下，使用挂载目标的dom子内容
     if (!isFunction(component) && !component.render && !component.template) {
+      // 注意使用mount时，component 如果是一个函数或带有render属性或template属性，则挂载目标的dom内容模版将没有意义
       component.template = container.innerHTML
     }
-    // clear content before mounting
+    // 每次重新挂载内容时，都灰清空原先的dom内容
     container.innerHTML = ''
+
     // 执行 mount
     const proxy = mount(container)
     container.removeAttribute('v-cloak')
     container.setAttribute('data-v-app', '')
+
     return proxy
   }
 

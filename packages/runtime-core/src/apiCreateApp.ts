@@ -125,7 +125,7 @@ export function createAppAPI<HostElement>(
   render: RootRenderFunction,
   hydrate?: RootHydrateFunction
 ): CreateAppFunction<HostElement> {
-  // 返回 一个 createApp() 函数，实际项目的入口， rootComponent 基本组件 App
+  // 返回 一个 createApp() 函数，实际项目的入口， rootComponent 基本组件 App， rootProps将传递给根组件的props
   return function createApp(rootComponent, rootProps = null) {
     if (rootProps != null && !isObject(rootProps)) {
       __DEV__ && warn(`root props passed to app.mount() must be an object.`)
@@ -228,18 +228,22 @@ export function createAppAPI<HostElement>(
         return app
       },
 
-      // 在入口出 重新定义了一边，进一步增强
+      // 基本挂载方法
+      // 在不同情景下实现各自的功能：客户端版的mount方法会在入口重新初始化
       mount(rootContainer: HostElement, isHydrate?: boolean): any {
+        // 避免对同一个Vue.createApp()结果, 多次调用mount()
+        // 此时，需要重新 createApp，然后再调用mount
         if (!isMounted) {
+          // 初始化 vnode 属性，其中vnode.type=rootComponent
           const vnode = createVNode(
             rootComponent as ConcreteComponent,
             rootProps
           )
           // store app context on the root VNode.
           // this will be set on the root instance on initial mount.
-          vnode.appContext = context
+          vnode.appContext = context // app 的相关环境信息
 
-          // HMR root reload 热更新，只更新变化的内容
+          // 开发模式下，HMR root reload 热更新，只更新变化的内容
           if (__DEV__) {
             context.reload = () => {
               render(cloneVNode(vnode), rootContainer)
@@ -248,8 +252,10 @@ export function createAppAPI<HostElement>(
 
           // 开始 渲染
           if (isHydrate && hydrate) {
+            // ssr
             hydrate(vnode as VNode<Node, Element>, rootContainer as any)
           } else {
+            // 浏览器
             render(vnode, rootContainer)
           }
           isMounted = true
@@ -263,6 +269,7 @@ export function createAppAPI<HostElement>(
 
           return vnode.component!.proxy
         } else if (__DEV__) {
+          // 开发环境下，如开发库（非*.prod.js）vue.global.js 或构建构建的 env != production
           warn(
             `App has already been mounted.\n` +
               `If you want to remount the same app, move your app creation logic ` +
