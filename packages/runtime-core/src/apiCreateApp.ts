@@ -120,21 +120,25 @@ export type CreateAppFunction<HostElement> = (
 
 let uid = 0
 
+// 创建 一个 createApp() 函数，实际项目的入口
 export function createAppAPI<HostElement>(
   render: RootRenderFunction,
   hydrate?: RootHydrateFunction
 ): CreateAppFunction<HostElement> {
+  // 返回 一个 createApp() 函数，实际项目的入口， rootComponent 基本组件 App
   return function createApp(rootComponent, rootProps = null) {
     if (rootProps != null && !isObject(rootProps)) {
       __DEV__ && warn(`root props passed to app.mount() must be an object.`)
       rootProps = null
     }
 
+    // 初始化 app 的基本方法
     const context = createAppContext()
     const installedPlugins = new Set()
 
     let isMounted = false
 
+    // createApp() 返回的最终结果
     const app: App = (context.app = {
       _uid: uid++,
       _component: rootComponent as ConcreteComponent,
@@ -224,6 +228,7 @@ export function createAppAPI<HostElement>(
         return app
       },
 
+      // 在入口出 重新定义了一边，进一步增强
       mount(rootContainer: HostElement, isHydrate?: boolean): any {
         if (!isMounted) {
           const vnode = createVNode(
@@ -234,13 +239,14 @@ export function createAppAPI<HostElement>(
           // this will be set on the root instance on initial mount.
           vnode.appContext = context
 
-          // HMR root reload
+          // HMR root reload 热更新，只更新变化的内容
           if (__DEV__) {
             context.reload = () => {
               render(cloneVNode(vnode), rootContainer)
             }
           }
 
+          // 开始 渲染
           if (isHydrate && hydrate) {
             hydrate(vnode as VNode<Node, Element>, rootContainer as any)
           } else {

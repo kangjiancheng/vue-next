@@ -1,3 +1,6 @@
+/**
+ * 代码片段生成 方式
+ */
 const range: number = 2
 
 export function generateCodeFrame(

@@ -21,6 +21,7 @@ declare module '@vue/reactivity' {
   }
 }
 
+// 初始化默认选项，准备渲染基本环境
 const rendererOptions = extend({ patchProp, forcePatchProp }, nodeOps)
 
 // lazy create the renderer - this makes core renderer logic tree-shakable
@@ -29,6 +30,7 @@ let renderer: Renderer<Element> | HydrationRenderer
 
 let enabledHydration = false
 
+// 初始化 renderer 函数，返回 render() 与 createApp() 函数
 function ensureRenderer() {
   return renderer || (renderer = createRenderer<Node, Element>(rendererOptions))
 }
@@ -50,13 +52,18 @@ export const hydrate = ((...args) => {
   ensureHydrationRenderer().hydrate(...args)
 }) as RootHydrateFunction
 
+/**
+ * 开始入口
+ */
 export const createApp = ((...args) => {
   const app = ensureRenderer().createApp(...args)
 
+  // 开发库，如：vue.global.js
   if (__DEV__) {
     injectNativeTagCheck(app)
   }
 
+  // 增强 mount 功能
   const { mount } = app
   app.mount = (containerOrSelector: Element | string): any => {
     const container = normalizeContainer(containerOrSelector)
@@ -67,6 +74,7 @@ export const createApp = ((...args) => {
     }
     // clear content before mounting
     container.innerHTML = ''
+    // 执行 mount
     const proxy = mount(container)
     container.removeAttribute('v-cloak')
     container.setAttribute('data-v-app', '')
