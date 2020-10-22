@@ -243,7 +243,7 @@ export function createAppAPI<HostElement>(
           // this will be set on the root instance on initial mount.
           vnode.appContext = context // app 的相关环境信息
 
-          // 开发模式下，HMR root reload 热更新，只更新变化的内容
+          // 开发模式下，HMR root reload 热更新，重新渲染
           if (__DEV__) {
             context.reload = () => {
               render(cloneVNode(vnode), rootContainer)
