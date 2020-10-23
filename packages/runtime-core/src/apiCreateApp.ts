@@ -267,6 +267,7 @@ export function createAppAPI<HostElement>(
             devtoolsInitApp(app, version)
           }
 
+          // ts 类型断言：后缀 '!' 排除null或undefined
           return vnode.component!.proxy
         } else if (__DEV__) {
           // 开发环境下，如开发库（非*.prod.js）vue.global.js 或构建构建的 env != production
