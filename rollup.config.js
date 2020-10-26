@@ -19,18 +19,22 @@ const packageOptions = pkg.buildOptions || {}
 let hasTSChecked = false
 
 const outputConfigs = {
+  // 构建工具
   'esm-bundler': {
     file: resolve(`dist/${name}.esm-bundler.js`),
     format: `es`
   },
+  // 浏览器 es6 方式
   'esm-browser': {
     file: resolve(`dist/${name}.esm-browser.js`),
     format: `es`
   },
+  // node
   cjs: {
     file: resolve(`dist/${name}.cjs.js`),
     format: `cjs`
   },
+  // 全局环境
   global: {
     file: resolve(`dist/${name}.global.js`),
     format: `iife`
@@ -199,7 +203,7 @@ function createReplacePlugin(
   const replacements = {
     __COMMIT__: `"${process.env.COMMIT}"`,
     __VERSION__: `"${masterVersion}"`,
-    __DEV__: isBundlerESMBuild
+    __DEV__: isBundlerESMBuild // 开发库
       ? // preserve to be handled by bundlers
         `(process.env.NODE_ENV !== 'production')`
       : // hard coded dev/prod builds
@@ -207,7 +211,7 @@ function createReplacePlugin(
     // this is only used during Vue's internal tests
     __TEST__: false,
     // If the build is expected to run directly in the browser (global / esm builds)
-    __BROWSER__: isBrowserBuild,
+    __BROWSER__: isBrowserBuild, // 全局 global.js 或 浏览器中使用esm 或 构建工具中esm
     __GLOBAL__: isGlobalBuild,
     __ESM_BUNDLER__: isBundlerESMBuild,
     __ESM_BROWSER__: isBrowserESMBuild,

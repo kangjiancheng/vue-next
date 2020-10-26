@@ -43,7 +43,12 @@
 
   const rootComponent = {
     props: {
+      'a-b': String,
       age: Number,
+      ageArray: [Number, Boolean, String],
+      ageFn: function(age) {
+        console.log('age: ', age)
+      }
     },
     // props 不可通过解构来获取对应值
     setup(props, context ) {
@@ -76,6 +81,7 @@
   }
   // debugger
   const app = createApp(rootComponent, rootProps)
+  app.config.performance = true
   app.mount(document.querySelector('#app'))
   // app.mount('#app')
 

@@ -403,7 +403,7 @@ function _createVNode(
     ref: props && normalizeRef(props),
     scopeId: currentScopeId,
     children: null,
-    component: null,
+    component: null, // 在render -> patch -> mountComponent 初始完成后，createComponentInstance() 返回赋值
     suspense: null,
     ssContent: null,
     ssFallback: null,

@@ -114,6 +114,7 @@ const cacheStringFunction = <T extends (str: string) => string>(fn: T): T => {
 
 const camelizeRE = /-(\w)/g
 /**
+ * 小驼峰：camelCase
  * @private
  */
 export const camelize = cacheStringFunction(
@@ -154,6 +155,7 @@ export const invokeArrayFns = (fns: Function[], arg?: any) => {
   }
 }
 
+// 不可遍历
 export const def = (obj: object, key: string | symbol, value: any) => {
   Object.defineProperty(obj, key, {
     configurable: true,

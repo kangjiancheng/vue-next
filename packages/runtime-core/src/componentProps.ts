@@ -134,6 +134,7 @@ export function initProps(
 ) {
   const props: Data = {}
   const attrs: Data = {}
+  // 设定 attrs.__vInternal = 1
   def(attrs, InternalObjectKey, 1)
   setFullProps(instance, rawProps, props, attrs)
   // validation
@@ -344,9 +345,10 @@ function resolvePropValue(
   return value
 }
 
+// 处理组件的props 属性
 export function normalizePropsOptions(
-  comp: ConcreteComponent,
-  appContext: AppContext,
+  comp: ConcreteComponent, // 根组件
+  appContext: AppContext, // app 上下文
   asMixin = false
 ): NormalizedPropsOptions {
   if (!appContext.deopt && comp.__props) {
@@ -377,11 +379,14 @@ export function normalizePropsOptions(
     }
   }
 
+  // 没有props
   if (!raw && !hasExtends) {
     return (comp.__props = EMPTY_ARR as any)
   }
 
   if (isArray(raw)) {
+    // props 为数组格式：如 props: ['age', 'name', ...]
+    // 转换为 对象格式：props: { age: {}, name: {} }
     for (let i = 0; i < raw.length; i++) {
       if (__DEV__ && !isString(raw[i])) {
         warn(`props must be strings when using array syntax.`, raw[i])
@@ -392,22 +397,34 @@ export function normalizePropsOptions(
       }
     }
   } else if (raw) {
+    // props 必须是 对象格式，如 props: { age: Number, name: String }
+    // comp.__props: normalized 内部规范: age : {0: false, 1: true, type: Number}
     if (__DEV__ && !isObject(raw)) {
       warn(`invalid props options`, raw)
     }
     for (const key in raw) {
+      // camelCase 小驼峰
       const normalizedKey = camelize(key)
+      // props不能已$开头
       if (validatePropName(normalizedKey)) {
-        const opt = raw[key]
+        // 进一步规范prop的值
+        const opt = raw[key] // prop 的值
+        // 针对数组或函数格式的prop重新组装赋值
         const prop: NormalizedProp = (normalized[normalizedKey] =
           isArray(opt) || isFunction(opt) ? { type: opt } : opt)
+
         if (prop) {
-          const booleanIndex = getTypeIndex(Boolean, prop.type)
-          const stringIndex = getTypeIndex(String, prop.type)
-          prop[BooleanFlags.shouldCast] = booleanIndex > -1
+          // 如果prop值存在（注意正常情况下，prop接收的是一个类型值）
+          // 分3种情况处理：数组、函数、其它
+          // 数组时，返回Boolean类型的索引，函数返回0，其它返回 1
+          const booleanIndex = getTypeIndex(Boolean, prop.type) // 返回 Boolean 在数组中的位置
+          const stringIndex = getTypeIndex(String, prop.type) // 返回 String 在数组中的位置
+          prop[BooleanFlags.shouldCast] = booleanIndex > -1 // prop[0] = booleanIndex > -1 true，表明有Boolean类型
           prop[BooleanFlags.shouldCastTrue] =
-            stringIndex < 0 || booleanIndex < stringIndex
+            stringIndex < 0 || booleanIndex < stringIndex // prop[1] true，String 类型不存在 或 比 Boolean 靠后
+
           // if the prop needs boolean casting or default value
+          // 针对 要判断 boolean 类型 或有默认值的prop
           if (booleanIndex > -1 || hasOwn(prop, 'default')) {
             needCastKeys.push(normalizedKey)
           }
@@ -431,6 +448,7 @@ function validatePropName(key: string) {
 // use function string name to check type constructors
 // so that it works across vms / iframes.
 function getType(ctor: Prop<any>): string {
+  // 返回一个类型
   const match = ctor && ctor.toString().match(/^\s*function (\w+)/)
   return match ? match[1] : ''
 }
@@ -441,9 +459,10 @@ function isSameType(a: Prop<any>, b: Prop<any>): boolean {
 
 function getTypeIndex(
   type: Prop<any>,
-  expectedTypes: PropType<any> | void | null | true
+  expectedTypes: PropType<any> | void | null | true // prop的type值，即prop的值
 ): number {
   if (isArray(expectedTypes)) {
+    // 返回 指定类型的索引
     for (let i = 0, len = expectedTypes.length; i < len; i++) {
       if (isSameType(expectedTypes[i], type)) {
         return i

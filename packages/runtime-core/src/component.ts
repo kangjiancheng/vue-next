@@ -393,13 +393,16 @@ const emptyAppContext = createAppContext()
 
 let uid = 0
 
+// mountComponent时，初始化component实例配置
 export function createComponentInstance(
-  vnode: VNode,
+  vnode: VNode, // 根组件的vnode
   parent: ComponentInternalInstance | null,
   suspense: SuspenseBoundary | null
 ) {
+  // vnode.type 是根组件选项
   const type = vnode.type as ConcreteComponent
-  // inherit parent app context - or - if root, adopt from root vnode
+  // 默认使用根组件的vnode.appContext，如果不是创建根组件，则继承父组件的app 上下文环境
+  // 根组件的vnode.appContext 是在 mount()时 初始化。
   const appContext =
     (parent ? parent.appContext : vnode.appContext) || emptyAppContext
 
@@ -426,6 +429,7 @@ export function createComponentInstance(
     directives: null,
 
     // resolved props and emits options
+    // 规范props 属性格式，如转换为小驼峰、props不能已$开头
     propsOptions: normalizePropsOptions(type, appContext),
     emitsOptions: normalizeEmitsOptions(type, appContext),
 
@@ -469,11 +473,15 @@ export function createComponentInstance(
     ec: null
   }
   if (__DEV__) {
+    // ctx 绑定实例相关上下文配置，对组件的相关属性进行proxy拦截处理，不可更改
+    // 设置实例的ctx属性: $xxx 配置，访问相关ctx属性，返回实例相应信息，如instance.ctx.$root 返回 instance.root
+    // 同时也绑定appContext.config内属性到实例的ctx上
     instance.ctx = createRenderContext(instance)
   } else {
+    // 其它环境下，则不处理
     instance.ctx = { _: instance }
   }
-  instance.root = parent ? parent.root : instance
+  instance.root = parent ? parent.root : instance // 绑定root
   instance.emit = emit.bind(null, instance)
 
   if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
@@ -507,14 +515,20 @@ export function validateComponentName(name: string, config: AppConfig) {
 
 export let isInSSRComponentSetup = false
 
+/**
+ * 开始挂载渲染component
+ */
 export function setupComponent(
-  instance: ComponentInternalInstance,
+  instance: ComponentInternalInstance, // 组件的实例
   isSSR = false
 ) {
   isInSSRComponentSetup = isSSR
 
+  // 组件的vnode，在 createVnode 初始化
   const { props, children, shapeFlag } = instance.vnode
+  // 是组件式
   const isStateful = shapeFlag & ShapeFlags.STATEFUL_COMPONENT
+  // 进一步处理组件的props，在初始化组件时，已经规范了prop格式
   initProps(instance, props, isStateful, isSSR)
   initSlots(instance, children)
 

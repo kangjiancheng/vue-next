@@ -423,8 +423,11 @@ function baseCreateRenderer(
   createHydrationFns: typeof createHydrationFunctions
 ): HydrationRenderer
 
+/**
+ * 创建渲染器： 初始化 各个方法，返回 render() 和 createApp()
+ * 创建不同场景patch时，对应的处理方式
+ */
 // implementation
-// 初始化 各个方法，返回 render() 和 createApp()
 function baseCreateRenderer(
   options: RendererOptions,
   createHydrationFns?: typeof createHydrationFunctions
@@ -451,18 +454,23 @@ function baseCreateRenderer(
     insertStaticContent: hostInsertStaticContent
   } = options
 
+  /**
+   * 初次渲染：patch(container._vnode || null, vnode, container)
+   * patch 内部通过不同patch类型 如：是一个组件，则使用对应方法处理
+   */
   // Note: functions inside this closure should use `const xxx = () => {}`
   // style in order to prevent being inlined by minifiers.
   const patch: PatchFn = (
-    n1,
-    n2,
-    container,
+    n1, // dom上原先已挂载的VNode
+    n2, // 当前要挂载的VNode
+    container, // dom实例：挂载目标dom节点
     anchor = null,
     parentComponent = null,
     parentSuspense = null,
     isSVG = false,
     optimized = false
   ) => {
+    // 卸载掉dom原先的vnode tree
     // patching & not same type, unmount old tree
     if (n1 && !isSameVNodeType(n1, n2)) {
       anchor = getNextHostNode(n1)
@@ -470,11 +478,14 @@ function baseCreateRenderer(
       n1 = null
     }
 
+    // 判断 是否 不需要进行特殊diff优化，即整体进行diff
     if (n2.patchFlag === PatchFlags.BAIL) {
       optimized = false
       n2.dynamicChildren = null
     }
 
+    // 初次渲染，即：createApp(rootComponent, rootProps).mount('#app')，type 是 rootComponent
+    // shapeFlag = ShapeFlags.COMPONENT： 4
     const { type, ref, shapeFlag } = n2
     switch (type) {
       case Text:
@@ -503,6 +514,7 @@ function baseCreateRenderer(
         )
         break
       default:
+        // 由于ShapeFlags 值都是通过 1 << xx， 因此通过按位操作：& 如果二进制位都一样，则结果为当前shapeFlag，否则结果为0
         if (shapeFlag & ShapeFlags.ELEMENT) {
           processElement(
             n1,
@@ -515,6 +527,7 @@ function baseCreateRenderer(
             optimized
           )
         } else if (shapeFlag & ShapeFlags.COMPONENT) {
+          // 当 type 为 组件时，即要渲染当对象是一个组件时：
           processComponent(
             n1,
             n2,
@@ -1202,10 +1215,11 @@ function baseCreateRenderer(
     }
   }
 
+  // render patch 处理 shapeFlag & ShapeFlags.COMPONENT
   const processComponent = (
-    n1: VNode | null,
-    n2: VNode,
-    container: RendererElement,
+    n1: VNode | null, // dom上原先已挂载的VNode
+    n2: VNode, // 当前要挂载的VNode
+    container: RendererElement, // dom实例：挂载目标dom节点
     anchor: RendererNode | null,
     parentComponent: ComponentInternalInstance | null,
     parentSuspense: SuspenseBoundary | null,
@@ -1213,6 +1227,7 @@ function baseCreateRenderer(
     optimized: boolean
   ) => {
     if (n1 == null) {
+      // shapeFlag = 1 << 9
       if (n2.shapeFlag & ShapeFlags.COMPONENT_KEPT_ALIVE) {
         ;(parentComponent!.ctx as KeepAliveContext).activate(
           n2,
@@ -1222,6 +1237,7 @@ function baseCreateRenderer(
           optimized
         )
       } else {
+        // 开始 渲染组件
         mountComponent(
           n2,
           container,
@@ -1237,27 +1253,35 @@ function baseCreateRenderer(
     }
   }
 
+  // 实际挂载组件方法
+  // 第一次开始render patch 挂载并渲染组件
   const mountComponent: MountComponentFn = (
-    initialVNode,
-    container,
+    initialVNode, // 当前要挂载的VNode
+    container, // dom实例：挂载目标dom节点
     anchor,
     parentComponent,
     parentSuspense,
     isSVG,
     optimized
   ) => {
+    // 初始化和绑定组件实例基本属性：如type=vnode.type、props初始化、上下文信息appContext、ctx，绑定instance.root=instance 等
+    // 同时也将组件实例绑定到 vnode.component
     const instance: ComponentInternalInstance = (initialVNode.component = createComponentInstance(
       initialVNode,
       parentComponent,
       parentSuspense
     ))
 
+    // __BROWSER__：全局环境/浏览器环境/构建工具环境，并且是浏览器对应的分支
+    // instance.type 为根组件选项，在createVnode时初始化
     if (__DEV__ && (__BROWSER__ || __TEST__) && instance.type.__hmrId) {
       registerHMR(instance)
     }
 
     if (__DEV__) {
       pushWarningContext(initialVNode)
+      // instance.appContext.config.performance:true 开启性能检测
+      // 通过 window.performance查看结果
       startMeasure(instance, `mount`)
     }
 
@@ -1270,6 +1294,7 @@ function baseCreateRenderer(
     if (__DEV__) {
       startMeasure(instance, `init`)
     }
+    // 启动配置组件实例
     setupComponent(instance)
     if (__DEV__) {
       endMeasure(instance, `init`)
@@ -2200,12 +2225,19 @@ function baseCreateRenderer(
     return hostNextSibling((vnode.anchor || vnode.el)!)
   }
 
+  /**
+   * 执行mount后，执行渲染函数
+   * @param vnode - 根组件对应的vnode
+   * @param container - 挂在dom节点容器
+   */
   const render: RootRenderFunction = (vnode, container) => {
     if (vnode == null) {
       if (container._vnode) {
+        // 渲染之前，先卸载掉原先的挂在实例
         unmount(container._vnode, null, null, true)
       }
     } else {
+      // 开始渲染、补丁
       patch(container._vnode || null, vnode, container)
     }
     flushPostFlushCbs()

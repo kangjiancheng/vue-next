@@ -78,7 +78,7 @@ export interface AppContext {
    * Flag for de-optimizing props normalization
    * @internal
    */
-  deopt?: boolean
+  deopt?: boolean // 初始化组件实例时
   /**
    * HMR only
    * @internal
@@ -231,7 +231,7 @@ export function createAppAPI<HostElement>(
       // 基本挂载方法
       // 在不同情景下实现各自的功能：客户端版的mount方法会在入口重新初始化
       mount(rootContainer: HostElement, isHydrate?: boolean): any {
-        // 避免对同一个Vue.createApp()结果, 多次调用mount()
+        // isMounted 避免对同一个Vue.createApp()结果, 多次调用mount()
         // 此时，需要重新 createApp，然后再调用mount
         if (!isMounted) {
           // 初始化 vnode 属性，其中vnode.type=rootComponent

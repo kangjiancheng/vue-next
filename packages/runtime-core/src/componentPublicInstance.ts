@@ -456,6 +456,7 @@ export function createRenderContext(instance: ComponentInternalInstance) {
   })
 
   // expose public properties
+  // 访问相关实例属性，返回处理后的组件实例属性
   Object.keys(publicPropertiesMap).forEach(key => {
     Object.defineProperty(target, key, {
       configurable: true,
@@ -468,6 +469,7 @@ export function createRenderContext(instance: ComponentInternalInstance) {
   })
 
   // expose global properties
+  // 绑定app上下文的config信息到 实例的ctx上
   const { globalProperties } = instance.appContext.config
   Object.keys(globalProperties).forEach(key => {
     Object.defineProperty(target, key, {

@@ -57,6 +57,8 @@ export const hydrate = ((...args) => {
  * 开始入口
  */
 export const createApp = ((...args) => {
+  // ensureRenderer：初始化渲染函数render、初始化createApp 方法
+  // createApp: 初始化app基本配置和方法
   const app = ensureRenderer().createApp(...args)
 
   // 开发库，如：vue.global.js
@@ -68,7 +70,7 @@ export const createApp = ((...args) => {
   const { mount } = app
   // containerOrSelector: 挂载目标，dom节点实例 或 节点选择器
   app.mount = (containerOrSelector: Element | string): any => {
-    // 校验 挂载目标
+    // 校验 挂载目标，并返回dom实例
     const container = normalizeContainer(containerOrSelector)
     if (!container) return
 

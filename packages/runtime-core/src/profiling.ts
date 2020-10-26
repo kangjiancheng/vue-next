@@ -3,6 +3,7 @@ import { ComponentInternalInstance, formatComponentName } from './component'
 let supported: boolean
 let perf: any
 
+// 性能检测 如果设 performance：true，且window.performance存在
 export function startMeasure(
   instance: ComponentInternalInstance,
   type: string
