@@ -51,6 +51,7 @@ export const remove = <T>(arr: T[], el: T) => {
   }
 }
 
+// 用于判断当前对象实例(不是原型)上是否存在给定的属性。
 const hasOwnProperty = Object.prototype.hasOwnProperty
 export const hasOwn = (
   val: object,
@@ -98,6 +99,7 @@ export const isIntegerKey = (key: unknown) =>
 
 export const isReservedProp = /*#__PURE__*/ makeMap(
   // the leading comma is intentional so empty string "" is also included
+  // 禁止 空key: ''
   ',key,ref,' +
     'onVnodeBeforeMount,onVnodeMounted,' +
     'onVnodeBeforeUpdate,onVnodeUpdated,' +

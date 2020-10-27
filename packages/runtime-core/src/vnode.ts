@@ -399,8 +399,8 @@ function _createVNode(
     [ReactiveFlags.SKIP]: true,
     type,
     props,
-    key: props && normalizeKey(props),
-    ref: props && normalizeRef(props),
+    key: props && normalizeKey(props), // 获取 props 中属性名为 key 的属性
+    ref: props && normalizeRef(props), // 获取 props 中属性名为 ref 的属性
     scopeId: currentScopeId,
     children: null,
     component: null, // 在render -> patch -> mountComponent 初始完成后，createComponentInstance() 返回赋值

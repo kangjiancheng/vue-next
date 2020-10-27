@@ -429,7 +429,7 @@ export function createComponentInstance(
     directives: null,
 
     // resolved props and emits options
-    // 规范props 属性格式，如转换为小驼峰、props不能已$开头
+    // 规范props 属性格式，如转换为小驼峰、props不能已$开头，结果赋值给__props
     propsOptions: normalizePropsOptions(type, appContext),
     emitsOptions: normalizeEmitsOptions(type, appContext),
 
@@ -519,14 +519,15 @@ export let isInSSRComponentSetup = false
  * 开始挂载渲染component
  */
 export function setupComponent(
-  instance: ComponentInternalInstance, // 组件的实例
+  instance: ComponentInternalInstance, // 组件的实例，由上边的ComponentInternalInstance() 创建
   isSSR = false
 ) {
   isInSSRComponentSetup = isSSR
 
   // 组件的vnode，在 createVnode 初始化
+  // 传递的props：rootProps（非组件上的props属性）
   const { props, children, shapeFlag } = instance.vnode
-  // 是组件式
+  // 是组件式：4
   const isStateful = shapeFlag & ShapeFlags.STATEFUL_COMPONENT
   // 进一步处理组件的props（在初始化组件实例时，已经规范了prop格式)
   initProps(instance, props, isStateful, isSSR)

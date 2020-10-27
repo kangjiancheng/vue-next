@@ -126,28 +126,38 @@ type NormalizedProp =
 export type NormalizedProps = Record<string, NormalizedProp>
 export type NormalizedPropsOptions = [NormalizedProps, string[]] | []
 
+/**
+ * 开始处理 props: 结合组件上的props属性 和 传进组件的props
+ * 生成有效 props和attrs 即接收传进来的props，并进行类型校验等
+ */
 export function initProps(
   instance: ComponentInternalInstance,
-  rawProps: Data | null,
+  rawProps: Data | null, // 传递的props：rootProps（非组件上的props属性）
   isStateful: number, // result of bitwise flag comparison
   isSSR = false
 ) {
-  const props: Data = {}
-  const attrs: Data = {}
+  const props: Data = {} // 存储传进来的props的值，这些props是在组件上已经声明了
+  const attrs: Data = {} // 存储没有声明的props（虽然确实传递了，当 组件的props属性里 没有声明校验）
   // 设定 attrs.__vInternal = 1
   def(attrs, InternalObjectKey, 1)
+
+  // 将传入给组件的props 与 组件上待接收的props列表 进行对比
+  // 设置组件接收到的 props 和 attrs，并设置props的默认值
   setFullProps(instance, rawProps, props, attrs)
   // validation
   if (__DEV__) {
+    // 开发环境验证，验证prop的 required、type、validator
     validateProps(props, instance)
   }
 
   if (isStateful) {
-    // stateful
+    // stateful：状态式组件 component
+    // 浏览器环境下，对props进行响应式处理
     instance.props = isSSR ? props : shallowReactive(props)
   } else {
     if (!instance.type.props) {
       // functional w/ optional props, props === attrs
+      // 如果 props属性没有定义，则默认接收所有传递进来的属性
       instance.props = attrs
     } else {
       // functional w/ declared props
@@ -266,16 +276,21 @@ export function updateProps(
   }
 }
 
+// 将传入进组件上的 props的值 保存起来，设置带值的props和attrs，同时设置props的默认值
 function setFullProps(
   instance: ComponentInternalInstance,
-  rawProps: Data | null,
+  rawProps: Data | null, // 传进组件的props：如rootProps（非组件上的props属性）
   props: Data,
   attrs: Data
 ) {
+  // options 为规范后的组件 props 属性
+  // instance.propsOptions 为组件上的 __props
   const [options, needCastKeys] = instance.propsOptions
   if (rawProps) {
+    // 传入的 props
     for (const key in rawProps) {
       const value = rawProps[key]
+      // 不处理vue 保留的关键 prop key，如：key、ref、或空字符串key，即不能传入这些到组件
       // key, ref are reserved and never passed down
       if (isReservedProp(key)) {
         continue
@@ -284,68 +299,84 @@ function setFullProps(
       // kebab -> camel conversion here we need to camelize the key.
       let camelKey
       if (options && hasOwn(options, (camelKey = camelize(key)))) {
+        // '传入给组件的props' 如果在 '组件的校验props里' 则赋值保存到有效的props
         props[camelKey] = value
       } else if (!isEmitListener(instance.emitsOptions, key)) {
-        // Any non-declared (either as a prop or an emitted event) props are put
-        // into a separate `attrs` object for spreading. Make sure to preserve
-        // original key casing
+        // '传入给组件的props' 如果不在 '组件的校验props里'，同时也不是一个emit事件， 则赋值保存到attrs
         attrs[key] = value
       }
     }
   }
 
+  // boolean类型或有默认值
   if (needCastKeys) {
-    const rawCurrentProps = toRaw(props)
+    const rawCurrentProps = toRaw(props) // 首次还是不变，即还是当前这个值
+
+    // 针对 可以需要校验为boolean 类型 或有默认值的prop
     for (let i = 0; i < needCastKeys.length; i++) {
       const key = needCastKeys[i]
+      // 设置prop的默认值
       props[key] = resolvePropValue(
-        options!,
+        options!, // 排除undefined/null
         rawCurrentProps,
-        key,
-        rawCurrentProps[key],
+        key, // 传入的prop，
+        rawCurrentProps[key], // 传入的 prop的值
         instance
       )
     }
   }
 }
 
+// 处理带有默认值的props 或 Boolean类型校验
 function resolvePropValue(
   options: NormalizedProps,
-  props: Data,
-  key: string,
-  value: unknown,
+  props: Data, // 处理后的有效props，带实际值，即传进组件的prop并在组件里声明了
+  key: string, // needCastKeys[i]
+  value: unknown, // 传入的 prop的值
   instance: ComponentInternalInstance
 ) {
-  const opt = options[key]
+  const opt = options[key] // 组件上声明的prop
   if (opt != null) {
     const hasDefault = hasOwn(opt, 'default')
-    // default values
+    // default values，设置prop的默认值
     if (hasDefault && value === undefined) {
       const defaultValue = opt.default
+      /**
+       * prop的默认值，即当default属性值是函数时，需要根据type 是否是 Function
+       *  是 - prop的默认值是这个 default函数，
+       *  不是 - prop的默认值是这个 default函数的返回值
+       */
       if (opt.type !== Function && isFunction(defaultValue)) {
+        // default属性值虽然是一个函数，但prop的默认值实际是这个函数的返回值
         setCurrentInstance(instance)
         value = defaultValue(props)
         setCurrentInstance(null)
       } else {
+        // value 是一个基本类型 或是一个函数（type 需定义为 Function）
         value = defaultValue
       }
     }
     // boolean casting
+    // 进一步处理默认值，处理boolean类型的默认值
     if (opt[BooleanFlags.shouldCast]) {
       if (!hasOwn(props, key) && !hasDefault) {
+        // 没有向组件传入这个 Boolean prop，且这个组件也没为这个prop设置默认值
         value = false
       } else if (
         opt[BooleanFlags.shouldCastTrue] &&
         (value === '' || value === hyphenate(key))
       ) {
+        // opt[BooleanFlags.shouldCastTrue] = true 此时：
+        // opt.type 不是String类型 或 或String比Boolean类型 声明偏后
         value = true
       }
     }
   }
+  // 默认值可以直接是 null
   return value
 }
 
-// 处理组件的props 属性
+// 规范 组件的props属性 格式
 export function normalizePropsOptions(
   comp: ConcreteComponent, // 根组件
   appContext: AppContext, // app 上下文
@@ -408,8 +439,10 @@ export function normalizePropsOptions(
       // props不能已$开头
       if (validatePropName(normalizedKey)) {
         // 进一步规范prop的值
-        const opt = raw[key] // prop 的值
-        // 针对数组或函数格式的prop重新组装赋值
+        const opt = raw[key] // prop 的类型值
+        // 调整prop格式，赋值type
+        // 正常格式 如 prop: { type: Number, default: 123 }
+        // prop: Boolean => prop: { type: Boolean }
         const prop: NormalizedProp = (normalized[normalizedKey] =
           isArray(opt) || isFunction(opt) ? { type: opt } : opt)
 
@@ -417,15 +450,17 @@ export function normalizePropsOptions(
           // 如果prop值存在（注意正常情况下，prop接收的是一个类型值）
           // 分3种情况处理：数组、函数、其它
           // 数组时，返回Boolean类型的索引，函数返回0，其它返回 1
-          const booleanIndex = getTypeIndex(Boolean, prop.type) // 返回 Boolean 在数组中的位置
+          const booleanIndex = getTypeIndex(Boolean, prop.type) // 判断是否是Boolean类型（可以函数或是数组） 返回 Boolean 的位置
           const stringIndex = getTypeIndex(String, prop.type) // 返回 String 在数组中的位置
-          prop[BooleanFlags.shouldCast] = booleanIndex > -1 // prop[0] = booleanIndex > -1 true，表明有Boolean类型
+
+          // 为了处理 类型为Boolean的默认值
+          prop[BooleanFlags.shouldCast] = booleanIndex > -1 // prop[0]  true，表明有Boolean类型，为了将默认值转换为 false
           prop[BooleanFlags.shouldCastTrue] =
-            stringIndex < 0 || booleanIndex < stringIndex // prop[1] true，String 类型不存在 或 比 Boolean 靠后
+            stringIndex < 0 || booleanIndex < stringIndex // prop[1] true，String 类型不存在 或 存在且比 Boolean 靠后
 
           // if the prop needs boolean casting or default value
-          // 针对 要判断 boolean 类型 或有默认值的prop
           if (booleanIndex > -1 || hasOwn(prop, 'default')) {
+            // prop是 boolean 类型 或有默认值
             needCastKeys.push(normalizedKey)
           }
         }
@@ -457,6 +492,7 @@ function isSameType(a: Prop<any>, b: Prop<any>): boolean {
   return getType(a) === getType(b)
 }
 
+// 获取某个类型在某个类型集合中的位置
 function getTypeIndex(
   type: Prop<any>,
   expectedTypes: PropType<any> | void | null | true // prop的type值，即prop的值
@@ -469,6 +505,7 @@ function getTypeIndex(
       }
     }
   } else if (isFunction(expectedTypes)) {
+    // 当只prop的type只是一个类型是，判断是否类型相等
     return isSameType(expectedTypes, type) ? 0 : -1
   }
   return -1
@@ -478,8 +515,9 @@ function getTypeIndex(
  * dev only
  */
 function validateProps(props: Data, instance: ComponentInternalInstance) {
+  // props 为组件接收到的属性集合，且已规范格式和设置完默认值
   const rawValues = toRaw(props)
-  const options = instance.propsOptions[0]
+  const options = instance.propsOptions[0] // 已规范后的组件的props属性列表
   for (const key in options) {
     let opt = options[key]
     if (opt == null) continue
@@ -491,10 +529,10 @@ function validateProps(props: Data, instance: ComponentInternalInstance) {
  * dev only
  */
 function validateProp(
-  name: string,
-  value: unknown,
-  prop: PropOptions,
-  isAbsent: boolean
+  name: string, // 组件上声明prop的 key 键名
+  value: unknown, // 组件接收到的prop的值
+  prop: PropOptions, // 组件上声明prop的 value 值
+  isAbsent: boolean // 组件上key 是否在 在已接收的props里
 ) {
   const { type, required, validator } = prop
   // required!
@@ -504,24 +542,32 @@ function validateProp(
   }
   // missing but optional
   if (value == null && !prop.required) {
+    // 默认值 可以是 null
     return
   }
+
+  // 判断传入prop属性类型是否符合定义的type
   // type check
   if (type != null && type !== true) {
     let isValid = false
     const types = isArray(type) ? type : [type]
     const expectedTypes = []
     // value is valid as long as one of the specified types match
+    // 只要传入的prop属性的类型 存在于 此prop期望接收的类型列表里， 就是有效的类型
     for (let i = 0; i < types.length && !isValid; i++) {
+      // 判断 value 类型是否符合 types中的某一个，isValid=true 就立刻停止判断
       const { valid, expectedType } = assertType(value, types[i])
       expectedTypes.push(expectedType || '')
       isValid = valid
     }
     if (!isValid) {
+      // 所有 expectedTypes 都没符合，就报错
       warn(getInvalidTypeMessage(name, value, expectedTypes))
       return
     }
   }
+
+  // 自定义 验证，返回值为false，则验证失败
   // custom validator
   if (validator && !validator(value)) {
     warn('Invalid prop: custom validator check failed for prop "' + name + '".')
@@ -540,12 +586,19 @@ type AssertionResult = {
 /**
  * dev only
  */
+// 判断 value的类型是否符合type,
+// value 为 传入的prop的值
+// type 为 组件里prop能接收的类型
 function assertType(value: unknown, type: PropConstructor): AssertionResult {
   let valid
-  const expectedType = getType(type)
+  const expectedType = getType(type) // 期望的类型
+
+  // 基本数据类型
   if (isSimpleType(expectedType)) {
     const t = typeof value
     valid = t === expectedType.toLowerCase()
+
+    // 如果是 基本数据类型函数的实例，如：value = new String('xxx')
     // for primitive wrapper objects
     if (!valid && t === 'object') {
       valid = value instanceof type
@@ -566,6 +619,7 @@ function assertType(value: unknown, type: PropConstructor): AssertionResult {
 /**
  * dev only
  */
+// 类型校验出错，报错提示
 function getInvalidTypeMessage(
   name: string,
   value: unknown,

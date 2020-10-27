@@ -43,6 +43,27 @@
 
   const rootComponent = {
     props: {
+      hasDefault: {
+        type: Number,
+        default: 1
+      },
+      typeFunction: {
+        type: Function, // 当 type = Function
+        default: () => '默认值 就是这个函数，即default属性的值'
+      },
+      typeNotFunction: {
+        type: Number,
+        // props 为传入的有效props集合
+        default: props => 123 // 默认值是这个函数的 返回值
+      },
+      strBoolean: {
+        type: Number,
+        default: '', // 默认值应该返回为 true
+      },
+      strBoolean2: {
+        type: String,
+        default: ''
+      },
       'a-b': String,
       age: Number,
       ageArray: [Number, Boolean, String],
@@ -77,7 +98,8 @@
     }
   }
   const rootProps = {
-    age: 10
+    age: 10,
+    toAttrs: '这个属性会保存到 attrs，因为组件上没有接收这个属性',
   }
   // debugger
   const app = createApp(rootComponent, rootProps)
