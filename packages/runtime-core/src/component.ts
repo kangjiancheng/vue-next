@@ -529,8 +529,11 @@ export function setupComponent(
   const { props, children, shapeFlag } = instance.vnode
   // 是组件式：4
   const isStateful = shapeFlag & ShapeFlags.STATEFUL_COMPONENT
-  // 进一步处理组件的props（在初始化组件实例时，已经规范了prop格式)
+
+  // 进一步处理组件的props（在初始化组件实例时，已经规范了组件的props格式)
+  // 设置组件实际接收的props、attrs，并进行props的类型检查、默认值处理等
   initProps(instance, props, isStateful, isSSR)
+
   initSlots(instance, children)
 
   const setupResult = isStateful
