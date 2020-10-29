@@ -63,6 +63,7 @@ export const createApp = ((...args) => {
 
   // 开发库，如：vue.global.js
   if (__DEV__) {
+    // 如：检测组件name属性时，不可使用这些保留name
     injectNativeTagCheck(app)
   }
 

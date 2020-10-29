@@ -504,6 +504,7 @@ export const setCurrentInstance = (
 
 const isBuiltInTag = /*#__PURE__*/ makeMap('slot,component')
 
+// 校验 组件name属性
 export function validateComponentName(name: string, config: AppConfig) {
   const appIsNativeTag = config.isNativeTag || NO
   if (isBuiltInTag(name) || appIsNativeTag(name)) {
@@ -534,6 +535,7 @@ export function setupComponent(
   // 设置组件实际接收的props、attrs，并进行props的类型检查、默认值处理等
   initProps(instance, props, isStateful, isSSR)
 
+  // TODO: 待分析有slots
   initSlots(instance, children)
 
   const setupResult = isStateful
@@ -543,22 +545,27 @@ export function setupComponent(
   return setupResult
 }
 
+// 状态式组件
 function setupStatefulComponent(
   instance: ComponentInternalInstance,
   isSSR: boolean
 ) {
+  // 组件选项
   const Component = instance.type as ComponentOptions
 
   if (__DEV__) {
+    // 组件名 不可使用保留的关键字符串命名
     if (Component.name) {
       validateComponentName(Component.name, instance.appContext.config)
     }
+    // 组件名 不可使用保留的关键字符串命名
     if (Component.components) {
       const names = Object.keys(Component.components)
       for (let i = 0; i < names.length; i++) {
         validateComponentName(names[i], instance.appContext.config)
       }
     }
+    // 自定义指令名不能与官方内置指令一样：v-if、v-show...
     if (Component.directives) {
       const names = Object.keys(Component.directives)
       for (let i = 0; i < names.length; i++) {
@@ -568,6 +575,7 @@ function setupStatefulComponent(
   }
   // 0. create render proxy property access cache
   instance.accessCache = Object.create(null)
+  // 拦截 instance.ctx 的访问get、设置set、判断has
   // 1. create public instance / render proxy
   // also mark it raw so it's never observed
   instance.proxy = new Proxy(instance.ctx, PublicInstanceProxyHandlers)
@@ -621,10 +629,13 @@ export function handleSetupResult(
   isSSR: boolean
 ) {
   if (isFunction(setupResult)) {
+    // setup 可以返回一个渲染函数
     // setup returned an inline render function
     instance.render = setupResult as InternalRenderFunction
   } else if (isObject(setupResult)) {
+    // setup 返回一个对象
     if (__DEV__ && isVNode(setupResult)) {
+      // 不可以直接返回一个vnode，应该返回一个render函数
       warn(
         `setup() should not return VNodes directly - ` +
           `return a render function instead.`
@@ -633,6 +644,7 @@ export function handleSetupResult(
     // setup returned bindings.
     // assuming a render function compiled from template is present.
     if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
+      // 假定已经预置了一个由 模板template编译后的渲染函数
       instance.devtoolsRawSetupState = setupResult
     }
     instance.setupState = proxyRefs(setupResult)

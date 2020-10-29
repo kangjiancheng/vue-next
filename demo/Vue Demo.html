@@ -42,6 +42,7 @@
 
 
   const rootComponent = {
+    name: 'root-component',
     props: {
       hasDefault: {
         type: Number,
@@ -58,7 +59,7 @@
       },
       strBoolean: {
         type: Number,
-        default: '', // 默认值应该返回为 true
+        // default: '', // todo test 默认值应该返回为 true
       },
       strBoolean2: {
         type: String,
@@ -69,7 +70,7 @@
       ageArray: [Number, Boolean, String],
       ageFn: function(age) {
         console.log('age: ', age)
-      }
+      },
     },
     // props 不可通过解构来获取对应值
     setup(props, context ) {
@@ -99,7 +100,17 @@
   }
   const rootProps = {
     age: 10,
-    toAttrs: '这个属性会保存到 attrs，因为组件上没有接收这个属性',
+    // toAttrs: '这个属性会保存到 attrs，因为组件上没有接收这个属性',
+    // class: [
+    //   'class-0',
+    //   { class1: 'class-1'},
+    // ],
+    // style: [
+    //   'font-size: 12px;',
+    //   {
+    //     backgroundColor: 'blue',
+    //   }
+    // ]
   }
   // debugger
   const app = createApp(rootComponent, rootProps)

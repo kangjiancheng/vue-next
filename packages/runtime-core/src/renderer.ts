@@ -1294,7 +1294,7 @@ function baseCreateRenderer(
     if (__DEV__) {
       startMeasure(instance, `init`)
     }
-    // 启动配置组件实例
+    // 启动配置组件实例，输出组件对应的渲染函数render()
     setupComponent(instance)
     if (__DEV__) {
       endMeasure(instance, `init`)

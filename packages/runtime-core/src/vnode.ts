@@ -357,6 +357,7 @@ function _createVNode(
     }
     let { class: klass, style } = props
     if (klass && !isString(klass)) {
+      // 规范传递过来的 class 名字格式，空格拼接成字符串
       props.class = normalizeClass(klass)
     }
     if (isObject(style)) {
@@ -365,6 +366,7 @@ function _createVNode(
       if (isProxy(style) && !isArray(style)) {
         style = extend({}, style)
       }
+      // 将 字符串style 转换为 对象style
       props.style = normalizeStyle(style)
     }
   }

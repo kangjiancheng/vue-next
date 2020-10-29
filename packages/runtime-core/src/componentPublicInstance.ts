@@ -230,6 +230,7 @@ export interface ComponentRenderContext {
   _: ComponentInternalInstance
 }
 
+// instance.ctx => instance.proxy
 export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
   get({ _: instance }: ComponentRenderContext, key: string) {
     const {
@@ -469,7 +470,7 @@ export function createRenderContext(instance: ComponentInternalInstance) {
   })
 
   // expose global properties
-  // 绑定app上下文的config信息到 实例的ctx上
+  // 绑定app上下文的config.globalProperties 信息到 实例的ctx上
   const { globalProperties } = instance.appContext.config
   Object.keys(globalProperties).forEach(key => {
     Object.defineProperty(target, key, {
