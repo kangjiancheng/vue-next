@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Vue 3 组件源码分析</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+    .red-class {
+      color: red;
+    }
+    .blue-class {
+      color: blue;
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <h1>{{ title }}</h1>
+  <local-component>
+    <template #default>
+      <div class="pass-slot-default">slot 默认位置</div>
+    </template>
+    <template #footer>
+      <div class="pass-slot-footer">slot 通过具名</div>
+    </template>
+  </local-component>
+</div>
+
+<script src="../packages/vue/dist/vue.global.js"></script>
+<script>
+
+  const {
+    createApp,
+    ref,
+    reactive,
+    onMounted,
+  } = Vue
+
+  // 定义局部组件
+  const LocalComponent = {
+    name: 'local-component',
+    template: `
+      <div class="local-component">
+        <h3 class="local-title">{{ title }}</h3>
+        <main><slot></slot></main>
+        <footer><slot name="footer"></slot></footer>
+        <global-component :title="globalTitle"/>
+      </div>
+    `,
+    data () {
+      return {
+        title: '这是局部组件',
+        globalTitle: '这是全局组件',
+      }
+    }
+  }
+
+
+  const rootComponent = {
+    name: 'root-component',
+    components: {
+      LocalComponent, // 局部组件引入
+    },
+    props: {
+      age: {
+        type: Number,
+        required: true,
+        default: 1,
+      }
+    },
+    data () {
+      return {
+        title: '分析组件',
+      }
+    },
+    setup() {
+      const count = ref(0)
+      const state = reactive({ foo: 1 })
+
+      const handleClick = () => {
+        count.value++
+        state.foo++
+      }
+
+      return {
+        count,
+        state,
+        handleClick,
+      }
+    }
+  }
+  const rootProps = {
+    age: 10,
+  }
+
+  const app = createApp(rootComponent, rootProps)
+
+  // 定义全局组件，可直接使用
+  app.component('global-component', {
+    template: '<h3 class="global-component">{{ title }}</h3>',
+    props: {
+      title: {
+        type: String,
+        required: true,
+      }
+    }
+  })
+
+  app.mount('#app')
+
+</script>
+
+</body>
+</html>
