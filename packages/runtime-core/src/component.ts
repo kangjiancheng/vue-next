@@ -535,7 +535,6 @@ export function setupComponent(
   // 设置组件实际接收的props、attrs，并进行props的类型检查、默认值处理等
   initProps(instance, props, isStateful, isSSR)
 
-  // TODO: 待分析有slots
   initSlots(instance, children)
 
   const setupResult = isStateful
@@ -558,7 +557,7 @@ function setupStatefulComponent(
     if (Component.name) {
       validateComponentName(Component.name, instance.appContext.config)
     }
-    // 组件名 不可使用保留的关键字符串命名
+    // 子组件名 不可使用保留的关键字符串命名
     if (Component.components) {
       const names = Object.keys(Component.components)
       for (let i = 0; i < names.length; i++) {
@@ -580,6 +579,7 @@ function setupStatefulComponent(
   // also mark it raw so it's never observed
   instance.proxy = new Proxy(instance.ctx, PublicInstanceProxyHandlers)
   if (__DEV__) {
+    // 将组件的props属性暴露给 组件实例instance.ctx
     exposePropsOnRenderContext(instance)
   }
   // 2. call setup()

@@ -484,13 +484,13 @@ export function createRenderContext(instance: ComponentInternalInstance) {
   return target as ComponentRenderContext
 }
 
-// dev only
+// dev only：将组件的props属性暴露给 组件实例instance.ctx
 export function exposePropsOnRenderContext(
   instance: ComponentInternalInstance
 ) {
   const {
     ctx,
-    propsOptions: [propsOptions]
+    propsOptions: [propsOptions] // 规范后的组件的props属性
   } = instance
   if (propsOptions) {
     Object.keys(propsOptions).forEach(key => {
