@@ -201,6 +201,7 @@ export type ComponentPublicInstance<
 type PublicPropertiesMap = Record<string, (i: ComponentInternalInstance) => any>
 
 const publicPropertiesMap: PublicPropertiesMap = extend(Object.create(null), {
+  // i 为component实例: instance
   $: i => i,
   $el: i => i.vnode.el,
   $data: i => i.data,
@@ -230,8 +231,11 @@ export interface ComponentRenderContext {
   _: ComponentInternalInstance
 }
 
-// instance.ctx => instance.proxy
+// 代理ctx: 拦截组件实例的上下文：instance.ctx，并返回给instance.proxy
+// ctx 由下方的 xxxRenderContext() 方法创建组合而成的
 export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
+  // key 为 instance.ctx的属性
+  // ctx 为组件实例的上下文，包括了实例方法，实例data属性、实例props等
   get({ _: instance }: ComponentRenderContext, key: string) {
     const {
       ctx,
@@ -261,16 +265,19 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
     // prototype) to memoize what access type a key corresponds to.
     let normalizedProps
     if (key[0] !== '$') {
+      // 访问的不是组件内置的实例属性时
+
       const n = accessCache![key]
+      // 缓存之前设置的属性，直接返回，避免后续重复操作
       if (n !== undefined) {
         switch (n) {
-          case AccessTypes.SETUP:
+          case AccessTypes.SETUP: // 在setup 方法中创建并返回的属性
             return setupState[key]
-          case AccessTypes.DATA:
+          case AccessTypes.DATA: // 在data 中定义的属性
             return data[key]
-          case AccessTypes.CONTEXT:
+          case AccessTypes.CONTEXT: // 内置的上下文全局属性：appContext.config.globalProperties
             return ctx[key]
-          case AccessTypes.PROPS:
+          case AccessTypes.PROPS: // 组件接收到的props属性
             return props![key]
           // default: just fallthrough
         }
@@ -497,7 +504,7 @@ export function exposePropsOnRenderContext(
       Object.defineProperty(ctx, key, {
         enumerable: true,
         configurable: true,
-        get: () => instance.props[key],
+        get: () => instance.props[key], // 组件实际接收到的props
         set: NOOP
       })
     })
