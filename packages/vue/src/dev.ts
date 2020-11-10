@@ -15,6 +15,7 @@ export function initDev() {
       )
     }
 
+    // 修改引擎内置报错格式，控制台展示
     initCustomFormatter()
   }
 }

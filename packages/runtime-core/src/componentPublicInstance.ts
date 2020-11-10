@@ -200,6 +200,7 @@ export type ComponentPublicInstance<
 
 type PublicPropertiesMap = Record<string, (i: ComponentInternalInstance) => any>
 
+// instance.ctx: 公开组件实例部分属性与方法
 const publicPropertiesMap: PublicPropertiesMap = extend(Object.create(null), {
   // i 为component实例: instance
   $: i => i,
@@ -257,25 +258,19 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
       return true
     }
 
-    // data / props / ctx
-    // This getter gets called for every property access on the render context
-    // during render and is a major hotspot. The most expensive part of this
-    // is the multiple hasOwn() calls. It's much faster to do a simple property
-    // access on a plain object, so we use an accessCache object (with null
-    // prototype) to memoize what access type a key corresponds to.
+    // 当访问组件实例上下文ctx属性时，设置缓存所访问属性的范围：data / props / ctx，方便后续再次访问时可直接返回，避免重复判断等操作
+    // 访问优先级：setup > data > props
     let normalizedProps
     if (key[0] !== '$') {
-      // 访问的不是组件内置的实例属性时
-
+      // 设置所访问属性的范围
       const n = accessCache![key]
-      // 缓存之前设置的属性，直接返回，避免后续重复操作
       if (n !== undefined) {
         switch (n) {
           case AccessTypes.SETUP: // 在setup 方法中创建并返回的属性
             return setupState[key]
           case AccessTypes.DATA: // 在data 中定义的属性
             return data[key]
-          case AccessTypes.CONTEXT: // 内置的上下文全局属性：appContext.config.globalProperties
+          case AccessTypes.CONTEXT: // ctx中除了setup、data、props访问的剩余属性(包括用户自定义的$xxx ?)
             return ctx[key]
           case AccessTypes.PROPS: // 组件接收到的props属性
             return props![key]
@@ -303,9 +298,12 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
       }
     }
 
+    /**
+     * 各种范围的 $xxx：publicPropertiesMap、globalProperties、自定义、
+     */
     const publicGetter = publicPropertiesMap[key]
     let cssModule, globalProperties
-    // public $xxx properties
+    // 组件实例公开的 $xxx 属性，直接返回相应属性与方法
     if (publicGetter) {
       if (key === '$attrs') {
         track(instance, TrackOpTypes.GET, key)
@@ -313,34 +311,38 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
       }
       return publicGetter(instance)
     } else if (
-      // css module (injected by vue-loader)
       (cssModule = type.__cssModules) &&
       (cssModule = cssModule[key])
     ) {
+      // todo: 待测试
+      // css module (injected by vue-loader)
+      // type 即 组件，在createVNode时初始化
       return cssModule
     } else if (ctx !== EMPTY_OBJ && hasOwn(ctx, key)) {
+      // 为用户自定义的$xxx属性，已排除内置
       // user may set custom properties to `this` that start with `$`
       accessCache![key] = AccessTypes.CONTEXT
       return ctx[key]
     } else if (
-      // global properties
       ((globalProperties = appContext.config.globalProperties),
       hasOwn(globalProperties, key))
     ) {
+      // 全局属性
       return globalProperties[key]
     } else if (
       __DEV__ &&
       currentRenderingInstance &&
       (!isString(key) ||
-        // #1091 avoid internal isRef/isVNode checks on component instance leading
-        // to infinite warning loop
+        // #1091 avoid internal isRef/isVNode checks on component instance leading to infinite warning loop
         key.indexOf('__v') !== 0)
     ) {
+      // key 不是字符串 或 不是以 '__v' 开头
       if (
         data !== EMPTY_OBJ &&
         (key[0] === '$' || key[0] === '_') &&
         hasOwn(data, key)
       ) {
+        // 如果在data中定义了$xxx，在模板中使用时，则只能通过$data.$xxx访问
         warn(
           `Property ${JSON.stringify(
             key
@@ -348,6 +350,8 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
             `character ("$" or "_") and is not proxied on the render context.`
         )
       } else {
+        // 不可以使用未定义的属性
+        // 除了data中定义的$xxx，如果setup中定义了$yyy, 则实际并没有定义，vue访问不到
         warn(
           `Property ${JSON.stringify(key)} was accessed during render ` +
             `but is not defined on instance.`
@@ -361,12 +365,14 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
     key: string,
     value: any
   ): boolean {
+    // 修改组件的 data、setup 返回值、props
     const { data, setupState, ctx } = instance
     if (setupState !== EMPTY_OBJ && hasOwn(setupState, key)) {
       setupState[key] = value
     } else if (data !== EMPTY_OBJ && hasOwn(data, key)) {
       data[key] = value
     } else if (key in instance.props) {
+      // 禁止修改 props 属性
       __DEV__ &&
         warn(
           `Attempting to mutate prop "${key}". Props are readonly.`,
@@ -374,16 +380,18 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
         )
       return false
     }
+
+    // 禁止修改组件实例所公开的内置属性：$xxx
     if (key[0] === '$' && key.slice(1) in instance) {
       __DEV__ &&
         warn(
-          `Attempting to mutate public property "${key}". ` +
-            `Properties starting with $ are reserved and readonly.`,
+          `Attempting to mutate public property "${key}". Properties starting with $ are reserved and readonly.`,
           instance
         )
       return false
     } else {
       if (__DEV__ && key in instance.appContext.config.globalProperties) {
+        // 修改全局属性
         Object.defineProperty(ctx, key, {
           enumerable: true,
           configurable: true,
@@ -396,6 +404,7 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
     return true
   },
 
+  // 判断所访问属性存在各个范围里
   has(
     {
       _: { data, setupState, accessCache, ctx, appContext, propsOptions }
@@ -404,7 +413,7 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
   ) {
     let normalizedProps
     return (
-      accessCache![key] !== undefined ||
+      accessCache![key] !== undefined || // 访问属性的同时，会设置accessCache相应值
       (data !== EMPTY_OBJ && hasOwn(data, key)) ||
       (setupState !== EMPTY_OBJ && hasOwn(setupState, key)) ||
       ((normalizedProps = propsOptions[0]) && hasOwn(normalizedProps, key)) ||
@@ -415,6 +424,7 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
   }
 }
 
+// 别使用ownKeys()，生成环境下会不存在
 if (__DEV__ && !__TEST__) {
   PublicInstanceProxyHandlers.ownKeys = (target: ComponentRenderContext) => {
     warn(
@@ -464,7 +474,7 @@ export function createRenderContext(instance: ComponentInternalInstance) {
   })
 
   // expose public properties
-  // 访问相关实例属性，返回处理后的组件实例属性
+  // 访问相关内置公开的实例属性，返回处理后的组件实例属性
   Object.keys(publicPropertiesMap).forEach(key => {
     Object.defineProperty(target, key, {
       configurable: true,

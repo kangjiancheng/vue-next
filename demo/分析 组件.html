@@ -21,6 +21,8 @@
 <body>
 <div id="app">
   <h1>{{ title }}</h1>
+  <div> fooState: {{ fooState }}，age: {{ age }} - {{ count }}</div>
+  <div> <button @click="handleYou">点击</button></div>
   <local-component>
     <template #default>
       <div class="pass-slot-default">slot 默认位置</div>
@@ -78,19 +80,25 @@
         title: '分析组件',
       }
     },
-    setup() {
+    setup(props, ctx) {
       const count = ref(0)
-      const state = reactive({ foo: 1 })
+      let fooState = reactive({ foo: 1 })
 
       const handleClick = () => {
         count.value++
         state.foo++
       }
+      count = 2
 
       return {
         count,
-        state,
+        fooState,
         handleClick,
+      }
+    },
+    methods: {
+      handleYou() {
+        this.$title = 'you'
       }
     }
   }
