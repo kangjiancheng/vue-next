@@ -1,3 +1,7 @@
+
+搭建临时服务
+> npx http-server
+
 构建所有模块库
 > build
 
