@@ -59,15 +59,16 @@ export const ErrorTypeStrings: Record<number | string, string> = {
 export type ErrorTypes = LifecycleHooks | ErrorCodes
 
 export function callWithErrorHandling(
-  fn: Function,
-  instance: ComponentInternalInstance | null,
-  type: ErrorTypes,
-  args?: unknown[]
+  fn: Function, // 执行函数
+  instance: ComponentInternalInstance | null, // 组件实例
+  type: ErrorTypes, // 报错范围
+  args?: unknown[] // 执行函数参数
 ) {
   let res
   try {
     res = args ? fn(...args) : fn()
   } catch (err) {
+    // err - 如 setup 中代码错误，修改const基本变量的值，引擎报错：'Uncaught TypeError: Assignment to constant variable.'
     handleError(err, instance, type)
   }
   return res
@@ -122,6 +123,7 @@ export function handleError(
       }
       cur = cur.parent
     }
+    // 用户自定义 错误报告函数
     // app-level handling
     const appErrorHandler = instance.appContext.config.errorHandler
     if (appErrorHandler) {
@@ -144,6 +146,7 @@ function logError(
   throwInDev = true
 ) {
   if (__DEV__) {
+    // Vue 错误跟踪显示
     const info = ErrorTypeStrings[type]
     if (contextVNode) {
       pushWarningContext(contextVNode)
@@ -152,6 +155,7 @@ function logError(
     if (contextVNode) {
       popWarningContext()
     }
+
     // crash in dev by default so it's more noticeable
     if (throwInDev) {
       throw err

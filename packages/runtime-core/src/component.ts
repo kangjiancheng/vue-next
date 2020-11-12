@@ -399,7 +399,7 @@ export function createComponentInstance(
   parent: ComponentInternalInstance | null,
   suspense: SuspenseBoundary | null
 ) {
-  // vnode.type 是根组件选项
+  // vnode.type 即组件
   const type = vnode.type as ConcreteComponent
   // 默认使用根组件的vnode.appContext，如果不是创建根组件，则继承父组件的app 上下文环境
   // 根组件的vnode.appContext 是在 mount()时 初始化。
@@ -535,7 +535,6 @@ export function setupComponent(
   // 设置组件实际接收的props、attrs，并进行props的类型检查、默认值处理等
   initProps(instance, props, isStateful, isSSR)
 
-  // TODO: 待分析有slots
   initSlots(instance, children)
 
   const setupResult = isStateful
@@ -558,7 +557,7 @@ function setupStatefulComponent(
     if (Component.name) {
       validateComponentName(Component.name, instance.appContext.config)
     }
-    // 组件名 不可使用保留的关键字符串命名
+    // 子组件名 不可使用保留的关键字符串命名
     if (Component.components) {
       const names = Object.keys(Component.components)
       for (let i = 0; i < names.length; i++) {
@@ -573,32 +572,39 @@ function setupStatefulComponent(
       }
     }
   }
-  // 0. create render proxy property access cache
-  instance.accessCache = Object.create(null)
+
+  // 初始化组件实例上下文代理: instance.proxy => instance.ctx
+  // 为proxy里的相关属性 设置所访问的属性范围类型，如是props或data或setup属性等类型并缓存，方便直接访问并返回结果
+  instance.accessCache = Object.create(null) // 属性的所属范围
   // 拦截 instance.ctx 的访问get、设置set、判断has
-  // 1. create public instance / render proxy
-  // also mark it raw so it's never observed
+  // get: data、setupState、props、全局属性、组件实例公开属性与方法 等等
   instance.proxy = new Proxy(instance.ctx, PublicInstanceProxyHandlers)
   if (__DEV__) {
+    // 将组件的props属性暴露给 组件实例instance.ctx
     exposePropsOnRenderContext(instance)
   }
   // 2. call setup()
   const { setup } = Component
   if (setup) {
+    // 初始 setup.length = 0，setupContext = null
     const setupContext = (instance.setupContext =
       setup.length > 1 ? createSetupContext(instance) : null)
 
     currentInstance = instance
-    pauseTracking()
+    pauseTracking() // 停止对setup()内部错误追踪，由引擎或用户自定义
+
+    // 执行setup，返回结果 setupResult
     const setupResult = callWithErrorHandling(
       setup,
       instance,
-      ErrorCodes.SETUP_FUNCTION,
-      [__DEV__ ? shallowReadonly(instance.props) : instance.props, setupContext]
+      ErrorCodes.SETUP_FUNCTION, // 标志 报错时的范围
+      [__DEV__ ? shallowReadonly(instance.props) : instance.props, setupContext] // setup(props, context) 接收的参数
     )
+
     resetTracking()
     currentInstance = null
 
+    // 客户端未实现 Promise
     if (isPromise(setupResult)) {
       if (isSSR) {
         // return the promise so server-renderer can wait on it
@@ -623,9 +629,10 @@ function setupStatefulComponent(
   }
 }
 
+// 处理 setup() 的返回值: 如果存在，则应该是对象 或 函数，函数则 render
 export function handleSetupResult(
   instance: ComponentInternalInstance,
-  setupResult: unknown,
+  setupResult: unknown, // setup() 返回值
   isSSR: boolean
 ) {
   if (isFunction(setupResult)) {
@@ -637,18 +644,21 @@ export function handleSetupResult(
     if (__DEV__ && isVNode(setupResult)) {
       // 不可以直接返回一个vnode，应该返回一个render函数
       warn(
-        `setup() should not return VNodes directly - ` +
-          `return a render function instead.`
+        `setup() should not return VNodes directly - return a render function instead.`
       )
     }
+
     // setup returned bindings.
     // assuming a render function compiled from template is present.
+    // 假设存在一个从模板编译的渲染函数
     if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
-      // 假定已经预置了一个由 模板template编译后的渲染函数
       instance.devtoolsRawSetupState = setupResult
     }
+
     instance.setupState = proxyRefs(setupResult)
+
     if (__DEV__) {
+      // 暴露 setup的返回值到 组件实例上下文ctx
       exposeSetupStateOnRenderContext(instance)
     }
   } else if (__DEV__ && setupResult !== undefined) {
