@@ -319,7 +319,7 @@ export const createVNode = (__DEV__
 // 创建vdom
 function _createVNode(
   type: VNodeTypes | ClassComponent | typeof NULL_DYNAMIC_COMPONENT,
-  props: (Data & VNodeProps) | null = null,
+  props: (Data & VNodeProps) | null = null, // 传递给组件的props
   children: unknown = null,
   patchFlag: number = 0,
   dynamicProps: string[] | null = null,
@@ -400,7 +400,7 @@ function _createVNode(
     __v_isVNode: true,
     [ReactiveFlags.SKIP]: true,
     type,
-    props,
+    props, // 传递给组件的props
     key: props && normalizeKey(props), // 获取 props 中属性名为 key 的属性
     ref: props && normalizeRef(props), // 获取 props 中属性名为 ref 的属性
     scopeId: currentScopeId,

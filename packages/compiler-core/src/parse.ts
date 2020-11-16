@@ -1,3 +1,7 @@
+/**
+ * 解析模板template，得到ast语法树
+ */
+
 import { ParserOptions } from './options'
 import { NO, isArray, makeMap, extend } from '@vue/shared'
 import { ErrorCodes, createCompilerError, defaultOnError } from './errors'
@@ -55,9 +59,9 @@ export const defaultParserOptions: MergedParserOptions = {
 }
 
 export const enum TextModes {
-  //          | Elements | Entities | End sign              | Inside of
-  DATA, //    | ✔        | ✔        | End tags of ancestors |
-  RCDATA, //  | ✘        | ✔        | End tag of the parent | <textarea>
+  //                | Elements | Entities  | End sign              | Inside of
+  DATA, // | ✔        | ✔        | End tags of ancestors |
+  RCDATA, // | ✘        | ✔        | End tag of the parent | <textarea>
   RAWTEXT, // | ✘        | ✘        | End tag of the parent | <style>,<script>
   CDATA,
   ATTRIBUTE_VALUE
@@ -74,32 +78,45 @@ export interface ParserContext {
   inVPre: boolean // v-pre, do not process directives and interpolations
 }
 
+/**
+ * 解析模板template，得到ast语法树
+ * @param content - 模板template内容(innerHTML)
+ * @param options - 解析选项
+ */
 export function baseParse(
   content: string,
   options: ParserOptions = {}
 ): RootNode {
+  // 创建解析环境，记录解析进度
   const context = createParserContext(content, options)
+
+  // 获取解析位置
   const start = getCursor(context)
+
   return createRoot(
     parseChildren(context, TextModes.DATA, []),
     getSelection(context, start)
   )
 }
 
+// 创建解析上下文，为了记录解析进度
 function createParserContext(
   content: string,
   rawOptions: ParserOptions
 ): ParserContext {
+  // 初始化 解析options
   const options = extend({}, defaultParserOptions)
   for (const key in rawOptions) {
+    // 将rawOptions存在值的key 添加到 options：等价于 =》 if (rawOptions[key]) options[key] = rawOptions[key]
     // @ts-ignore
     options[key] = rawOptions[key] || defaultParserOptions[key]
   }
+
   return {
     options,
-    column: 1,
-    line: 1,
-    offset: 0,
+    column: 1, // 当前列，这三个属性 定位解析位置
+    line: 1, // 当前行
+    offset: 0, // 位置
     originalSource: content,
     source: content,
     inPre: false,

@@ -11,6 +11,7 @@ __DEV__ && initDev()
 
 const compileCache: Record<string, RenderFunction> = Object.create(null)
 
+// 当执行完setup函数后， 将template编译为 render函数
 function compileToFunction(
   template: string | HTMLElement,
   options?: CompilerOptions
@@ -24,6 +25,9 @@ function compileToFunction(
     }
   }
 
+  console.log('template: ', template)
+
+  // 以模板内容为key，缓存编译结果
   const key = template
   const cached = compileCache[key]
   if (cached) {

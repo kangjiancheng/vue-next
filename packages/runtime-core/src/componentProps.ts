@@ -127,12 +127,12 @@ export type NormalizedProps = Record<string, NormalizedProp>
 export type NormalizedPropsOptions = [NormalizedProps, string[]] | []
 
 /**
- * 开始处理 props: 结合组件上的props属性 和 传进组件的props
- * 生成有效 props和attrs 即接收传进来的props，并进行类型校验等
+ * 生成有效的props: 结合组件所定义的props属性 和 传进给组件的props
+ * 生成有效 props和attrs 即接收传进来的props，并进行类型校验、默认值处理等
  */
 export function initProps(
   instance: ComponentInternalInstance,
-  rawProps: Data | null, // 传递的props：rootProps（非组件上的props属性）
+  rawProps: Data | null, // 传给组件的props：rootProps（非组件上的props属性）
   isStateful: number, // result of bitwise flag comparison
   isSSR = false
 ) {
@@ -141,7 +141,7 @@ export function initProps(
   // 设定 attrs.__vInternal = 1
   def(attrs, InternalObjectKey, 1)
 
-  // 将传入给组件的props 与 组件上待接收的props列表 进行对比
+  // 将传进组件的props 与 组件所定义的props列表 进行对比
   // 设置组件接收到的 props 和 attrs，并设置props的默认值
   setFullProps(instance, rawProps, props, attrs)
   // validation
@@ -276,14 +276,14 @@ export function updateProps(
   }
 }
 
-// 将传入进组件上的 props的值 保存起来，设置带值的props和attrs，同时设置props的默认值
+// 将传进组件上的 props的值 保存起来到props和attrs，同时设置props的默认值
 function setFullProps(
   instance: ComponentInternalInstance,
-  rawProps: Data | null, // 传进组件的props：如rootProps（非组件上的props属性）
-  props: Data,
-  attrs: Data
+  rawProps: Data | null, // 传给组件的props：如rootProps（非组件上的props属性）
+  props: Data, // 存储组件接收到的props，已经进行类型检测、默认值处理、赋值操作等。
+  attrs: Data // 存储 那些传给组件但组件未定义 的props属性
 ) {
-  // options 为规范后的组件 props 属性
+  // options 为规范后的组件所定义的 props 属性
   // instance.propsOptions 为组件上的 __props
   const [options, needCastKeys] = instance.propsOptions
   if (rawProps) {
@@ -299,7 +299,7 @@ function setFullProps(
       // kebab -> camel conversion here we need to camelize the key.
       let camelKey
       if (options && hasOwn(options, (camelKey = camelize(key)))) {
-        // '传入给组件的props' 如果在 '组件的校验props里' 则赋值保存到有效的props
+        // '传给组件的props' 如果在 '组件定义的props里' 则赋值保存到有效的props
         props[camelKey] = value
       } else if (!isEmitListener(instance.emitsOptions, key)) {
         // '传入给组件的props' 如果不在 '组件的校验props里'，同时也不是一个emit事件， 则赋值保存到attrs
@@ -386,7 +386,7 @@ export function normalizePropsOptions(
     return comp.__props
   }
 
-  const raw = comp.props
+  const raw = comp.props // 组件所定义的props
   const normalized: NormalizedPropsOptions[0] = {}
   const needCastKeys: NormalizedPropsOptions[1] = []
 

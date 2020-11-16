@@ -1,3 +1,7 @@
+/**
+ * 编译template模板，得到render函数
+ */
+
 import { CompilerOptions } from './options'
 import { baseParse } from './parse'
 import { transform, NodeTransform, DirectiveTransform } from './transform'
@@ -52,6 +56,11 @@ export function getBaseTransformPreset(
   ]
 }
 
+/**
+ * 编译 开始，返回render函数
+ * @param template，模板
+ * @param options，编译选项
+ */
 // we name it `baseCompile` so that higher order compilers like
 // @vue/compiler-dom can export `compile` while re-exporting everything else.
 export function baseCompile(
@@ -78,6 +87,7 @@ export function baseCompile(
     onError(createCompilerError(ErrorCodes.X_SCOPE_ID_NOT_SUPPORTED))
   }
 
+  // 解析模板，生成语法树ast
   const ast = isString(template) ? baseParse(template, options) : template
   const [nodeTransforms, directiveTransforms] = getBaseTransformPreset(
     prefixIdentifiers

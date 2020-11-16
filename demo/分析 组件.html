@@ -81,6 +81,8 @@
       }
     },
     setup(props, ctx) {
+      console.log('props: ', props)
+      console.log('ctx: ', ctx)
       const count = ref(0)
       let fooState = reactive({ foo: 1 })
 
@@ -88,7 +90,7 @@
         count.value++
         state.foo++
       }
-      count = 2
+      // count = 2
 
       return {
         count,

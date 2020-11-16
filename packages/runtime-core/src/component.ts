@@ -429,7 +429,7 @@ export function createComponentInstance(
     directives: null,
 
     // resolved props and emits options
-    // 规范props 属性格式，如转换为小驼峰、props不能已$开头，结果赋值给__props
+    // 规范 组件的props 属性格式，如转换为小驼峰、props不能已$开头，结果赋值给type.__props
     propsOptions: normalizePropsOptions(type, appContext),
     emitsOptions: normalizeEmitsOptions(type, appContext),
 
@@ -440,8 +440,8 @@ export function createComponentInstance(
     // state
     ctx: EMPTY_OBJ,
     data: EMPTY_OBJ,
-    props: EMPTY_OBJ,
-    attrs: EMPTY_OBJ,
+    props: EMPTY_OBJ, // 组件接收到有效props，已经进行类型、默认值处理，同时也赋值了。
+    attrs: EMPTY_OBJ, // 存储 那些传给组件但组件未定义 的props属性
     slots: EMPTY_OBJ,
     refs: EMPTY_OBJ,
     setupState: EMPTY_OBJ,
@@ -526,7 +526,7 @@ export function setupComponent(
   isInSSRComponentSetup = isSSR
 
   // 组件的vnode，在 createVnode 初始化
-  // 传递的props：rootProps（非组件上的props属性）
+  // 传递给组件的props：rootProps（非组件上的props属性）
   const { props, children, shapeFlag } = instance.vnode
   // 是组件式：4
   const isStateful = shapeFlag & ShapeFlags.STATEFUL_COMPONENT
@@ -598,6 +598,7 @@ function setupStatefulComponent(
       setup,
       instance,
       ErrorCodes.SETUP_FUNCTION, // 标志 报错时的范围
+      // TODO：shallowReadonly ？
       [__DEV__ ? shallowReadonly(instance.props) : instance.props, setupContext] // setup(props, context) 接收的参数
     )
 
@@ -629,7 +630,7 @@ function setupStatefulComponent(
   }
 }
 
-// 处理 setup() 的返回值: 如果存在，则应该是对象 或 函数，函数则 render
+// 校验setup返回值: 如果存在，则应该是对象 或  函数(转换为render)
 export function handleSetupResult(
   instance: ComponentInternalInstance,
   setupResult: unknown, // setup() 返回值
@@ -655,6 +656,7 @@ export function handleSetupResult(
       instance.devtoolsRawSetupState = setupResult
     }
 
+    // TODO: proxyRefs(setupResult)
     instance.setupState = proxyRefs(setupResult)
 
     if (__DEV__) {
@@ -682,15 +684,17 @@ let compile: CompileFunction | undefined
  * For runtime-dom to register the compiler.
  * Note the exported method uses any to avoid d.ts relying on the compiler types.
  */
+// 在 packages/vue/src/index.ts 时，调用执行赋值
 export function registerRuntimeCompiler(_compile: any) {
   compile = _compile
 }
 
+// 设置 组件的render函数，编译compile template得到render函数
 function finishComponentSetup(
   instance: ComponentInternalInstance,
   isSSR: boolean
 ) {
-  const Component = instance.type as ComponentOptions
+  const Component = instance.type as ComponentOptions // vnode.type，组件
 
   // template / render function normalization
   if (__NODE_JS__ && isSSR) {
@@ -698,7 +702,10 @@ function finishComponentSetup(
       instance.render = Component.render as InternalRenderFunction
     }
   } else if (!instance.render) {
-    // could be set from setup()
+    // setup不存在； 或如果setup存在，且setup 返回一个对象
+    // 如果setup 返回的是一个 函数，则赋值为render，否则render不存在
+
+    // 不存在render函数时，需要进行编译
     if (compile && Component.template && !Component.render) {
       if (__DEV__) {
         startMeasure(instance, `compile`)
@@ -736,6 +743,7 @@ function finishComponentSetup(
   if (__DEV__ && !Component.render && instance.render === NOOP) {
     /* istanbul ignore if */
     if (!compile && Component.template) {
+      // 当compile不存在但存在template时，提示需要带有编译器版本的vue
       warn(
         `Component provided template option but ` +
           `runtime compilation is not supported in this build of Vue.` +

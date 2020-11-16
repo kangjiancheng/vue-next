@@ -1,3 +1,6 @@
+/**
+ * 编译template模板入口，得到render函数
+ */
 import {
   baseCompile,
   baseParse,
@@ -37,6 +40,7 @@ export const DOMDirectiveTransforms: Record<string, DirectiveTransform> = {
   show: transformShow
 }
 
+// 开始编译 template模板，得到render函数
 export function compile(
   template: string,
   options: CompilerOptions = {}
