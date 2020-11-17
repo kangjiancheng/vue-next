@@ -25,8 +25,6 @@ function compileToFunction(
     }
   }
 
-  console.log('template: ', template)
-
   // 以模板内容为key，缓存编译结果
   const key = template
   const cached = compileCache[key]
@@ -50,7 +48,7 @@ function compileToFunction(
     template,
     extend(
       {
-        hoistStatic: true,
+        hoistStatic: true, // 变量提升
         onError(err: CompilerError) {
           if (__DEV__) {
             const message = `Template compilation error: ${err.message}`

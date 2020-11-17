@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Vue 3 调试</title>
+  <title>Vue 3 调试 - 分析编译compile模板</title>
   <style>
     body {
       margin: 0;
@@ -20,9 +20,21 @@
 </head>
 <body>
 <div id="app">
+  <!-- 开头包括换行或缩进 -->
   <h1>Hello Vue 3!</h1>
+
+  <!-- 以下存在空格缩进-->
+
   <button :class="count > 1 ? redClass: blueClass" number="123" :test="testAttr" @click="handleClick">Clicked {{ count }} times.</button>
-  <span>age: {{ age }}</span>
+  <p>
+    <span>{{ age }}</span>
+  </p>
+  <pre>
+    <span>pre 标签</span>
+  </pre>
+  <p v-pre>
+    <span>pre 指令</span>
+  </p><!--结尾存在换行，下行没有缩进-->
 </div>
 
 <script>console.time('Vue App')</script>
@@ -32,6 +44,11 @@
 <!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
 <script>
   console.log('---------- Start Demo ---------')
+
+  var template = document.getElementById('app').innerHTML
+  console.log('template: start')
+  console.log('%c' + template, 'color: red; background-color: skyblue;')
+  console.log('end')
 
   const {
     createApp,

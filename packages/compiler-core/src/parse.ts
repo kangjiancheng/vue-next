@@ -118,7 +118,7 @@ function createParserContext(
     line: 1, // 当前行
     offset: 0, // 位置
     originalSource: content,
-    source: content,
+    source: content, // 模板代码 innerHTML，开头包括换行和代码缩进（缩进以空格表示）
     inPre: false,
     inVPre: false
   }
@@ -140,13 +140,14 @@ function parseChildren(
 
     if (mode === TextModes.DATA || mode === TextModes.RCDATA) {
       if (!context.inVPre && startsWith(s, context.options.delimiters[0])) {
-        // '{{'
+        // '{{' 解析插值
         node = parseInterpolation(context, mode)
       } else if (mode === TextModes.DATA && s[0] === '<') {
         // https://html.spec.whatwg.org/multipage/parsing.html#tag-open-state
         if (s.length === 1) {
           emitError(context, ErrorCodes.EOF_BEFORE_TAG_NAME, 1)
         } else if (s[1] === '!') {
+          // '<!'
           // https://html.spec.whatwg.org/multipage/parsing.html#markup-declaration-open-state
           if (startsWith(s, '<!--')) {
             node = parseComment(context)
@@ -165,14 +166,17 @@ function parseChildren(
             node = parseBogusComment(context)
           }
         } else if (s[1] === '/') {
+          // '</'
           // https://html.spec.whatwg.org/multipage/parsing.html#end-tag-open-state
           if (s.length === 2) {
             emitError(context, ErrorCodes.EOF_BEFORE_TAG_NAME, 2)
           } else if (s[2] === '>') {
+            // '</>'
             emitError(context, ErrorCodes.MISSING_END_TAG_NAME, 2)
             advanceBy(context, 3)
             continue
           } else if (/[a-z]/i.test(s[2])) {
+            // '</a' 结束标志
             emitError(context, ErrorCodes.X_INVALID_END_TAG)
             parseTag(context, TagType.End, parent)
             continue
@@ -185,8 +189,10 @@ function parseChildren(
             node = parseBogusComment(context)
           }
         } else if (/[a-z]/i.test(s[1])) {
+          // '<a' 开始标志
           node = parseElement(context, ancestors)
         } else if (s[1] === '?') {
+          // '<?'
           emitError(
             context,
             ErrorCodes.UNEXPECTED_QUESTION_MARK_INSTEAD_OF_TAG_NAME,
@@ -198,6 +204,7 @@ function parseChildren(
         }
       }
     }
+
     if (!node) {
       node = parseText(context, mode)
     }
@@ -945,6 +952,7 @@ function isEnd(
   switch (mode) {
     case TextModes.DATA:
       if (startsWith(s, '</')) {
+        // 模板代码 innerHTML，开头包括换行和缩进（缩进以空格表示）
         //TODO: probably bad performance
         for (let i = ancestors.length - 1; i >= 0; --i) {
           if (startsWithEndTagOpen(s, ancestors[i].tag)) {
