@@ -116,9 +116,9 @@ function createParserContext(
     options,
     column: 1, // 当前列，这三个属性 定位解析位置
     line: 1, // 当前行
-    offset: 0, // 位置
-    originalSource: content,
-    source: content, // 模板代码 innerHTML，开头包括换行和代码缩进（缩进以空格表示）
+    offset: 0, // 当前操作的模板字符串位置
+    originalSource: content, // 模板代码 innerHTML，开头包括换行和代码缩进（缩进以空格表示）
+    source: content, // 当前正在操作的模板内容，即 originalSource.slice(offset)
     inPre: false,
     inVPre: false
   }
@@ -206,6 +206,8 @@ function parseChildren(
     }
 
     if (!node) {
+      // 当前解析内容为文本，得到对应的文本内容，包括换行、空格，且以 ['<', '{{', ']]>'] 为结束边界
+      // 并更新context 中的光标位置信息和后续要处理的sources内容
       node = parseText(context, mode)
     }
 
@@ -817,6 +819,9 @@ function parseInterpolation(
   }
 }
 
+/**
+ * 解析并获取当前所处理的文本内容和位置
+ */
 function parseText(context: ParserContext, mode: TextModes): TextNode {
   __TEST__ && assert(context.source.length > 0)
 
@@ -825,6 +830,7 @@ function parseText(context: ParserContext, mode: TextModes): TextNode {
     endTokens.push(']]>')
   }
 
+  // 查找文本结束的位置，以 ['<', '{{'] 为结束边界，且优先以后边为准，如 '{{' 优先级高
   let endIndex = context.source.length
   for (let i = 0; i < endTokens.length; i++) {
     const index = context.source.indexOf(endTokens[i], 1)
@@ -835,13 +841,15 @@ function parseText(context: ParserContext, mode: TextModes): TextNode {
 
   __TEST__ && assert(endIndex > 0)
 
+  // 解析内容的开始位置
   const start = getCursor(context)
+  // 获取解析文本内容
   const content = parseTextData(context, endIndex, mode)
 
   return {
     type: NodeTypes.TEXT,
     content,
-    loc: getSelection(context, start)
+    loc: getSelection(context, start) // 获取解析到的模板相关位置信息和内容
   }
 }
 
@@ -854,8 +862,11 @@ function parseTextData(
   length: number,
   mode: TextModes
 ): string {
+  // 解析到的文本内容
   const rawText = context.source.slice(0, length)
+  // 解析文本内容后，更新接下来要解析的内容和光标位置调整
   advanceBy(context, length)
+
   if (
     mode === TextModes.RAWTEXT ||
     mode === TextModes.CDATA ||
@@ -864,6 +875,7 @@ function parseTextData(
     return rawText
   } else {
     // DATA or RCDATA containing "&"". Entity decoding required.
+    // 解析包含'&'的html实体字符串，通过创建一个dom实例，将rawText作为innerHTML，然后获取其中的textContent，即可实现解析
     return context.options.decodeEntities(
       rawText,
       mode === TextModes.ATTRIBUTE_VALUE
@@ -876,6 +888,7 @@ function getCursor(context: ParserContext): Position {
   return { column, line, offset }
 }
 
+// 获取已解析的模板内容
 function getSelection(
   context: ParserContext,
   start: Position,
@@ -897,9 +910,14 @@ function startsWith(source: string, searchString: string): boolean {
   return source.startsWith(searchString)
 }
 
+/**
+ * 重新定位之后要处理内容的光标位置信息和源码内容
+ * @param numberOfCharacters  已处理的字符长度
+ */
 function advanceBy(context: ParserContext, numberOfCharacters: number): void {
   const { source } = context
   __TEST__ && assert(numberOfCharacters <= source.length)
+  // 重新定位之后要处理内容的光标位置信息，修改context光标信息
   advancePositionWithMutation(context, source, numberOfCharacters)
   context.source = source.slice(numberOfCharacters)
 }
@@ -952,7 +970,7 @@ function isEnd(
   switch (mode) {
     case TextModes.DATA:
       if (startsWith(s, '</')) {
-        // 模板代码 innerHTML，开头包括换行和缩进（缩进以空格表示）
+        // 模板代码 innerHTML，包括换行和缩进（缩进以空格表示）
         //TODO: probably bad performance
         for (let i = ancestors.length - 1; i >= 0; --i) {
           if (startsWithEndTagOpen(s, ancestors[i].tag)) {

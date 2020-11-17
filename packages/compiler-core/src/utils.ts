@@ -110,17 +110,19 @@ export function advancePositionWithMutation(
   let lastNewLinePos = -1
   for (let i = 0; i < numberOfCharacters; i++) {
     if (source.charCodeAt(i) === 10 /* newline char code */) {
+      // 换行的ascii码：10，空格的ascii码 32
       linesCount++
       lastNewLinePos = i
     }
   }
 
-  pos.offset += numberOfCharacters
-  pos.line += linesCount
+  pos.offset += numberOfCharacters // 光标位置 相对于 模板整体内容长度
+  pos.line += linesCount // 通过换行码来判断行数
+
   pos.column =
-    lastNewLinePos === -1
+    lastNewLinePos === -1 // 即没有换行: <div id='app'><span>没有换行</span></div>
       ? pos.column + numberOfCharacters
-      : numberOfCharacters - lastNewLinePos
+      : numberOfCharacters - lastNewLinePos // 将光标定位到当前行后，再定位所要操作的列位置即所对应的字符
 
   return pos
 }

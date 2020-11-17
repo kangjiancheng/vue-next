@@ -20,14 +20,13 @@
 </head>
 <body>
 <div id="app">
-  <!-- 开头包括换行或缩进 -->
+  解析文本
+  <!-- 以上包括换行和缩进 -->
   <h1>Hello Vue 3!</h1>
-
-  <!-- 以下存在空格缩进-->
 
   <button :class="count > 1 ? redClass: blueClass" number="123" :test="testAttr" @click="handleClick">Clicked {{ count }} times.</button>
   <p>
-    <span>{{ age }}</span>
+    <span>age: {{ age }} < 10 ?</span>
   </p>
   <pre>
     <span>pre 标签</span>
@@ -45,10 +44,13 @@
 <script>
   console.log('---------- Start Demo ---------')
 
-  var template = document.getElementById('app').innerHTML
+  let template = document.getElementById('app').innerHTML
   console.log('template: start')
   console.log('%c' + template, 'color: red; background-color: skyblue;')
   console.log('end')
+  console.log('换行符 -%c template.charCodeAt(0) : ' + template.charCodeAt(0), 'color: red;')
+
+
 
   const {
     createApp,
