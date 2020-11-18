@@ -133,6 +133,7 @@ function parseChildren(
   const ns = parent ? parent.ns : Namespaces.HTML
   const nodes: TemplateChildNode[] = []
 
+  // 如果不是结束边界，就继续解析
   while (!isEnd(context, mode, ancestors)) {
     __TEST__ && assert(context.source.length > 0)
     const s = context.source
@@ -820,7 +821,7 @@ function parseInterpolation(
 }
 
 /**
- * 解析并获取当前所处理的文本内容和位置
+ * 解析文本节点并返回： 解析并获取当前所处理的文本内容和位置
  */
 function parseText(context: ParserContext, mode: TextModes): TextNode {
   __TEST__ && assert(context.source.length > 0)
@@ -854,6 +855,7 @@ function parseText(context: ParserContext, mode: TextModes): TextNode {
 }
 
 /**
+ * 解析文本内容并返回
  * Get text data with a given length from the current location.
  * This translates HTML entities in the text data.
  */
@@ -883,12 +885,13 @@ function parseTextData(
   }
 }
 
+// 获取当前光标解析位置
 function getCursor(context: ParserContext): Position {
   const { column, line, offset } = context
   return { column, line, offset }
 }
 
-// 获取已解析的模板内容
+// 获取指定解析范围的模板内容
 function getSelection(
   context: ParserContext,
   start: Position,
@@ -902,6 +905,7 @@ function getSelection(
   }
 }
 
+// 获取数组最后一个元素
 function last<T>(xs: T[]): T | undefined {
   return xs[xs.length - 1]
 }
@@ -912,12 +916,12 @@ function startsWith(source: string, searchString: string): boolean {
 
 /**
  * 重新定位之后要处理内容的光标位置信息和源码内容
- * @param numberOfCharacters  已处理的字符长度
+ * @param numberOfCharacters  当前所解析内容的长度
  */
 function advanceBy(context: ParserContext, numberOfCharacters: number): void {
   const { source } = context
   __TEST__ && assert(numberOfCharacters <= source.length)
-  // 重新定位之后要处理内容的光标位置信息，修改context光标信息
+  // 重新定位之后要处理内容的光标位置信息，修改context光标定位信息
   advancePositionWithMutation(context, source, numberOfCharacters)
   context.source = source.slice(numberOfCharacters)
 }
