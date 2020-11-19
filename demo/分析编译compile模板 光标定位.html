@@ -22,6 +22,7 @@
 <div id="app">
   解析文本
   <!-- 以上包括换行和缩进 -->
+  <!-->
   <h1>Hello Vue 3!</h1>
 
   <button :class="count > 1 ? redClass: blueClass" number="123" :test="testAttr" @click="handleClick">Clicked {{ count }} times.</button>
@@ -63,6 +64,7 @@
 
   const rootComponent = {
     name: 'root-component',
+    template: '<!--<!--a-->123',
     props: {
       age: Number,
     },
@@ -92,7 +94,7 @@
   }
   const rootProps = {
     age: 10, // props
-    sex: 'man', // attrs
+    // sex: 'man', // attrs
   }
   // debugger
 

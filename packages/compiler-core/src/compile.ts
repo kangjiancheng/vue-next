@@ -89,6 +89,7 @@ export function baseCompile(
 
   // 解析模板，生成语法树ast
   const ast = isString(template) ? baseParse(template, options) : template
+
   const [nodeTransforms, directiveTransforms] = getBaseTransformPreset(
     prefixIdentifiers
   )

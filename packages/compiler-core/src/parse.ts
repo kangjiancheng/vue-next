@@ -139,11 +139,13 @@ function parseChildren(
     const s = context.source
     let node: TemplateChildNode | TemplateChildNode[] | undefined = undefined
 
+    // 解析插值{{}}、 解析注释、特殊标签、结束标签、开始标签
     if (mode === TextModes.DATA || mode === TextModes.RCDATA) {
+      // '{{' 解析插值、delimiters = ['{{', '}}']
       if (!context.inVPre && startsWith(s, context.options.delimiters[0])) {
-        // '{{' 解析插值
         node = parseInterpolation(context, mode)
       } else if (mode === TextModes.DATA && s[0] === '<') {
+        // 解析注释、特殊标签、结束标签、开始标签
         // https://html.spec.whatwg.org/multipage/parsing.html#tag-open-state
         if (s.length === 1) {
           emitError(context, ErrorCodes.EOF_BEFORE_TAG_NAME, 1)
@@ -151,6 +153,7 @@ function parseChildren(
           // '<!'
           // https://html.spec.whatwg.org/multipage/parsing.html#markup-declaration-open-state
           if (startsWith(s, '<!--')) {
+            // <!-- 解析注释，并返回注释内容节点 -->
             node = parseComment(context)
           } else if (startsWith(s, '<!DOCTYPE')) {
             // Ignore DOCTYPE by a limitation.
@@ -193,7 +196,7 @@ function parseChildren(
           // '<a' 开始标志
           node = parseElement(context, ancestors)
         } else if (s[1] === '?') {
-          // '<?'
+          // '<?' xml 格式
           emitError(
             context,
             ErrorCodes.UNEXPECTED_QUESTION_MARK_INSTEAD_OF_TAG_NAME,
@@ -206,8 +209,9 @@ function parseChildren(
       }
     }
 
+    // 解析文本
     if (!node) {
-      // 当前解析内容为文本，得到对应的文本内容，包括换行、空格，且以 ['<', '{{', ']]>'] 为结束边界
+      // 当前解析内容为文本，得到对应的文本内容节点，包括换行、空格，且以 ['<', '{{', ']]>'] 为结束边界
       // 并更新context 中的光标位置信息和后续要处理的sources内容
       node = parseText(context, mode)
     }
@@ -319,45 +323,70 @@ function parseCDATA(
   return nodes
 }
 
+/**
+ * 解析注释： <!--正常注释-->、处理无效注释'a<!--bc'、不规范注释'<!-->'、处理嵌套注释'<!--<!--a-->123'、
+ *    源码调试注释时，推荐直接编辑模版的template属性，如 template: '<!-- abc -->'，
+ *    因为如果通过dom标签得到的template，其innerHTML 输出的注释会与源码有区别，如 <!-->的innerHTML 为 '<!---->'
+ * @param context
+ * @return 返回已解析的注释节点配置
+ */
 function parseComment(context: ParserContext): CommentNode {
   __TEST__ && assert(startsWith(context.source, '<!--'))
 
   const start = getCursor(context)
   let content: string
 
-  // Regular comment.
+  // Regular comment: 结束边界：'-->' 或 '--!>'(其innerHTML为 '-->')
   const match = /--(\!)?>/.exec(context.source)
   if (!match) {
-    content = context.source.slice(4)
-    advanceBy(context, context.source.length)
-    emitError(context, ErrorCodes.EOF_IN_COMMENT)
+    // 如果没有匹配到：如 template = 'a<!--bc'
+    content = context.source.slice(4) // 截取 '<!--' 之后的内容
+    advanceBy(context, context.source.length) // 直接将光标移动到结束位置，结束处理
+    emitError(context, ErrorCodes.EOF_IN_COMMENT) // 触发控制台错误，在compiler 函数定义时，定义错误处理
   } else {
+    // match.index 为'-->'匹配到的位置，如：'<!--a-->'，其 match.index = 5
+
     if (match.index <= 3) {
+      // 不合理注释如: template =  '<!-->'  或 '<!--->'
       emitError(context, ErrorCodes.ABRUPT_CLOSING_OF_EMPTY_COMMENT)
     }
     if (match[1]) {
+      // 捕获0为匹配的内容，捕获组1为 '(\!)' 括号里的内容
+      // match[1] = '!' 如 template = '<!-- abc --!>'，不规范的关闭注释
       emitError(context, ErrorCodes.INCORRECTLY_CLOSED_COMMENT)
     }
+    // 获取注释内容，不影响原source
     content = context.source.slice(4, match.index)
 
+    // 处理嵌套注释，如：template = '<!--<!--a-->123'，则 match.index = 9
     // Advancing with reporting nested comments.
-    const s = context.source.slice(0, match.index)
-    let prevIndex = 1,
-      nestedIndex = 0
+    const s = context.source.slice(0, match.index) // s = '<!--<!--a'
+    let prevIndex = 1, // 开始查找位置
+      nestedIndex = 0 // 嵌套位置
     while ((nestedIndex = s.indexOf('<!--', prevIndex)) !== -1) {
+      // 移动光标位置，同时更新下次要解析的模版内容：context.source = '<!--a-->123'
       advanceBy(context, nestedIndex - prevIndex + 1)
+
+      // s = '<!--<!--a'，nestedIndex = 4，length = 9
       if (nestedIndex + 4 < s.length) {
+        // 存在嵌套注释
         emitError(context, ErrorCodes.NESTED_COMMENT)
       }
+      // 更新下一轮起始位置，如：s='<!--<!--a'，prevIndex = 5
       prevIndex = nestedIndex + 1
     }
+
+    // 如: template='<!--<!--a-->123'，此时解析内容context.source为：'<!--a-->123'，
+    // match.index = 9, match[0] 为匹配到的结束注释 '-->' 3, prevIndex = 5
+    // 则计算出 advanceBy 需移动光标距离：总注释长度（match.index + match[0].length） - 已解析的注释长度（prevIndex） + 1
     advanceBy(context, match.index + match[0].length - prevIndex + 1)
   }
 
+  // 返回注释内容节点
   return {
     type: NodeTypes.COMMENT,
     content,
-    loc: getSelection(context, start)
+    loc: getSelection(context, start) // 注释范围起始点与注释源码（包括标签）
   }
 }
 
@@ -915,8 +944,9 @@ function startsWith(source: string, searchString: string): boolean {
 }
 
 /**
+ * advance：前进，光标向前移动、模版内容向前解析
  * 重新定位之后要处理内容的光标位置信息和源码内容
- * @param numberOfCharacters  当前所解析内容的长度
+ * @param numberOfCharacters  ，前进数量，即当前已解析的模版内容长度
  */
 function advanceBy(context: ParserContext, numberOfCharacters: number): void {
   const { source } = context
@@ -945,11 +975,12 @@ function getNewPosition(
   )
 }
 
+// 提示错误，光标位置，解析范围
 function emitError(
   context: ParserContext,
   code: ErrorCodes,
   offset?: number,
-  loc: Position = getCursor(context)
+  loc: Position = getCursor(context) // 返回光标位置：结束位置（即模版长度）
 ): void {
   if (offset) {
     loc.offset += offset

@@ -15,13 +15,13 @@ export function defaultOnError(error: CompilerError) {
 
 export function createCompilerError<T extends number>(
   code: T,
-  loc?: SourceLocation,
+  loc?: SourceLocation, // 模版光标解析范围
   messages?: { [code: number]: string },
   additionalMessage?: string
 ): T extends ErrorCodes ? CoreCompilerError : CompilerError {
   const msg =
     __DEV__ || !__BROWSER__
-      ? (messages || errorMessages)[code] + (additionalMessage || ``)
+      ? (messages || errorMessages)[code] + (additionalMessage || ``) // 错误范围
       : code
   const error = new SyntaxError(String(msg)) as CompilerError
   error.code = code

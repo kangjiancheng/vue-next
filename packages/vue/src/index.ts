@@ -49,16 +49,19 @@ function compileToFunction(
     extend(
       {
         hoistStatic: true, // 变量提升
+        // 解析失败时，比如解析注释失败，当 template = 'abc<!--123' => 错误提示：'Template compilation error: Unexpected EOF in comment.'
         onError(err: CompilerError) {
           if (__DEV__) {
-            const message = `Template compilation error: ${err.message}`
+            const message = `Template compilation error: ${err.message}` // 错误范围
             const codeFrame =
               err.loc &&
               generateCodeFrame(
+                // 输出 '错误源码'
                 template as string,
                 err.loc.start.offset,
                 err.loc.end.offset
               )
+            // 控制台输出错误信息
             warn(codeFrame ? `${message}\n${codeFrame}` : message)
           } else {
             /* istanbul ignore next */
