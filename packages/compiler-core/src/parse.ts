@@ -114,9 +114,9 @@ function createParserContext(
 
   return {
     options,
-    column: 1, // 当前列，这三个属性 定位解析位置
+    column: 1, // 当前列（索引以1开始），这三个属性 定位光标解析起始位置
     line: 1, // 当前行
-    offset: 0, // 当前操作的模板字符串位置
+    offset: 0, // 当前操作的模板字符串source的起始位置
     originalSource: content, // 模板代码 innerHTML，开头包括换行和代码缩进（缩进以空格表示）
     source: content, // 当前正在操作的模板内容，即 originalSource.slice(offset)
     inPre: false,
@@ -139,61 +139,73 @@ function parseChildren(
     const s = context.source
     let node: TemplateChildNode | TemplateChildNode[] | undefined = undefined
 
-    // 解析插值{{}}、 解析注释、特殊标签、结束标签、开始标签
+    // 解析识别优先级为：解析插值{{}}、 解析注释与解析并注释特殊标签内容(如：CDATA标签)、解析结束标签、解析开始标签、解析文本内容
     if (mode === TextModes.DATA || mode === TextModes.RCDATA) {
       // '{{' 解析插值、delimiters = ['{{', '}}']
       if (!context.inVPre && startsWith(s, context.options.delimiters[0])) {
         node = parseInterpolation(context, mode)
       } else if (mode === TextModes.DATA && s[0] === '<') {
-        // 解析注释、特殊标签、结束标签、开始标签
+        // 解析注释、结束标签、开始标签、 注释特殊注释标签(如'<!DOCTYPE>' =》 '<!--DOCTYPE-->')
         // https://html.spec.whatwg.org/multipage/parsing.html#tag-open-state
         if (s.length === 1) {
+          // 不可以在模板中直接使用 '<'，如： template: '<span> 1 < 2</span>'，会被当作是一个结束标签
+          // 如果在dom文档树中，如 <span>1 < 2<span> 其中的小于号通过innerHTML会被转译为 '&lt;'，所以在模板中实际内容为<span>1 &lt; 2</span>
           emitError(context, ErrorCodes.EOF_BEFORE_TAG_NAME, 1)
         } else if (s[1] === '!') {
           // '<!'
           // https://html.spec.whatwg.org/multipage/parsing.html#markup-declaration-open-state
           if (startsWith(s, '<!--')) {
-            // <!-- 解析注释，并返回注释内容节点 -->
+            // <!-- 解析注释，并返回注释内容节点，同时校验注释格式 -->
             node = parseComment(context)
           } else if (startsWith(s, '<!DOCTYPE')) {
             // Ignore DOCTYPE by a limitation.
+            // 注释标签内容'<!DOCTYPE html>' 转换为 '<!--DOCTYPE html-->' 并返回
             node = parseBogusComment(context)
           } else if (startsWith(s, '<![CDATA[')) {
+            // XHTML(及 XML)中，CDATA 块表示 文档中可以包含任意文本的区块，其内容不作为标签来解析，避免发生语法错误，如：小于号 '<'
             if (ns !== Namespaces.HTML) {
+              // 解析 <![CDATA[ html模板内容 ]]>
               node = parseCDATA(context, ancestors)
             } else {
+              // CDATA 是为在xhtml文档中能正常解析html语法格式的代码，没必要在html文档中出现
               emitError(context, ErrorCodes.CDATA_IN_HTML_CONTENT)
+              // 注释CDATA内容，并返回注释节点
               node = parseBogusComment(context)
             }
           } else {
+            // 错误的注释标志，如：'<!doctype>'
             emitError(context, ErrorCodes.INCORRECTLY_OPENED_COMMENT)
+            // 注释 错误的注释标志内容，如 '<!--doctype-->'
             node = parseBogusComment(context)
           }
         } else if (s[1] === '/') {
-          // '</'
+          // 优先 解析结束标签'</'，因为如果一开始就存在结束标签，是错误的。
           // https://html.spec.whatwg.org/multipage/parsing.html#end-tag-open-state
           if (s.length === 2) {
+            // s = '</'，不完整的结束标签
             emitError(context, ErrorCodes.EOF_BEFORE_TAG_NAME, 2)
           } else if (s[2] === '>') {
-            // '</>'
+            // s = '</>'，空结束标签
             emitError(context, ErrorCodes.MISSING_END_TAG_NAME, 2)
             advanceBy(context, 3)
             continue
           } else if (/[a-z]/i.test(s[2])) {
-            // '</a' 结束标志
+            // template = 'abc</p>', s = '</p>' 只有结束标志
             emitError(context, ErrorCodes.X_INVALID_END_TAG)
             parseTag(context, TagType.End, parent)
             continue
           } else {
+            // s = '</123>' 无效的结束标签
             emitError(
               context,
               ErrorCodes.INVALID_FIRST_CHARACTER_OF_TAG_NAME,
               2
             )
+            // 注释无效标签：s = '</123>' => <!--123-->
             node = parseBogusComment(context)
           }
         } else if (/[a-z]/i.test(s[1])) {
-          // '<a' 开始标志
+          // s = '<p>abc</p>' 开始标志
           node = parseElement(context, ancestors)
         } else if (s[1] === '?') {
           // '<?' xml 格式
@@ -209,10 +221,9 @@ function parseChildren(
       }
     }
 
-    // 解析文本
+    // 解析文本包括换行、空格，且以 ['<', '{{', ']]>'] 为结束边界
     if (!node) {
-      // 当前解析内容为文本，得到对应的文本内容节点，包括换行、空格，且以 ['<', '{{', ']]>'] 为结束边界
-      // 并更新context 中的光标位置信息和后续要处理的sources内容
+      // 获取文本节点
       node = parseText(context, mode)
     }
 
@@ -303,6 +314,11 @@ function pushNode(nodes: TemplateChildNode[], node: TemplateChildNode): void {
   nodes.push(node)
 }
 
+/**
+ * namespace 不是html时，即可能是 xhtml时，解析 '<![CDATA[ html代码]>' 其中的模板内容
+ * @param context
+ * @param ancestors
+ */
 function parseCDATA(
   context: ParserContext,
   ancestors: ElementNode[]
@@ -311,7 +327,9 @@ function parseCDATA(
     assert(last(ancestors) == null || last(ancestors)!.ns !== Namespaces.HTML)
   __TEST__ && assert(startsWith(context.source, '<![CDATA['))
 
-  advanceBy(context, 9)
+  advanceBy(context, 9) // 移动光标距离为： '<![CDATA['.length
+
+  // 解析 '<![CDATA[ html代码 ]]>' 之间的内容
   const nodes = parseChildren(context, TextModes.CDATA, ancestors)
   if (context.source.length === 0) {
     emitError(context, ErrorCodes.EOF_IN_CDATA)
@@ -390,26 +408,30 @@ function parseComment(context: ParserContext): CommentNode {
   }
 }
 
+// 注释 特殊标签如: '<!DOCTYPE html>' 或 '<![CDATA[123...]]>' 或无效结束标签 '</123>' 等
+// 注释特殊标签，并返回注释内容，如： '<!--DOCTYPE html-->' 或 '[CDATA[123...]]' 或 '<!--123-->'
 function parseBogusComment(context: ParserContext): CommentNode | undefined {
   __TEST__ && assert(/^<(?:[\!\?]|\/[^a-z>])/i.test(context.source))
 
+  // 获取当前光标位置，即当前模板解析起始位置
   const start = getCursor(context)
-  const contentStart = context.source[1] === '?' ? 1 : 2
+  const contentStart = context.source[1] === '?' ? 1 : 2 // <?xml、<!DOCTYPE、</123>等
   let content: string
 
   const closeIndex = context.source.indexOf('>')
   if (closeIndex === -1) {
+    // 没有结束边界，直接结束解析，并注释之后所有内容
     content = context.source.slice(contentStart)
-    advanceBy(context, context.source.length)
+    advanceBy(context, context.source.length) // 光标移动到结束位置
   } else {
-    content = context.source.slice(contentStart, closeIndex)
-    advanceBy(context, closeIndex + 1)
+    content = context.source.slice(contentStart, closeIndex) // 获取注释内容
+    advanceBy(context, closeIndex + 1) // 光标移动到结束边界的下个位置
   }
 
   return {
     type: NodeTypes.COMMENT,
-    content,
-    loc: getSelection(context, start)
+    content, // 注释内容
+    loc: getSelection(context, start) // 注释内容在模板中的起始和终止位置，还有对应的模板内容
   }
 }
 
@@ -427,6 +449,7 @@ function parseElement(
   const isPreBoundary = context.inPre && !wasInPre
   const isVPreBoundary = context.inVPre && !wasInVPre
 
+  // 自闭标签 <br />
   if (element.isSelfClosing || context.options.isVoidTag(element.tag)) {
     return element
   }
@@ -473,11 +496,11 @@ const isSpecialTemplateDirective = /*#__PURE__*/ makeMap(
 )
 
 /**
- * Parse a tag (E.g. `<div id=a>`) with that type (start tag or end tag).
+ * 解析标签，如：开始标签'<div>' 或 结束标签 '</div>'
  */
 function parseTag(
   context: ParserContext,
-  type: TagType,
+  type: TagType, // 开始或结束
   parent: ElementNode | undefined
 ): ElementNode {
   __TEST__ && assert(/^<\/?[a-z]/i.test(context.source))
@@ -487,15 +510,19 @@ function parseTag(
     )
 
   // Tag open.
-  const start = getCursor(context)
-  const match = /^<\/?([a-z][^\t\r\n\f />]*)/i.exec(context.source)!
-  const tag = match[1]
-  const ns = context.options.getNamespace(tag, parent)
+  const start = getCursor(context) // 获取模板解析位置
+  // 开始标签，如：'<s*pan>' 或 结束标签 '</s*pan>'  (* 排除: 空格、换行、/、> )
+  const match = /^<\/?([a-z][^\t\r\n\f />]*)/i.exec(context.source)! // 结尾'!' 排除 null
+  const tag = match[1] // 捕获组1，括号内容：标签名
+  const ns = context.options.getNamespace(tag, parent) // 默认 Namespaces.HTML
 
+  // 移动光标距离， match[0] 为匹配到到内容，即标签长度，如: '<span>'.length = 6
   advanceBy(context, match[0].length)
+  // 跳过 开头为：空格、换行等
   advanceSpaces(context)
 
   // save current state in case we need to re-parse attributes with v-pre
+  // 保存当前解析状态，光标位置，与当前解析内容 （已跳过标签）
   const cursor = getCursor(context)
   const currentSource = context.source
 
@@ -926,11 +953,11 @@ function getSelection(
   start: Position,
   end?: Position
 ): SourceLocation {
-  end = end || getCursor(context)
+  end = end || getCursor(context) // 光标位置
   return {
     start,
-    end,
-    source: context.originalSource.slice(start.offset, end.offset)
+    end, // 不包括结束位置的字符，end 为下一次解析内容的起始位置
+    source: context.originalSource.slice(start.offset, end.offset) // 节点内容即该节点对应的模板内容
   }
 }
 
