@@ -224,6 +224,11 @@ export interface ComponentInternalInstance {
    */
   render: InternalRenderFunction | null
   /**
+   * SSR render function
+   * @internal
+   */
+  ssrRender?: Function | null
+  /**
    * Object containing values this component provides for its descendents
    * @internal
    */
@@ -645,7 +650,13 @@ export function handleSetupResult(
   if (isFunction(setupResult)) {
     // setup 可以返回一个渲染函数
     // setup returned an inline render function
-    instance.render = setupResult as InternalRenderFunction
+    if (!__BROWSER__ && (instance.type as ComponentOptions).__ssrInlineRender) {
+      // when the function's name is `ssrRender` (compiled by SFC inline mode),
+      // set it as ssrRender instead.
+      instance.ssrRender = setupResult
+    } else {
+      instance.render = setupResult as InternalRenderFunction
+    }
   } else if (isObject(setupResult)) {
     // setup 返回一个对象
     if (__DEV__ && isVNode(setupResult)) {

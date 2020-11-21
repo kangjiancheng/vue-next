@@ -594,20 +594,20 @@
   resolved "https://registry.yarnpkg.com/@ls-lint/ls-lint/-/ls-lint-1.9.2.tgz#689f1f4c06072823a726802ba167340efcefe19c"
   integrity sha512-sugEjWjSSy9OHF6t1ZBLZCAROj52cZthB9dIePmzZzzMwmWwy3qAEMSdJheHeS1FOwDZI7Ipm1H/bWgzJNnSAw==
 
-"@microsoft/api-extractor-model@7.10.10":
-  version "7.10.10"
-  resolved "https://registry.yarnpkg.com/@microsoft/api-extractor-model/-/api-extractor-model-7.10.10.tgz#d7d3e0b28319370c46eb5b30314e087bf95c9a45"
-  integrity sha512-Sy3kjAQARyW54YneYdf1c7vKZAQbFSZA1Px9TekkcKCOGER8h5trplTSCQWwTgWOKarQaNNSnlkHII0CNMoMjA==
+"@microsoft/api-extractor-model@7.12.0":
+  version "7.12.0"
+  resolved "https://registry.yarnpkg.com/@microsoft/api-extractor-model/-/api-extractor-model-7.12.0.tgz#ad5589c166b31dad3c8669b46b050f8bc4056f1b"
+  integrity sha512-TxoAbL/lauS3k/brBWVsiQTnyHBwHrAGJhTuiD0tWS/eu4dLNULchcSQfcOaFS91OgDEz4lMMbClgChFuo+53Q==
   dependencies:
     "@microsoft/tsdoc" "0.12.19"
     "@rushstack/node-core-library" "3.35.1"
 
 "@microsoft/api-extractor@^7.9.15":
-  version "7.11.4"
-  resolved "https://registry.yarnpkg.com/@microsoft/api-extractor/-/api-extractor-7.11.4.tgz#265638db0edf3dc6a6bcc54566e561969d5e5f97"
-  integrity sha512-BRAB6IuwWgK7toDBgiaSkYb04dp3xbTOXdDvWUqcILvrzPF8WQHGPWFmmr5OLg2WknjiIE3TEKF9turfZcgcjw==
+  version "7.12.0"
+  resolved "https://registry.yarnpkg.com/@microsoft/api-extractor/-/api-extractor-7.12.0.tgz#3ab602cebaa18d357afc67471abba484d8dc20d4"
+  integrity sha512-YDd7AUkIayPLooMasDyV4vle1TLUQhFp2v/tGdRU+WAVbnyVUDXXa20WEfbPEZ4QVlgN+77EX6f2K6GyKd713A==
   dependencies:
-    "@microsoft/api-extractor-model" "7.10.10"
+    "@microsoft/api-extractor-model" "7.12.0"
     "@microsoft/tsdoc" "0.12.19"
     "@rushstack/node-core-library" "3.35.1"
     "@rushstack/rig-package" "0.2.8"
@@ -893,9 +893,9 @@
   integrity sha1-aaI6OtKcrwCX8G7aWbNh7i8GOfY=
 
 "@types/node@*", "@types/node@^14.10.1":
-  version "14.14.8"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-14.14.8.tgz#2127bd81949a95c8b7d3240f3254352d72563aec"
-  integrity sha512-z/5Yd59dCKI5kbxauAJgw6dLPzW+TNOItNE00PkpzNwUIEwdj/Lsqwq94H5DdYBX7C13aRA0CY32BK76+neEUA==
+  version "14.14.9"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-14.14.9.tgz#04afc9a25c6ff93da14deabd65dc44485b53c8d6"
+  integrity sha512-JsoLXFppG62tWTklIoO4knA+oDTYsmqWxHRvd4lpmfQRNhX6osheUOWETP2jMoV/2bEHuMra8Pp3Dmo/stBFcw==
 
 "@types/node@10.17.13":
   version "10.17.13"
@@ -7395,7 +7395,12 @@ typedarray@^0.0.6:
   resolved "https://registry.yarnpkg.com/typedarray/-/typedarray-0.0.6.tgz#867ac74e3864187b1d3d47d996a78ec5c8830777"
   integrity sha1-hnrHTjhkGHsdPUfZlqeOxciDB3c=
 
-typescript@^4.0.2, typescript@~4.0.5:
+typescript@^4.0.2:
+  version "4.1.2"
+  resolved "https://registry.yarnpkg.com/typescript/-/typescript-4.1.2.tgz#6369ef22516fe5e10304aae5a5c4862db55380e9"
+  integrity sha512-thGloWsGH3SOxv1SoY7QojKi0tc+8FnOmiarEGMbd/lar7QOEd3hvlx3Fp5y6FlDUGl9L+pd4n2e+oToGMmhRQ==
+
+typescript@~4.0.5:
   version "4.0.5"
   resolved "https://registry.yarnpkg.com/typescript/-/typescript-4.0.5.tgz#ae9dddfd1069f1cb5beb3ef3b2170dd7c1332389"
   integrity sha512-ywmr/VrTVCmNTJ6iV2LwIrfG1P+lv6luD8sUJs+2eI9NLGigaN+nUQc13iHqisq7bra9lnmUSYqbJvegraBOPQ==

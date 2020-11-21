@@ -27,7 +27,7 @@ import { walk } from 'estree-walker'
 import { RawSourceMap } from 'source-map'
 import { CSS_VARS_HELPER, genCssVarsCode, injectCssVarsCalls } from './cssVars'
 import { compileTemplate, SFCTemplateCompileOptions } from './compileTemplate'
-import { warnOnce } from './warn'
+import { warnExperimental, warnOnce } from './warn'
 
 const DEFINE_OPTIONS = 'defineOptions'
 
@@ -73,13 +73,8 @@ export function compileScript(
 ): SFCScriptBlock {
   const { script, scriptSetup, source, filename } = sfc
 
-  if (__DEV__ && !__TEST__ && scriptSetup) {
-    warnOnce(
-      `<script setup> is still an experimental proposal.\n` +
-        `Follow its status at https://github.com/vuejs/rfcs/pull/227.\n` +
-        `It's also recommended to pin your vue dependencies to exact versions ` +
-        `to avoid breakage.`
-    )
+  if (scriptSetup) {
+    warnExperimental(`<script setup>`, 227)
   }
 
   // for backwards compat
@@ -156,6 +151,7 @@ export function compileScript(
   const userImports: Record<
     string,
     {
+      isType: boolean
       imported: string | null
       source: string
     }
@@ -171,6 +167,7 @@ export function compileScript(
   let optionsArg: ObjectExpression | undefined
   let optionsType: TSTypeLiteral | undefined
   let hasAwait = false
+  let hasInlinedSsrRenderFn = false
   // context types to generate
   let propsType = `{}`
   let emitType = `(e: string, ...args: any[]) => void`
@@ -202,11 +199,9 @@ export function compileScript(
     try {
       return _parse(input, options).program.body
     } catch (e) {
-      e.message = `[@vue/compiler-sfc] ${e.message}\n\n${generateCodeFrame(
-        source,
-        e.pos + offset,
-        e.pos + offset + 1
-      )}`
+      e.message = `[@vue/compiler-sfc] ${e.message}\n\n${
+        sfc.filename
+      }\n${generateCodeFrame(source, e.pos + offset, e.pos + offset + 1)}`
       throw e
     }
   }
@@ -217,20 +212,25 @@ export function compileScript(
     end: number = node.end! + startOffset
   ) {
     throw new Error(
-      `[@vue/compiler-sfc] ${msg}\n\n` +
-        generateCodeFrame(source, node.start! + startOffset, end)
+      `[@vue/compiler-sfc] ${msg}\n\n${sfc.filename}\n${generateCodeFrame(
+        source,
+        node.start! + startOffset,
+        end
+      )}`
     )
   }
 
   function registerUserImport(
     source: string,
     local: string,
-    imported: string | false
+    imported: string | false,
+    isType: boolean
   ) {
     if (source === 'vue' && imported) {
       userImportAlias[imported] = local
     }
     userImports[local] = {
+      isType,
       imported: imported || null,
       source
     }
@@ -425,7 +425,12 @@ export function compileScript(
             specifier.type === 'ImportSpecifier' &&
             specifier.imported.type === 'Identifier' &&
             specifier.imported.name
-          registerUserImport(node.source.value, specifier.local.name, imported)
+          registerUserImport(
+            node.source.value,
+            specifier.local.name,
+            imported,
+            node.importKind === 'type'
+          )
         }
       } else if (node.type === 'ExportDefaultDeclaration') {
         // export default
@@ -514,15 +519,7 @@ export function compileScript(
       node.body.type === 'ExpressionStatement'
     ) {
       if (enableRefSugar) {
-        if (__DEV__ && !__TEST__) {
-          warnOnce(
-            `ref: sugar is still an experimental proposal and is not ` +
-              `guaranteed to be a part of <script setup>.\n` +
-              `Follow its status at https://github.com/vuejs/rfcs/pull/228.\n` +
-              `It's also recommended to pin your vue dependencies to exact versions ` +
-              `to avoid breakage.`
-          )
-        }
+        warnExperimental(`ref: sugar`, 228)
         s.overwrite(
           node.label.start! + startOffset,
           node.body.start! + startOffset,
@@ -575,7 +572,12 @@ export function compileScript(
             error(`different imports aliased to same local name.`, specifier)
           }
         } else {
-          registerUserImport(source, local, imported)
+          registerUserImport(
+            source,
+            local,
+            imported,
+            node.importKind === 'type'
+          )
         }
       }
       if (removed === node.specifiers.length) {
@@ -790,7 +792,8 @@ export function compileScript(
   if (optionsArg) {
     Object.assign(bindingMetadata, analyzeBindingsFromOptions(optionsArg))
   }
-  for (const [key, { source }] of Object.entries(userImports)) {
+  for (const [key, { isType, source }] of Object.entries(userImports)) {
+    if (isType) continue
     bindingMetadata[key] =
       source.endsWith('.vue') || source === 'vue'
         ? BindingTypes.SETUP_CONST
@@ -818,15 +821,24 @@ export function compileScript(
   // 10. generate return statement
   let returned
   if (options.inlineTemplate) {
-    if (sfc.template) {
+    if (sfc.template && !sfc.template.src) {
+      if (options.templateOptions && options.templateOptions.ssr) {
+        hasInlinedSsrRenderFn = true
+      }
       // inline render function mode - we are going to compile the template and
       // inline it right here
       const { code, ast, preamble, tips, errors } = compileTemplate({
-        ...options.templateOptions,
         filename,
         source: sfc.template.content,
         inMap: sfc.template.map,
+        ...options.templateOptions,
+        id: scopeId,
+        scoped: sfc.styles.some(s => s.scoped),
+        isProd: options.isProd,
+        ssrCssVars: sfc.cssVars,
         compilerOptions: {
+          ...(options.templateOptions &&
+            options.templateOptions.compilerOptions),
           inline: true,
           isTS,
           bindingMetadata
@@ -841,7 +853,9 @@ export function compileScript(
       } else if (err) {
         if (err.loc) {
           err.message +=
-            `\n` +
+            `\n\n` +
+            sfc.filename +
+            '\n' +
             generateCodeFrame(
               source,
               err.loc.start.offset,
@@ -868,7 +882,9 @@ export function compileScript(
     // return bindings from setup
     const allBindings: Record<string, any> = { ...setupBindings }
     for (const key in userImports) {
-      allBindings[key] = true
+      if (!userImports[key].isType) {
+        allBindings[key] = true
+      }
     }
     returned = `{ ${Object.keys(allBindings).join(', ')} }`
   }
@@ -877,6 +893,9 @@ export function compileScript(
   // 11. finalize default export
   // expose: [] makes <script setup> components "closed" by default.
   let runtimeOptions = `\n  expose: [],`
+  if (hasInlinedSsrRenderFn) {
+    runtimeOptions += `\n  __ssrInlineRender: true,`
+  }
   if (optionsArg) {
     runtimeOptions += `\n  ${scriptSetup.content
       .slice(optionsArg.start! + 1, optionsArg.end! - 1)
@@ -902,7 +921,7 @@ export function compileScript(
         hasAwait ? `async ` : ``
       }setup(${args}) {\n`
     )
-    s.append(`})`)
+    s.appendRight(endOffset, `})`)
   } else {
     if (defaultExport) {
       // can't rely on spread operator in non ts mode
@@ -911,8 +930,7 @@ export function compileScript(
         `\n${hasAwait ? `async ` : ``}function setup(${args}) {\n`
       )
       s.append(
-        `/*#__PURE__*/ Object.assign(${defaultTempVar}, {${runtimeOptions}\n  setup\n})\n` +
-          `export default ${defaultTempVar}`
+        `\nexport default /*#__PURE__*/ Object.assign(${defaultTempVar}, {${runtimeOptions}\n  setup\n})\n`
       )
     } else {
       s.prependLeft(
@@ -920,7 +938,7 @@ export function compileScript(
         `\nexport default {${runtimeOptions}\n  ` +
           `${hasAwait ? `async ` : ``}setup(${args}) {\n`
       )
-      s.append(`}`)
+      s.appendRight(endOffset, `}`)
     }
   }
 

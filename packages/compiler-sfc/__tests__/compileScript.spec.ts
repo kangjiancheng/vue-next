@@ -1,4 +1,4 @@
-import { BindingTypes } from '@vue/compiler-dom/src'
+import { BindingTypes } from '@vue/compiler-dom'
 import { compileSFCScript as compile, assertCode } from './utils'
 
 describe('SFC compile <script setup>', () => {
@@ -51,6 +51,34 @@ const bar = 1
     foo: String
   },
   emit: ['a', 'b'],`)
+  })
+
+  describe('<script> and <script setup> co-usage', () => {
+    test('script first', () => {
+      const { content } = compile(`
+      <script>
+      export const n = 1
+      </script>
+      <script setup>
+      import { x } from './x'
+      x()
+      </script>
+      `)
+      assertCode(content)
+    })
+
+    test('script setup first', () => {
+      const { content } = compile(`
+      <script setup>
+      import { x } from './x'
+      x()
+      </script>
+      <script>
+      export const n = 1
+      </script>
+      `)
+      assertCode(content)
+    })
   })
 
   describe('imports', () => {
@@ -267,6 +295,34 @@ const bar = 1
       expect(content).toMatch(`[maybe.value] = val`)
       // let: assumes non-ref
       expect(content).toMatch(`{ lett: lett } = val`)
+      assertCode(content)
+    })
+
+    test('ssr codegen', () => {
+      const { content } = compile(
+        `
+        <script setup>
+        import { ref } from 'vue'
+        const count = ref(0)
+        </script>
+        <template>
+          <div>{{ count }}</div>
+          <div>static</div>
+        </template>
+        <style>
+        div { color: v-bind(count) }
+        </style>
+        `,
+        {
+          inlineTemplate: true,
+          templateOptions: {
+            ssr: true
+          }
+        }
+      )
+      expect(content).toMatch(`\n  __ssrInlineRender: true,\n`)
+      expect(content).toMatch(`return (_ctx, _push`)
+      expect(content).toMatch(`ssrInterpolate`)
       assertCode(content)
     })
   })
