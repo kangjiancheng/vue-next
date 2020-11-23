@@ -140,7 +140,7 @@ function parseChildren(
     const s = context.source
     let node: TemplateChildNode | TemplateChildNode[] | undefined = undefined
 
-    // 解析识别优先级为：解析插值{{}}、 解析注释与解析并注释特殊标签内容(如：CDATA标签)、解析结束标签、解析开始标签、解析文本内容
+    // 解析识别优先级为：解析插值{{}} > 解析注释与解析并注释特殊标签内容(如：CDATA标签) > 解析结束标签 > 解析开始标签 > 解析文本内容
     if (mode === TextModes.DATA || mode === TextModes.RCDATA) {
       // '{{' 解析插值、delimiters = ['{{', '}}']
       if (!context.inVPre && startsWith(s, context.options.delimiters[0])) {
@@ -174,13 +174,13 @@ function parseChildren(
               node = parseBogusComment(context)
             }
           } else {
-            // 错误的注释标志，如：'<!doctype>'
+            // 错误的注释标志，如：'<!doc>'
             emitError(context, ErrorCodes.INCORRECTLY_OPENED_COMMENT)
-            // 注释 错误的注释标志内容，如 '<!--doctype-->'
+            // 注释 错误的注释标志内容，如 '<!--doc-->'
             node = parseBogusComment(context)
           }
         } else if (s[1] === '/') {
-          // 优先 解析结束标签'</'，因为如果一开始就存在结束标签，是错误的。
+          // 优先 解析 结束标签'</'，因为如果一开始就存在结束标签，是错误的。
           // https://html.spec.whatwg.org/multipage/parsing.html#end-tag-open-state
           if (s.length === 2) {
             // s = '</'，不完整的结束标签
@@ -191,7 +191,7 @@ function parseChildren(
             advanceBy(context, 3)
             continue
           } else if (/[a-z]/i.test(s[2])) {
-            // template = 'abc</p>', s = '</p>' 只有结束标志
+            // template = 'abc</p', s = '</p' 只有结束标志
             emitError(context, ErrorCodes.X_INVALID_END_TAG)
             parseTag(context, TagType.End, parent)
             continue
@@ -206,7 +206,7 @@ function parseChildren(
             node = parseBogusComment(context)
           }
         } else if (/[a-z]/i.test(s[1])) {
-          // s = '<p>abc</p>' 开始标志
+          // s = '<p' 开始标志
           node = parseElement(context, ancestors)
         } else if (s[1] === '?') {
           // '<?' xml 格式
@@ -436,6 +436,9 @@ function parseBogusComment(context: ParserContext): CommentNode | undefined {
   }
 }
 
+/**
+ * 解析元素
+ */
 function parseElement(
   context: ParserContext,
   ancestors: ElementNode[]
@@ -446,11 +449,14 @@ function parseElement(
   const wasInPre = context.inPre
   const wasInVPre = context.inVPre
   const parent = last(ancestors)
+  // 解析元素标签：指令等
   const element = parseTag(context, TagType.Start, parent)
+  // 是否被 pre 标签包裹
   const isPreBoundary = context.inPre && !wasInPre
+  // 是否使用 v-pre 指令
   const isVPreBoundary = context.inVPre && !wasInVPre
 
-  // 自闭标签 <br />
+  // 自闭元素 或自闭标签 <br />、<img />、<input /> 等：@vue/shared/src/domTagConfig.ts
   if (element.isSelfClosing || context.options.isVoidTag(element.tag)) {
     return element
   }
@@ -510,23 +516,27 @@ function parseTag(
       type === (startsWith(context.source, '</') ? TagType.End : TagType.Start)
     )
 
-  // Tag open.
-  const start = getCursor(context) // 获取模板解析位置
-  // 开始标签，如：'<s*pan>' 或 结束标签 '</s*pan>'  (* 排除: 空格、换行、/、> )
-  const match = /^<\/?([a-z][^\t\r\n\f />]*)/i.exec(context.source)! // 结尾'!' 排除 null
-  const tag = match[1] // 捕获组1，括号内容：标签名
-  const ns = context.options.getNamespace(tag, parent) // 默认 Namespaces.HTML
+  // 解析标签，如：context.source = '<span class="abc" :hello="123">'
+  const start = getCursor(context) // 获取当前模板解析所在位置
+  // 匹配标签名（开始标签或结束标签），标签名之间不能有：空格、/、>、制页符
+  const match = /^<\/?([a-z][^\t\r\n\f />]*)/i.exec(context.source)! // 结尾 '!' ts语法 ，即match 排除 null
+  // 捕获组1，括号内容：标签名 - 'span'
+  const tag = match[1]
+  // 默认 Namespaces.HTML
+  const ns = context.options.getNamespace(tag, parent)
 
-  // 移动光标距离， match[0] 为匹配到到内容，即标签长度，如: '<span>'.length = 6
+  // 解析标签名完成，继续移动光标距离，match[0] 为匹配到到内容，如: '<span'.length = 5
   advanceBy(context, match[0].length)
-  // 跳过 开头为：空格、换行等
+  // 跳过 开头为：空格、换行等，如：context.source = ' class="abc">'
   advanceSpaces(context)
+  // 此时 context.source = 'class="abc">'
 
   // save current state in case we need to re-parse attributes with v-pre
   // 保存当前解析状态，光标位置，与当前解析内容 （已跳过标签）
   const cursor = getCursor(context)
   const currentSource = context.source
 
+  // 解析 props 属性
   // Attributes.
   let props = parseAttributes(context, type)
 
@@ -605,23 +615,33 @@ function parseTag(
   }
 }
 
+/**
+ * 解析标签上的属性列表
+ * @param context
+ * @param type：开始标签或结束标签
+ */
 function parseAttributes(
   context: ParserContext,
   type: TagType
 ): (AttributeNode | DirectiveNode)[] {
   const props = []
   const attributeNames = new Set<string>()
+
+  // 以 context.source = '' 或 '>...' 或 '/>...' 为结束解析标签属性
   while (
     context.source.length > 0 &&
     !startsWith(context.source, '>') &&
     !startsWith(context.source, '/>')
   ) {
+    // 标签属性上不能有：'/'，如：context.source = <span / class="abc"></span>' (注意：前边的标签名 '<span ' 已经解析了，现在在解析标签上的属性)
     if (startsWith(context.source, '/')) {
       emitError(context, ErrorCodes.UNEXPECTED_SOLIDUS_IN_TAG)
       advanceBy(context, 1)
       advanceSpaces(context)
-      continue
+      continue // 当前为无效属性，无需记录，直接继续解析后边属性
     }
+
+    // 结束标签上不能有属性，如: '</span class="abc">'，注意：标签名 '</span ' 已经解析了，现在在解析 'class="abc">'
     if (type === TagType.End) {
       emitError(context, ErrorCodes.END_TAG_WITH_ATTRIBUTES)
     }
@@ -636,43 +656,58 @@ function parseAttributes(
     }
     advanceSpaces(context)
   }
+
   return props
 }
 
+/**
+ * 解析标签上的某一个属性
+ * @param context
+ * @param nameSet，元素标签属性列表集合
+ */
 function parseAttribute(
   context: ParserContext,
   nameSet: Set<string>
 ): AttributeNode | DirectiveNode {
   __TEST__ && assert(/^[^\t\r\n\f />]/.test(context.source))
 
-  // Name.
-  const start = getCursor(context)
+  // 解析属性名，如：context.source = 'class="abc" :hello="123"></span>'
+  const start = getCursor(context) // 记录当前光标解析位置
+  // 匹配属性名，不能以：'空格、/、>' 开头， 且以：'空格、换行、/、>、=' 为结束边界
   const match = /^[^\t\r\n\f />][^\t\r\n\f />=]*/.exec(context.source)!
+  // match[0] 为 匹配到的内容: 'class'
   const name = match[0]
 
+  // 校验属性名
+
+  // 属性名 不能重复
   if (nameSet.has(name)) {
     emitError(context, ErrorCodes.DUPLICATE_ATTRIBUTE)
   }
   nameSet.add(name)
-
+  // 属性名 不能以 '=' 开头，如：'<span =="abc"></span>'
   if (name[0] === '=') {
     emitError(context, ErrorCodes.UNEXPECTED_EQUALS_SIGN_BEFORE_ATTRIBUTE_NAME)
   }
+  // 在一个块级域中处理
   {
+    // 属性名不能含有以下字符
     const pattern = /["'<]/g
     let m: RegExpExecArray | null
     while ((m = pattern.exec(name))) {
+      // 如：<span cl"as's<="abc">，则 name = `cla"as's<`
       emitError(
         context,
         ErrorCodes.UNEXPECTED_CHARACTER_IN_ATTRIBUTE_NAME,
-        m.index
+        m.index // 匹配到的错误位置，如：name = `cla"as's<`，m.index = 3
       )
     }
   }
 
+  // 完成解析：属性名，前进解析光标、模版中移除解析名
   advanceBy(context, name.length)
 
-  // Value
+  // 开始解析：属性值
   let value:
     | {
         content: string
@@ -680,17 +715,26 @@ function parseAttribute(
         loc: SourceLocation
       }
     | undefined = undefined
-
+  // 属性值在 '=' 之后，如：template: '<span class = "abc">'，此时 context.source: ' = "abc">'，注意可以 空格、换行 开头
   if (/^[\t\r\n\f ]*=/.test(context.source)) {
-    advanceSpaces(context)
-    advanceBy(context, 1)
-    advanceSpaces(context)
-    value = parseAttributeValue(context)
+    advanceSpaces(context) // 跳过空格
+    advanceBy(context, 1) // 跳过 '='
+    advanceSpaces(context) // 跳过空格
+    // 解析属性值
+    // 属性值 可以设置引号，template: '<span class = "abc">'
+    // 也可以没有，template: '<span class = abc>'，如果开始没有引号，则其结束边界为：空格、>，同时属性值内容不能有：引号、空格、<
+    // 结果都是：class="abc"
+    value = parseAttributeValue(context) // 返回属性值节点
+
+    // 有 '=' 时，必须有属性值
     if (!value) {
       emitError(context, ErrorCodes.MISSING_ATTRIBUTE_VALUE)
     }
   }
+  // 记录 所解析属性名与属性值 的位置
   const loc = getSelection(context, start)
+
+  // 解析完成：属性值
 
   if (!context.inVPre && /^(v-|:|@|#)/.test(name)) {
     const match = /(?:^v-([a-z0-9-]+))?(?:(?::|^@|^#)(\[[^\]]+\]|[^\.]+))?(.+)?$/i.exec(
@@ -785,6 +829,9 @@ function parseAttribute(
   }
 }
 
+/**
+ * 解析属性值（属性值在 '=' 之后），并返回属性值节点
+ */
 function parseAttributeValue(
   context: ParserContext
 ):
@@ -797,41 +844,53 @@ function parseAttributeValue(
   const start = getCursor(context)
   let content: string
 
+  // 如，template：'<span class = "abc"></span>'
+  // 此时，context.source：'"abc"></span>'
   const quote = context.source[0]
   const isQuoted = quote === `"` || quote === `'`
   if (isQuoted) {
-    // Quoted value.
-    advanceBy(context, 1)
+    // 属性值以 单/双引号 开头
+    advanceBy(context, 1) // 跳过 开始引号
 
     const endIndex = context.source.indexOf(quote)
     if (endIndex === -1) {
+      // 如：template = '<span class = "abc></span>'，则属性值为: content = 'abc></span>'
       content = parseTextData(
+        // 获取解析文本，并移动光标
         context,
-        context.source.length,
+        context.source.length, // 后边所有待解析的内容都是属性值
         TextModes.ATTRIBUTE_VALUE
       )
     } else {
+      // 解析引号之间的内容，返回属性值内容，并移动光标
       content = parseTextData(context, endIndex, TextModes.ATTRIBUTE_VALUE)
-      advanceBy(context, 1)
+      advanceBy(context, 1) // 跳过 结束引号
     }
   } else {
-    // Unquoted
+    // 属性值没有引号包裹，且以：'空格、换行、>' 为结束边界
+    // 如：template = '<span class = abc></span>'，此时：context.source = 'abc></span>'，则class的属性值为：'abc'
     const match = /^[^\t\r\n\f >]+/.exec(context.source)
     if (!match) {
+      // 没有设置属性值，如: template = '<span class = ></span>'，context.source = '></span>'
       return undefined
     }
+
+    // 属性值若不以引号开头，则不能有以下字符
     const unexpectedChars = /["'<=`]/g
     let m: RegExpExecArray | null
     while ((m = unexpectedChars.exec(match[0]))) {
+      // match[0]： 匹配到的内容 'abc'
       emitError(
         context,
         ErrorCodes.UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE,
         m.index
       )
     }
+    // 获取属性值内容
     content = parseTextData(context, match[0].length, TextModes.ATTRIBUTE_VALUE)
   }
 
+  // 返回属性值内容节点信息
   return { content, isQuoted, loc: getSelection(context, start) }
 }
 
@@ -885,8 +944,10 @@ function parseInterpolation(
 function parseText(context: ParserContext, mode: TextModes): TextNode {
   __TEST__ && assert(context.source.length > 0)
 
+  // 结束边界：<、{{、]]
   const endTokens = ['<', context.options.delimiters[0]]
   if (mode === TextModes.CDATA) {
+    // xhtml
     endTokens.push(']]>')
   }
 
@@ -895,6 +956,7 @@ function parseText(context: ParserContext, mode: TextModes): TextNode {
   for (let i = 0; i < endTokens.length; i++) {
     const index = context.source.indexOf(endTokens[i], 1)
     if (index !== -1 && endIndex > index) {
+      // 调整结束边界，先识别 '<'， 然后进一步缩小结束范围 '{{'
       endIndex = index
     }
   }
@@ -935,11 +997,11 @@ function parseTextData(
   ) {
     return rawText
   } else {
-    // DATA or RCDATA containing "&"". Entity decoding required.
-    // 解析包含'&'的html实体字符串，通过创建一个dom实例，将rawText作为innerHTML，然后获取其中的textContent，即可实现解析
+    // 解析属性值中的文本，如：template = '<span class="abc"></span>'，此时: rawText = 'abc'，作为属性值内容返回
+    // 同时处理文本中表示 '&' 的html实体字符串（通过创建一个dom实例，将rawText作为innerHTML，然后获取其中的textContent，即可实现解析）
     return context.options.decodeEntities(
       rawText,
-      mode === TextModes.ATTRIBUTE_VALUE
+      mode === TextModes.ATTRIBUTE_VALUE // 3.0.2版本暂未发现有使用该参数
     )
   }
 }
