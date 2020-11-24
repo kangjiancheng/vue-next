@@ -125,6 +125,12 @@ function createParserContext(
   }
 }
 
+/**
+ * 解析元素、子元素
+ * @param context
+ * @param mode
+ * @param ancestors - 父元素列表，即已解析的父元素
+ */
 function parseChildren(
   context: ParserContext,
   mode: TextModes,
@@ -206,7 +212,7 @@ function parseChildren(
             node = parseBogusComment(context)
           }
         } else if (/[a-z]/i.test(s[1])) {
-          // s = '<p' 开始标志
+          // s = '<p' 开始标签，解析标签名、标签属性、指令等
           node = parseElement(context, ancestors)
         } else if (s[1] === '?') {
           // '<?' xml 格式
@@ -343,7 +349,7 @@ function parseCDATA(
 }
 
 /**
- * 解析注释： <!--正常注释-->、处理无效注释'a<!--bc'、不规范注释'<!-->'、处理嵌套注释'<!--<!--a-->123'、
+ * 解析注释： <!--正常注释-->、处理无效注释 'a<!--bc'、不规范注释'<!-->'、处理嵌套注释'<!--<!--a-->123'、
  *    源码调试注释时，推荐直接编辑模版的template属性，如 template: '<!-- abc -->'，
  *    因为如果通过dom标签得到的template，其innerHTML 输出的注释会与源码有区别，如 <!-->的innerHTML 为 '<!---->'
  * @param context
@@ -437,7 +443,7 @@ function parseBogusComment(context: ParserContext): CommentNode | undefined {
 }
 
 /**
- * 解析元素
+ * 解析元素标签：标签名、标签属性、标签指令等
  */
 function parseElement(
   context: ParserContext,
@@ -445,7 +451,7 @@ function parseElement(
 ): ElementNode | undefined {
   __TEST__ && assert(/^<[a-z]/i.test(context.source))
 
-  // Start tag.
+  // 解析开始标签：标签名、标签属性列表、属性指令等
   const wasInPre = context.inPre
   const wasInVPre = context.inVPre
   const parent = last(ancestors)
@@ -461,7 +467,7 @@ function parseElement(
     return element
   }
 
-  // Children.
+  // 解析子元素
   ancestors.push(element)
   const mode = context.options.getTextMode(element, parent)
   const children = parseChildren(context, mode, ancestors)
@@ -518,9 +524,9 @@ function parseTag(
 
   // 解析标签，如：context.source = '<span class="abc" :hello="123">'
   const start = getCursor(context) // 获取当前模板解析所在位置
-  // 匹配标签名（开始标签或结束标签），标签名之间不能有：空格、/、>、制页符
+  // 匹配标签名（开始标签或结束标签），以：空格、/、>、制页符 结束
   const match = /^<\/?([a-z][^\t\r\n\f />]*)/i.exec(context.source)! // 结尾 '!' ts语法 ，即match 排除 null
-  // 捕获组1，括号内容：标签名 - 'span'
+  // 捕获组1，括号内容：标签名 'span'
   const tag = match[1]
   // 默认 Namespaces.HTML
   const ns = context.options.getNamespace(tag, parent)
@@ -532,97 +538,110 @@ function parseTag(
   // 此时 context.source = 'class="abc">'
 
   // save current state in case we need to re-parse attributes with v-pre
-  // 保存当前解析状态，光标位置，与当前解析内容 （已跳过标签）
+  // 解析完标签名，保存此刻解析状态，光标位置，与当前解析内容，为了识别标签为pre时，在解析完元素属性列表后，重置回此刻光标状态
   const cursor = getCursor(context)
   const currentSource = context.source
 
-  // 解析 props 属性
-  // Attributes.
+  // 解析标签属性，返回元素的属性节点列表，其中节点分为 普通html标签属性节点和指令属性节点
   let props = parseAttributes(context, type)
+  // 至此 context.source = '' 或 '>...' 或 '/>...'
 
-  // check <pre> tag
+  // 判断 tag === 'pre'
   if (context.options.isPreTag(tag)) {
     context.inPre = true
   }
 
-  // check v-pre
+  // 检测节点属性列表中是否有 v-pre 指令
   if (
     !context.inVPre &&
     props.some(p => p.type === NodeTypes.DIRECTIVE && p.name === 'pre')
   ) {
     context.inVPre = true
     // reset context
-    extend(context, cursor)
+    extend(context, cursor) // 重置光标信息到最开始标签属性开始位置，即标签名之后（也跳过空格）
     context.source = currentSource
-    // re-parse attrs and filter out v-pre itself
+    // 重新解析一遍元素属性列表，把所有属性都当作普通html标签属性，且不进行指令属性分析，同时去掉'v-pre' 属性
     props = parseAttributes(context, type).filter(p => p.name !== 'v-pre')
   }
 
-  // Tag close.
+  // 解析至此模版大致为： context.source = '' 或 '>...' 或 '/>...'，已经过 元素标签名、元素属性列表 分析
+
+  // 解析标签的关闭标志，如: '<span class="abc" </span>'，没有开始标签没有关闭
   let isSelfClosing = false
   if (context.source.length === 0) {
+    // 标签没有关闭，没有闭合字符，
     emitError(context, ErrorCodes.EOF_IN_TAG)
   } else {
+    // 自闭合标签，如：'<br />'
     isSelfClosing = startsWith(context.source, '/>')
     if (type === TagType.End && isSelfClosing) {
+      // 结束标签 不该为自闭合
       emitError(context, ErrorCodes.END_TAG_WITH_TRAILING_SOLIDUS)
     }
+    // 跳过关闭字符
     advanceBy(context, isSelfClosing ? 2 : 1)
   }
+  // 至此标签的模版光标解析结束
 
+  /**
+   * 判断元素标签类型： ELEMENT、 COMPONENT、 SLOT、 TEMPLATE
+   */
   let tagType = ElementTypes.ELEMENT
   const options = context.options
   if (!context.inVPre && !options.isCustomElement(tag)) {
+    // 判断是 v-is 指令，动态组件
     const hasVIs = props.some(
       p => p.type === NodeTypes.DIRECTIVE && p.name === 'is'
     )
+
+    // 判断是组件元素
     if (options.isNativeTag && !hasVIs) {
-      if (!options.isNativeTag(tag)) tagType = ElementTypes.COMPONENT
+      if (!options.isNativeTag(tag)) tagType = ElementTypes.COMPONENT // 如果不是html 标签，则判定为组件
     } else if (
       hasVIs ||
-      isCoreComponent(tag) ||
-      (options.isBuiltInComponent && options.isBuiltInComponent(tag)) ||
-      /^[A-Z]/.test(tag) ||
+      isCoreComponent(tag) || // 内置组件：Teleport、Suspense、KeepAlive、BaseTransition
+      (options.isBuiltInComponent && options.isBuiltInComponent(tag)) || // 内置组件 Transition、TransitionGroup
+      /^[A-Z]/.test(tag) || // 大写标签默认被识别为组件
       tag === 'component'
     ) {
       tagType = ElementTypes.COMPONENT
     }
 
     if (tag === 'slot') {
-      tagType = ElementTypes.SLOT
+      tagType = ElementTypes.SLOT // 元素类型 为slot
     } else if (
       tag === 'template' &&
       props.some(p => {
         return (
-          p.type === NodeTypes.DIRECTIVE && isSpecialTemplateDirective(p.name)
+          p.type === NodeTypes.DIRECTIVE && isSpecialTemplateDirective(p.name) // 存在指定指令列表则 元素为template类型
         )
       })
     ) {
-      tagType = ElementTypes.TEMPLATE
+      tagType = ElementTypes.TEMPLATE // 元素类型为模版template，且必须带有指定指令列表
     }
   }
 
+  // 返回元素模版节点信息
   return {
     type: NodeTypes.ELEMENT,
-    ns,
-    tag,
-    tagType,
-    props,
-    isSelfClosing,
+    ns, // 命名空间
+    tag, // 标签名
+    tagType, // 标签类型：ELEMENT、 COMPONENT、 SLOT、 TEMPLATE
+    props, // 元素属性列表
+    isSelfClosing, // 标签是否自闭和
     children: [],
-    loc: getSelection(context, start),
+    loc: getSelection(context, start), // 元素标签位置信息
     codegenNode: undefined // to be created during transform phase
   }
 }
 
 /**
- * 解析标签上的属性列表
- * @param context
- * @param type：开始标签或结束标签
+ * 解析标签上的属性列表: 属性名tagName=属性值tagValue，还有属性指令，以 v-、:、@、# 开头
+ * 返回元素的属性节点列表，其中节点分为 普通html标签属性节点和指令属性节点
  */
 function parseAttributes(
   context: ParserContext,
-  type: TagType
+  type: TagType // 开始标签或结束标签
 ): (AttributeNode | DirectiveNode)[] {
   const props = []
   const attributeNames = new Set<string>()
@@ -633,7 +652,7 @@ function parseAttributes(
     !startsWith(context.source, '>') &&
     !startsWith(context.source, '/>')
   ) {
-    // 标签属性上不能有：'/'，如：context.source = <span / class="abc"></span>' (注意：前边的标签名 '<span ' 已经解析了，现在在解析标签上的属性)
+    // 标签属性上不能有：'/'，如：template = '<span / class="abc"></span>'，此时 context.source = '/ class="abc"></span>'
     if (startsWith(context.source, '/')) {
       emitError(context, ErrorCodes.UNEXPECTED_SOLIDUS_IN_TAG)
       advanceBy(context, 1)
@@ -641,33 +660,35 @@ function parseAttributes(
       continue // 当前为无效属性，无需记录，直接继续解析后边属性
     }
 
-    // 结束标签上不能有属性，如: '</span class="abc">'，注意：标签名 '</span ' 已经解析了，现在在解析 'class="abc">'
+    // 结束标签上不能有属性，如: template = '</span class="abc">'
     if (type === TagType.End) {
       emitError(context, ErrorCodes.END_TAG_WITH_ATTRIBUTES)
     }
 
+    // 解析标签每个属性，返回html普通元素属性节点 或 指令属性节点
     const attr = parseAttribute(context, attributeNames)
     if (type === TagType.Start) {
       props.push(attr)
     }
 
+    // 如：template: '<span name="hello"class="world"></span>'，解析完name属性时，光标定位到name属性值后边，如果发现当前位置不是空格或结束边界则报错
     if (/^[^\t\r\n\f />]/.test(context.source)) {
       emitError(context, ErrorCodes.MISSING_WHITESPACE_BETWEEN_ATTRIBUTES)
     }
+    // 跳过空格，继续下一个属性解析，如果此时 context.source = '' 或 '>...' 或 '/>...' 则结束解析元素属性
     advanceSpaces(context)
   }
 
-  return props
+  return props // 返回元素属性节点列表
 }
 
 /**
- * 解析标签上的某一个属性
- * @param context
- * @param nameSet，元素标签属性列表集合
+ * 解析标签上的属性: 属性名tagName=属性值tagValue，还有属性指令:/^(v-|:|@|#)/.test(tagName)
+ * 返回 指令属性节点 或 普通html元素属性节点
  */
 function parseAttribute(
   context: ParserContext,
-  nameSet: Set<string>
+  nameSet: Set<string> // 元素标签属性列表集合
 ): AttributeNode | DirectiveNode {
   __TEST__ && assert(/^[^\t\r\n\f />]/.test(context.source))
 
@@ -685,7 +706,7 @@ function parseAttribute(
     emitError(context, ErrorCodes.DUPLICATE_ATTRIBUTE)
   }
   nameSet.add(name)
-  // 属性名 不能以 '=' 开头，如：'<span =="abc"></span>'
+  // 属性名 不能以 '=' 开头，如：'<span =class="abc"></span>'，则 name = '=class'
   if (name[0] === '=') {
     emitError(context, ErrorCodes.UNEXPECTED_EQUALS_SIGN_BEFORE_ATTRIBUTE_NAME)
   }
@@ -696,6 +717,7 @@ function parseAttribute(
     let m: RegExpExecArray | null
     while ((m = pattern.exec(name))) {
       // 如：<span cl"as's<="abc">，则 name = `cla"as's<`
+      // 如：没有关闭标签 template= '<span class="abc" </span>'，则第二次解析属性时 name = '<'
       emitError(
         context,
         ErrorCodes.UNEXPECTED_CHARACTER_IN_ATTRIBUTE_NAME,
@@ -715,12 +737,12 @@ function parseAttribute(
         loc: SourceLocation
       }
     | undefined = undefined
-  // 属性值在 '=' 之后，如：template: '<span class = "abc">'，此时 context.source: ' = "abc">'，注意可以 空格、换行 开头
+  // 属性值在 '=' 之后，如：template: '<span class = "abc">'，此时 context.source: ' = "abc">'，注意可以 空格、换行 间隔
   if (/^[\t\r\n\f ]*=/.test(context.source)) {
     advanceSpaces(context) // 跳过空格
     advanceBy(context, 1) // 跳过 '='
     advanceSpaces(context) // 跳过空格
-    // 解析属性值
+    // 解析属性值，并返回属性值节点
     // 属性值 可以设置引号，template: '<span class = "abc">'
     // 也可以没有，template: '<span class = abc>'，如果开始没有引号，则其结束边界为：空格、>，同时属性值内容不能有：引号、空格、<
     // 结果都是：class="abc"
@@ -731,37 +753,70 @@ function parseAttribute(
       emitError(context, ErrorCodes.MISSING_ATTRIBUTE_VALUE)
     }
   }
-  // 记录 所解析属性名与属性值 的位置
+  // 记录 所解析属性名与属性值 的位置，范围从属性名开始到属性值结束，此时光标移动到属性值之后
   const loc = getSelection(context, start)
 
   // 解析完成：属性值
 
+  // 解析标签指令，判断属性名是否代表指令
+  // 如：template = '<span v-bind:["指令参数(如click或change)"].prevent="someHandler"></span>'
+  // 此时: name = 'v-bind:["指令参数(如click或change)"].prevent'
+
+  // 指令开头必须是：v-、:、@、#
   if (!context.inVPre && /^(v-|:|@|#)/.test(name)) {
+    // 指令分类：v-xxx指令、v-xxx:xxx指令、 :[xxx]（参数形式的指令）、:xxx指令
+    // 还有：@[xxx]指令、@xxx指令、#[xxx]、#xxx
+    // 注意 ':'、 '@'、'#' 后边 不能马上跟 '.'，如：'<span @.click="someHandler"></span>'
+    // 如： template = '<span v-if="true"></span>'，则 name = 'v-if'
+    // 如： template = '<span :attr1='true' @[attr2]="false"></span>'，则 name = 'v-if'
+    // '?:' 表示不进行捕获这个括号中内容
     const match = /(?:^v-([a-z0-9-]+))?(?:(?::|^@|^#)(\[[^\]]+\]|[^\.]+))?(.+)?$/i.exec(
       name
-    )!
+    )! // 排除 null
 
+    /**
+     * 如属性名name为： 'v-bind:["指令参数(如click或change)"].prevent'  或者 '#header' 或 '@click'
+     *    match[1] 为匹配第一个待捕获的括号内容：([a-z0-9-]+) 指令，则 match[1] = 'bind' 或 '#' 或 '@'
+     *    match[2] 为匹配第二个待捕获的括号内容：(\[[^\]]+\]|[^\.]+)，则 match[2] = '["指令参数(如click或change)"]' 或 'header' 或 'click'
+     *    match[3] 为匹配第三个待捕获的括号内容：(.+)，则 match[3] = '.prevent'
+     * 注意 '?:' 表示不进行捕获这个括号中内容
+     */
+    /**
+     * 解析指令别名对应的真实功能：
+     *    如果 存在 v-xxx，则直接设置为 'xxx'
+     *    否则：
+     *        ':' 开头代表 'bind'
+     *        '@' 开头代表 'on'
+     *        '#' 开头代表 'slot'，此为默认，如：template: '<span #header="nav"></span>'，则 dirName = 'slot'
+     */
     const dirName =
       match[1] ||
       (startsWith(name, ':') ? 'bind' : startsWith(name, '@') ? 'on' : 'slot')
 
     let arg: ExpressionNode | undefined
 
+    // match[2] 捕获 (?:(?::|^@|^#)(\[[^\]]+\]|[^\.]+)) 其中括号内容：(\[[^\]]+\]|[^\.]+) ，即跟在 :、@、# 后的内容
     if (match[2]) {
-      const isSlot = dirName === 'slot'
-      const startOffset = name.indexOf(match[2])
+      const isSlot = dirName === 'slot' // 如：template: '<span #header="nav"></span>' 或 'v-slot'，则 name = '#header'，match[2] = 'header'，dirName = 'slot'
+      const startOffset = name.indexOf(match[2]) // 指令内容开始位置
+
+      // 解析指令内容的开始位置与结束位置，解析的内容为  ' :、@、# ' 后的指令内容
       const loc = getSelection(
+        // 获取指定模板范围内的位置与内容
         context,
-        getNewPosition(context, start, startOffset),
+        // 由于已解析完属性名跟属性值，模版光标已经移动到属性值之后，所以需要通过getNewPosition方法去单独获取指令在模版中的位置信息
+        getNewPosition(context, start, startOffset), // 如 'v-bind:click' 则返回指令名 'click' 光标模版开始位置节点，功能等同与 advance 中的 advancePositionWithMutation 移动光标功能，但getNewPosition方法不影响 start 光标位置信息，advancePositionWithMutation 则影响光标位置信息
         getNewPosition(
+          // 返回指令内容在模版中的结束位置信息
           context,
-          start,
-          startOffset + match[2].length + ((isSlot && match[3]) || '').length
+          start, // 指令内容开始位置
+          startOffset + match[2].length + ((isSlot && match[3]) || '').length // 如果是slot的话，还要包括 match[3]，为了支持vue2.x，如v-slot:header.top
         )
       )
       let content = match[2]
-      let isStatic = true
+      let isStatic = true // 是否静态指令
 
+      // 动态指令 '@["eventType (如click或change)"]'
       if (content.startsWith('[')) {
         isStatic = false
 
@@ -772,37 +827,43 @@ function parseAttribute(
           )
         }
 
+        // 进一步调整指令内容，设定为动态参数
         content = content.substr(1, content.length - 2)
       } else if (isSlot) {
         // #1241 special case for v-slot: vuetify relies extensively on slot
         // names containing dots. v-slot doesn't have any modifiers and Vue 2.x
         // supports such usage so we are keeping it consistent with 2.x.
+        // 为了支持vue2.x，slot 指令 要包括 '.' 之后的内容
         content += match[3] || ''
       }
 
+      // 返回指令内容信息
       arg = {
-        type: NodeTypes.SIMPLE_EXPRESSION,
+        type: NodeTypes.SIMPLE_EXPRESSION, // 节点类型为表达式
         content,
-        isStatic,
+        isStatic, // 是否静态指令
         constType: isStatic
           ? ConstantTypes.CAN_STRINGIFY
-          : ConstantTypes.NOT_CONSTANT,
-        loc
+          : ConstantTypes.NOT_CONSTANT, // 动态指令时，参数不能设置 const 类型
+        loc // 属性名中指令内容 的开始位置与结束位置还有对应的模版内容，如：'@click' 属性的指令内容 'click' 在模版中的位置信息
       }
     }
 
+    // 调整属性值 loc位置信息，去掉引号
     if (value && value.isQuoted) {
-      const valueLoc = value.loc
+      const valueLoc = value.loc // 属性值 loc光标位置信息，注意 value.content是不包含引号的，loc包含来引号
       valueLoc.start.offset++
       valueLoc.start.column++
-      valueLoc.end = advancePositionWithClone(valueLoc.start, value.content)
-      valueLoc.source = valueLoc.source.slice(1, -1)
+      valueLoc.end = advancePositionWithClone(valueLoc.start, value.content) // 调整结束位置，不影响开始位置
+      valueLoc.source = valueLoc.source.slice(1, -1) // 调整loc 中的source，去掉引号
     }
 
+    // 返回指令属性节点
     return {
-      type: NodeTypes.DIRECTIVE,
-      name: dirName,
+      type: NodeTypes.DIRECTIVE, // 节点类型为指令类型
+      name: dirName, // 指令类别，如 if、show、或 bind、@、#
       exp: value && {
+        // 指令值表达式内容信息
         type: NodeTypes.SIMPLE_EXPRESSION,
         content: value.content,
         isStatic: false,
@@ -811,12 +872,13 @@ function parseAttribute(
         constType: ConstantTypes.NOT_CONSTANT,
         loc: value.loc
       },
-      arg,
-      modifiers: match[3] ? match[3].substr(1).split('.') : [],
-      loc
+      arg, // 指令类别的内容信息
+      modifiers: match[3] ? match[3].substr(1).split('.') : [], // 指令的修饰符 '@click.prevent'中的 'prevent'
+      loc // 指令属性位置，包括属性名与属性值
     }
   }
 
+  // 返回普通html元素 attr属性 信息
   return {
     type: NodeTypes.ATTRIBUTE,
     name,
@@ -825,20 +887,20 @@ function parseAttribute(
       content: value.content,
       loc: value.loc
     },
-    loc
+    loc // 属性位置
   }
 }
 
 /**
- * 解析属性值（属性值在 '=' 之后），并返回属性值节点
+ * 解析属性值（属性值在 '=' 之后），并返回属性值内容节点、移动光标
  */
 function parseAttributeValue(
   context: ParserContext
 ):
   | {
-      content: string
+      content: string // 不包括引号
       isQuoted: boolean
-      loc: SourceLocation
+      loc: SourceLocation // 包括引号
     }
   | undefined {
   const start = getCursor(context)
@@ -890,7 +952,7 @@ function parseAttributeValue(
     content = parseTextData(context, match[0].length, TextModes.ATTRIBUTE_VALUE)
   }
 
-  // 返回属性值内容节点信息
+  // 返回属性值内容节点信息，其中 loc 包括引号位置信息
   return { content, isQuoted, loc: getSelection(context, start) }
 }
 
@@ -976,7 +1038,7 @@ function parseText(context: ParserContext, mode: TextModes): TextNode {
 }
 
 /**
- * 解析文本内容并返回
+ * 解析文本内容并返回、移动光标
  * Get text data with a given length from the current location.
  * This translates HTML entities in the text data.
  */
@@ -1022,7 +1084,7 @@ function getSelection(
   return {
     start,
     end, // 不包括结束位置的字符，end 为下一次解析内容的起始位置
-    source: context.originalSource.slice(start.offset, end.offset) // 节点内容即该节点对应的模板内容
+    source: context.originalSource.slice(start.offset, end.offset) // 节点内容即该节点对应的模板内容，slice()返回从开始索引到结束索引对应的所有元素，其 中不包含结束索引对应的元素
   }
 }
 
@@ -1055,14 +1117,18 @@ function advanceSpaces(context: ParserContext): void {
   }
 }
 
+/**
+ * 针对标签属性名为指令的节点，获取指令对应的开始/结束 光标位置信息，不影响属性名节点开始位置start: Position
+ */
 function getNewPosition(
   context: ParserContext,
-  start: Position,
+  start: Position, // 属性名指令光标开始位置
   numberOfCharacters: number
 ): Position {
   return advancePositionWithClone(
+    // 不修改 start 位置信息 （注意，在advancePositionWithMutation则影响模版节点位置信息）
     start,
-    context.originalSource.slice(start.offset, numberOfCharacters),
+    context.originalSource.slice(start.offset, numberOfCharacters), // 返回指令前缀，如 'v-bind:click'，则前缀为 'v-bind:'，再如：'#header'，则前缀为 '#'
     numberOfCharacters
   )
 }

@@ -87,6 +87,7 @@ export function getInnerRange(
   return newLoc
 }
 
+// 复制模版某一范围内的内容，避免影响该范围原先的位置信息
 export function advancePositionWithClone(
   pos: Position,
   source: string,
@@ -108,9 +109,10 @@ export function advancePositionWithMutation(
 ): Position {
   let linesCount = 0
   let lastNewLinePos = -1
+
+  // 识别换行，换行的ascii码：10，空格的ascii码 32
   for (let i = 0; i < numberOfCharacters; i++) {
     if (source.charCodeAt(i) === 10 /* newline char code */) {
-      // 换行的ascii码：10，空格的ascii码 32
       linesCount++
       lastNewLinePos = i
     }
