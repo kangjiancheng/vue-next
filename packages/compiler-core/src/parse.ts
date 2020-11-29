@@ -566,7 +566,7 @@ function parseTag(
 
   // 解析至此模版大致为： context.source = '' 或 '>...' 或 '/>...'，已经过 元素标签名、元素属性列表 分析
 
-  // 解析标签的关闭标志，如: '<span class="abc" </span>'，没有开始标签没有关闭
+  // 解析标签的关闭标志，如: template:'<span class="abc"'，开始标签没有关闭
   let isSelfClosing = false
   if (context.source.length === 0) {
     // 标签没有关闭，没有闭合字符，
@@ -652,16 +652,16 @@ function parseAttributes(
     !startsWith(context.source, '>') &&
     !startsWith(context.source, '/>')
   ) {
-    // 标签属性上不能有：'/'，如：template = '<span / class="abc"></span>'，此时 context.source = '/ class="abc"></span>'
     if (startsWith(context.source, '/')) {
+      // 标签属性上不能有：'/'，如：template = '<span / class="abc"></span>'，此时 context.source = '/ class="abc"></span>'
       emitError(context, ErrorCodes.UNEXPECTED_SOLIDUS_IN_TAG)
       advanceBy(context, 1)
       advanceSpaces(context)
       continue // 当前为无效属性，无需记录，直接继续解析后边属性
     }
 
-    // 结束标签上不能有属性，如: template = '</span class="abc">'
     if (type === TagType.End) {
+      // 结束标签上不能有属性，如: template = '</span class="abc">'
       emitError(context, ErrorCodes.END_TAG_WITH_ATTRIBUTES)
     }
 
@@ -694,7 +694,7 @@ function parseAttribute(
 
   // 解析属性名，如：context.source = 'class="abc" :hello="123"></span>'
   const start = getCursor(context) // 记录当前光标解析位置
-  // 匹配属性名，不能以：'空格、/、>' 开头， 且以：'空格、换行、/、>、=' 为结束边界
+  // 匹配属性名，不能以：'空格、/、>' 开头， 且之后以：'空格、换行、/、>、=' 为结束边界
   const match = /^[^\t\r\n\f />][^\t\r\n\f />=]*/.exec(context.source)!
   // match[0] 为 匹配到的内容: 'class'
   const name = match[0]
@@ -706,8 +706,8 @@ function parseAttribute(
     emitError(context, ErrorCodes.DUPLICATE_ATTRIBUTE)
   }
   nameSet.add(name)
-  // 属性名 不能以 '=' 开头，如：'<span =class="abc"></span>'，则 name = '=class'
   if (name[0] === '=') {
+    // 属性名 不能以 '=' 开头，如：'<span =class="abc"></span>'，则 name = '=class'
     emitError(context, ErrorCodes.UNEXPECTED_EQUALS_SIGN_BEFORE_ATTRIBUTE_NAME)
   }
   // 在一个块级域中处理
@@ -763,6 +763,7 @@ function parseAttribute(
   // 此时: name = 'v-bind:["指令参数(如click或change)"].prevent'
 
   // 指令开头必须是：v-、:、@、#
+  // context.inVPre 即指令列表存在v-pre指令，则不需要解析（触发时机：当解析完所有指令之后，会判断指令列表中是否有v-pre指令，有则会重新解析一遍所有属性，且把指令属性当做普通html标签属性处理）
   if (!context.inVPre && /^(v-|:|@|#)/.test(name)) {
     // 指令分类：v-xxx指令、v-xxx:xxx指令、 :[xxx]（参数形式的指令）、:xxx指令
     // 还有：@[xxx]指令、@xxx指令、#[xxx]、#xxx
@@ -776,14 +777,14 @@ function parseAttribute(
 
     /**
      * 如属性名name为： 'v-bind:["指令参数(如click或change)"].prevent'  或者 '#header' 或 '@click'
-     *    match[1] 为匹配第一个待捕获的括号内容：([a-z0-9-]+) 指令，则 match[1] = 'bind' 或 '#' 或 '@'
+     *    match[1] 为匹配第一个待捕获的括号内容：([a-z0-9-]+) 指令，则 match[1] = 'bind' 或 '' 或 ''
      *    match[2] 为匹配第二个待捕获的括号内容：(\[[^\]]+\]|[^\.]+)，则 match[2] = '["指令参数(如click或change)"]' 或 'header' 或 'click'
      *    match[3] 为匹配第三个待捕获的括号内容：(.+)，则 match[3] = '.prevent'
      * 注意 '?:' 表示不进行捕获这个括号中内容
      */
     /**
      * 解析指令别名对应的真实功能：
-     *    如果 存在 v-xxx，则直接设置为 'xxx'
+     *    如果 存在 v-xxx，则直接设置为 'xxx'，如v-slot，则 dirName = 'slot'
      *    否则：
      *        ':' 开头代表 'bind'
      *        '@' 开头代表 'on'
@@ -845,13 +846,13 @@ function parseAttribute(
         constType: isStatic
           ? ConstantTypes.CAN_STRINGIFY
           : ConstantTypes.NOT_CONSTANT, // 动态指令时，参数不能设置 const 类型
-        loc // 属性名中指令内容 的开始位置与结束位置还有对应的模版内容，如：'@click' 属性的指令内容 'click' 在模版中的位置信息
+        loc // 属性名中指令内容 的开始位置与结束位置还有对应的模版内容，如：'@click'属性的指令内容即： 'click'字符串在解析模版中的位置信息
       }
     }
 
-    // 调整属性值 loc位置信息，去掉引号
+    // 调整属性值 loc 位置信息，去掉引号
     if (value && value.isQuoted) {
-      const valueLoc = value.loc // 属性值 loc光标位置信息，注意 value.content是不包含引号的，loc包含来引号
+      const valueLoc = value.loc // 属性值 loc光标位置信息，注意 loc包含引号，但 value.content 是不包含引号，只有内容
       valueLoc.start.offset++
       valueLoc.start.column++
       valueLoc.end = advancePositionWithClone(valueLoc.start, value.content) // 调整结束位置，不影响开始位置
@@ -861,7 +862,7 @@ function parseAttribute(
     // 返回指令属性节点
     return {
       type: NodeTypes.DIRECTIVE, // 节点类型为指令类型
-      name: dirName, // 指令类别，如 if、show、或 bind、@、#
+      name: dirName, // 指令类别，如 if、show、或 bind、on、slot等指令名
       exp: value && {
         // 指令值表达式内容信息
         type: NodeTypes.SIMPLE_EXPRESSION,
@@ -916,7 +917,7 @@ function parseAttributeValue(
 
     const endIndex = context.source.indexOf(quote)
     if (endIndex === -1) {
-      // 如：template = '<span class = "abc></span>'，则属性值为: content = 'abc></span>'
+      // 缺少结束引号， 如：template = '<span class = "abc></span>'，则属性值内容为: content = 'abc></span>'
       content = parseTextData(
         // 获取解析文本，并移动光标
         context,
@@ -929,8 +930,9 @@ function parseAttributeValue(
       advanceBy(context, 1) // 跳过 结束引号
     }
   } else {
-    // 属性值没有引号包裹，且以：'空格、换行、>' 为结束边界
+    // 属性值没有引号包裹，则以：'空格、换行、>' 为结束边界
     // 如：template = '<span class = abc></span>'，此时：context.source = 'abc></span>'，则class的属性值为：'abc'
+
     const match = /^[^\t\r\n\f >]+/.exec(context.source)
     if (!match) {
       // 没有设置属性值，如: template = '<span class = ></span>'，context.source = '></span>'
@@ -1118,7 +1120,7 @@ function advanceSpaces(context: ParserContext): void {
 }
 
 /**
- * 针对标签属性名为指令的节点，获取指令对应的开始/结束 光标位置信息，不影响属性名节点开始位置start: Position
+ * 针对标签属性名为指令的属性节点，获取指令对应的开始/结束 光标位置信息，不影响属性名节点开始位置start: Position
  */
 function getNewPosition(
   context: ParserContext,
