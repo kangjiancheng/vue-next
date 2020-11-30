@@ -906,7 +906,7 @@ function baseCreateRenderer(
       invokeDirectiveHook(n2, n1, parentComponent, 'beforeUpdate')
     }
 
-    if (__DEV__ && (__BROWSER__ || __TEST__) && isHmrUpdating) {
+    if (__DEV__ && isHmrUpdating) {
       // HMR updated, force full diff
       patchFlag = 0
       optimized = false
@@ -1007,12 +1007,7 @@ function baseCreateRenderer(
         parentSuspense,
         areChildrenSVG
       )
-      if (
-        __DEV__ &&
-        (__BROWSER__ || __TEST__) &&
-        parentComponent &&
-        parentComponent.type.__hmrId
-      ) {
+      if (__DEV__ && parentComponent && parentComponent.type.__hmrId) {
         traverseStaticChildren(n1, n2)
       }
     } else if (!optimized) {
@@ -1272,10 +1267,8 @@ function baseCreateRenderer(
       parentSuspense
     ))
 
-    // __BROWSER__：全局环境/浏览器环境/构建工具环境，并且是浏览器对应的分支
-    // instance.type 为根组件选项，在createVnode时初始化
-    if (__DEV__ && (__BROWSER__ || __TEST__) && instance.type.__hmrId) {
-      registerHMR(instance)
+    if (__DEV__ && instance.type.__hmrId) {
+      registerHMR(instance) // 模块热更新（即页面局部刷新）
     }
 
     if (__DEV__) {
@@ -2151,7 +2144,7 @@ function baseCreateRenderer(
     parentSuspense: SuspenseBoundary | null,
     doRemove?: boolean
   ) => {
-    if (__DEV__ && (__BROWSER__ || __TEST__) && instance.type.__hmrId) {
+    if (__DEV__ && instance.type.__hmrId) {
       unregisterHMR(instance)
     }
 

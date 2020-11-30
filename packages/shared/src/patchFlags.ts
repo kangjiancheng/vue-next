@@ -54,6 +54,14 @@ export const enum PatchFlags {
   // 当在diff带有这个标记时，会被强制更新
   DYNAMIC_SLOTS = 1 << 10,
 
+  /**
+   * Indicates a fragment that was created only because the user has placed
+   * comments at the root level of a template. This is a dev-only flag since
+   * comments are stripped in production.
+   */
+  // 模版根部创建了注释
+  DEV_ROOT_FRAGMENT = 1 << 11,
+
   /*------------------------ 特殊标记：'负整数' -------------------------- */
 
   // 特殊标记，不会出现在以上位运算中进行匹配，即在进行以上位运算时：patchFlag > 0
@@ -80,8 +88,9 @@ export const PatchFlagNames = {
   [PatchFlags.STABLE_FRAGMENT]: `STABLE_FRAGMENT`, // 64
   [PatchFlags.KEYED_FRAGMENT]: `KEYED_FRAGMENT`, // 128
   [PatchFlags.UNKEYED_FRAGMENT]: `UNKEYED_FRAGMENT`, // 256
-  [PatchFlags.DYNAMIC_SLOTS]: `DYNAMIC_SLOTS`, // 512
-  [PatchFlags.NEED_PATCH]: `NEED_PATCH`, // 1024
+  [PatchFlags.NEED_PATCH]: `NEED_PATCH`, // 512
+  [PatchFlags.DYNAMIC_SLOTS]: `DYNAMIC_SLOTS`, // 1024
+  [PatchFlags.DEV_ROOT_FRAGMENT]: `DEV_ROOT_FRAGMENT`, // 2048
   [PatchFlags.HOISTED]: `HOISTED`, // -1
   [PatchFlags.BAIL]: `BAIL` // -2
 }

@@ -649,7 +649,7 @@ export function handleSetupResult(
   if (isFunction(setupResult)) {
     // setup 可以返回一个渲染函数
     // setup returned an inline render function
-    if (!__BROWSER__ && (instance.type as ComponentOptions).__ssrInlineRender) {
+    if (__NODE_JS__ && (instance.type as ComponentOptions).__ssrInlineRender) {
       // when the function's name is `ssrRender` (compiled by SFC inline mode),
       // set it as ssrRender instead.
       instance.ssrRender = setupResult
@@ -751,7 +751,9 @@ function finishComponentSetup(
   // support for 2.x options
   if (__FEATURE_OPTIONS_API__) {
     currentInstance = instance
+    pauseTracking()
     applyOptions(instance, Component)
+    resetTracking()
     currentInstance = null
   }
 
@@ -834,9 +836,12 @@ export function createSetupContext(
 
 // record effects created during a component's setup() so that they can be
 // stopped when the component unmounts
-export function recordInstanceBoundEffect(effect: ReactiveEffect) {
-  if (currentInstance) {
-    ;(currentInstance.effects || (currentInstance.effects = [])).push(effect)
+export function recordInstanceBoundEffect(
+  effect: ReactiveEffect,
+  instance = currentInstance
+) {
+  if (instance) {
+    ;(instance.effects || (instance.effects = [])).push(effect)
   }
 }
 
