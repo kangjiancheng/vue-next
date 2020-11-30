@@ -128,25 +128,26 @@ function createParserContext(
 /**
  * 解析元素、子元素
  * @param context
- * @param mode
- * @param ancestors - 父元素列表，即已解析的父元素
+ * @param mode  - 文本类型：
+ * @param ancestors - 祖先元素列表，即已解析的父元素
  */
 function parseChildren(
   context: ParserContext,
   mode: TextModes,
-  ancestors: ElementNode[]
+  ancestors: ElementNode[] // 祖先元素列表
 ): TemplateChildNode[] {
-  const parent = last(ancestors)
+  const parent = last(ancestors) // 返回最近的祖先元素 即父元素
   const ns = parent ? parent.ns : Namespaces.HTML
   const nodes: TemplateChildNode[] = []
 
-  // 如果不是结束边界，就继续解析
+  // 如果是结束边界，如是父元素对应的结束标签，则跳过
   while (!isEnd(context, mode, ancestors)) {
     __TEST__ && assert(context.source.length > 0)
     const s = context.source
     let node: TemplateChildNode | TemplateChildNode[] | undefined = undefined
 
     // 解析识别优先级为：解析插值{{}} > 解析注释与解析并注释特殊标签内容(如：CDATA标签) > 解析结束标签 > 解析开始标签 > 解析文本内容
+    // 不解析 RAWDATA 模式：style、script等标签
     if (mode === TextModes.DATA || mode === TextModes.RCDATA) {
       // '{{' 解析插值、delimiters = ['{{', '}}']
       if (!context.inVPre && startsWith(s, context.options.delimiters[0])) {
@@ -154,9 +155,10 @@ function parseChildren(
       } else if (mode === TextModes.DATA && s[0] === '<') {
         // 解析注释、结束标签、开始标签、 注释特殊注释标签(如'<!DOCTYPE>' =》 '<!--DOCTYPE-->')
         // https://html.spec.whatwg.org/multipage/parsing.html#tag-open-state
+
+        // 注意：不可以在模板中直接使用 '<'，如： template: '<span> 1 < 2</span>'，会被当作是一个结束标签
+        // 如果在dom文档树中，如： <span>1 < 2<span> 其中的小于号通过调用innerHTML会被转译为 '&lt;'，所以在模板中实际内容为 template: '<span>1 &lt; 2</span>'
         if (s.length === 1) {
-          // 不可以在模板中直接使用 '<'，如： template: '<span> 1 < 2</span>'，会被当作是一个结束标签
-          // 如果在dom文档树中，如 <span>1 < 2<span> 其中的小于号通过innerHTML会被转译为 '&lt;'，所以在模板中实际内容为<span>1 &lt; 2</span>
           emitError(context, ErrorCodes.EOF_BEFORE_TAG_NAME, 1)
         } else if (s[1] === '!') {
           // '<!'
@@ -186,7 +188,7 @@ function parseChildren(
             node = parseBogusComment(context)
           }
         } else if (s[1] === '/') {
-          // 优先 解析 结束标签'</'，因为如果一开始就存在结束标签，是错误的。
+          // 优先 解析 结束标签'</'， 因为如果是结束标签时，会先判断是否为ancestors中已解析元素对应的结束标签，有则跳过while循环解析。
           // https://html.spec.whatwg.org/multipage/parsing.html#end-tag-open-state
           if (s.length === 2) {
             // s = '</'，不完整的结束标签
@@ -223,6 +225,9 @@ function parseChildren(
           )
           node = parseBogusComment(context)
         } else {
+          // 如 template: 'a < b'，一个小于号
+          // 此时： context.source = '< b'
+          // 无效的标签符号，若要表示小于号，在template模版中 应该使用对应的html实体代表： &lt;
           emitError(context, ErrorCodes.INVALID_FIRST_CHARACTER_OF_TAG_NAME, 1)
         }
       }
@@ -231,6 +236,11 @@ function parseChildren(
     // 解析文本包括换行、空格，且以 ['<', '{{', ']]>'] 为结束边界
     if (!node) {
       // 获取文本节点
+
+      // 注意，如 template: 'a < b'，一个小于号，且小于号前边文本内容已解析完。
+      // 此轮 while 解析: context.source = '< b'
+      // 则 node = '< b'
+
       node = parseText(context, mode)
     }
 
@@ -243,15 +253,25 @@ function parseChildren(
     }
   }
 
+  /**
+   * 处理空白字符
+   * 1、移除空内容节点
+   * 2、将连续空格替换成一个空格
+   */
+
   // Whitespace management for more efficient output
   // (same as v2 whitespace: 'condense')
   let removedWhitespace = false
+
+  // 排除 TextModes.RAWTEXT，即标签为：style,iframe,script,noscript
   if (mode !== TextModes.RAWTEXT) {
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i]
       if (!context.inPre && node.type === NodeTypes.TEXT) {
+        // 文本节点，且当前上下文并不在pre标签里，即不去掉pre元素的文本内容的空白
         if (!/[^\t\r\n\f ]/.test(node.content)) {
-          const prev = nodes[i - 1]
+          // 内容只有：换行、空白
+          const prev = nodes[i - 1] // 前后相邻元素
           const next = nodes[i + 1]
           // If:
           // - the whitespace is the first or last node, or:
@@ -259,26 +279,29 @@ function parseChildren(
           // - the whitespace is between two elements AND contains newline
           // Then the whitespace is ignored.
           if (
-            !prev ||
-            !next ||
-            prev.type === NodeTypes.COMMENT ||
-            next.type === NodeTypes.COMMENT ||
-            (prev.type === NodeTypes.ELEMENT &&
+            !prev || // 前边没有相邻元素（首个元素）
+            !next || // 后边没有相邻元素（最后元素）
+            prev.type === NodeTypes.COMMENT || // 前边为注释元素
+            next.type === NodeTypes.COMMENT || // 后边为注释元素
+            (prev.type === NodeTypes.ELEMENT && // 前后都有相邻元素，且内容为换行
               next.type === NodeTypes.ELEMENT &&
               /[\r\n]/.test(node.content))
           ) {
-            removedWhitespace = true
-            nodes[i] = null as any
+            removedWhitespace = true // 移除空白
+            nodes[i] = null as any // 删除此节点
           } else {
             // Otherwise, condensed consecutive whitespace inside the text
             // down to a single space
+            // 如同一行内的两个元素之间的连续空白
             node.content = ' '
           }
         } else {
+          // 将文本内容中的连续空格替换成一个空格
           node.content = node.content.replace(/[\t\r\n\f ]+/g, ' ')
         }
       }
       // also remove comment nodes in prod by default
+      // 默认去掉生产环境下的注释节点
       if (
         !__DEV__ &&
         node.type === NodeTypes.COMMENT &&
@@ -293,19 +316,21 @@ function parseChildren(
       // https://html.spec.whatwg.org/multipage/grouping-content.html#the-pre-element
       const first = nodes[0]
       if (first && first.type === NodeTypes.TEXT) {
+        // 去掉纯文本内容的首个换行，结果为: '<pre>   abc</pre>'
+        // 如：template: `<pre>
+        //     abc</pre>`
         first.content = first.content.replace(/^\r?\n/, '')
       }
     }
   }
 
-  return removedWhitespace ? nodes.filter(Boolean) : nodes
+  return removedWhitespace ? nodes.filter(Boolean) : nodes // 如果设置了移除空白选项（包括注释），则移除对应的节点
 }
 
 function pushNode(nodes: TemplateChildNode[], node: TemplateChildNode): void {
   if (node.type === NodeTypes.TEXT) {
     const prev = last(nodes)
-    // Merge if both this and the previous node are text and those are
-    // consecutive. This happens for cases like "a < b".
+    // 处理 两个节点都是文本节点，将其拼接在一起，如 template: 'a < b'，虽然之前解析过程会对小于号 < 报错，但没有终止后续解析，因此需要处理并拼接在一起
     if (
       prev &&
       prev.type === NodeTypes.TEXT &&
@@ -447,17 +472,17 @@ function parseBogusComment(context: ParserContext): CommentNode | undefined {
  */
 function parseElement(
   context: ParserContext,
-  ancestors: ElementNode[]
+  ancestors: ElementNode[] // 祖先元素列表，每次解析完标签后，会存储进来
 ): ElementNode | undefined {
   __TEST__ && assert(/^<[a-z]/i.test(context.source))
 
   // 解析开始标签：标签名、标签属性列表、属性指令等
   const wasInPre = context.inPre
   const wasInVPre = context.inVPre
-  const parent = last(ancestors)
+  const parent = last(ancestors) // 获取父元素
   // 解析元素标签：指令等
   const element = parseTag(context, TagType.Start, parent)
-  // 是否被 pre 标签包裹
+  // 是否被 pre 标签包裹，在解析开始标签期间，如果是pre标签，则context.inPre会被设置为true
   const isPreBoundary = context.inPre && !wasInPre
   // 是否使用 v-pre 指令
   const isVPreBoundary = context.inVPre && !wasInVPre
@@ -467,20 +492,43 @@ function parseElement(
     return element
   }
 
+  /**
+   * 此时解析进度状态:
+   * 如：template = '<span class="abc"></span>'，
+   * 开始标签解析结果:
+   *   element.loc: {
+   *     source: "<span class="abc">"
+   *     start: {column: 1, line: 1, offset: 0}
+   *     end: {column: 19, line: 1, offset: 18}
+   *   }
+   * 接下来要解析的模版：context.source = '</span>'
+   */
+
   // 解析子元素
-  ancestors.push(element)
-  const mode = context.options.getTextMode(element, parent)
+  ancestors.push(element) // 存储父元素
+  const mode = context.options.getTextMode(element, parent) // 获取元素文本类型，根据标签名
+  // 开始解析子元素，返回子元素节点信息，如果是结束标签，则返回为空[]
   const children = parseChildren(context, mode, ancestors)
   ancestors.pop()
+  // 解析完子元素
 
   element.children = children
 
-  // End tag.
+  /**
+   *  解析结束标签
+   // 如：template = '<span class="abc"></span>'
+   // 解析完开始标签了，此时：context.source = '</span>'
+   */
   if (startsWithEndTagOpen(context.source, element.tag)) {
+    // 判断开始标签是否带有对应的结束标签
+    // 解析结束标签，比如不能有属性
     parseTag(context, TagType.End, parent)
   } else {
-    emitError(context, ErrorCodes.X_MISSING_END_TAG, 0, element.loc.start)
+    // 如果没有对应的结束标签
+    // 如：template = '<div><span class="abc"></span>'
+    emitError(context, ErrorCodes.X_MISSING_END_TAG, 0, element.loc.start) // 缺少结束标签，并定位到开始标签位置
     if (context.source.length === 0 && element.tag.toLowerCase() === 'script') {
+      // script 标签中，不能带有 html 的注释格式
       const first = children[0]
       if (first && startsWith(first.loc.source, '<!--')) {
         emitError(context, ErrorCodes.EOF_IN_SCRIPT_HTML_COMMENT_LIKE_TEXT)
@@ -490,6 +538,7 @@ function parseElement(
 
   element.loc = getSelection(context, element.loc.start)
 
+  // 解析完一个元素后，重置上下文的状态
   if (isPreBoundary) {
     context.inPre = false
   }
@@ -630,7 +679,7 @@ function parseTag(
     props, // 元素属性列表
     isSelfClosing, // 标签是否自闭和
     children: [],
-    loc: getSelection(context, start), // 元素标签位置信息
+    loc: getSelection(context, start), // 元素标签位置信息，如：template='<span class="abc"></span>'，完成解析开始标签后，其中的 loc.source = '<span class="abc">'
     codegenNode: undefined // to be created during transform phase
   }
 }
@@ -1061,8 +1110,8 @@ function parseTextData(
   ) {
     return rawText
   } else {
-    // 解析属性值中的文本，如：template = '<span class="abc"></span>'，此时: rawText = 'abc'，作为属性值内容返回
-    // 同时处理文本中表示 '&' 的html实体字符串（通过创建一个dom实例，将rawText作为innerHTML，然后获取其中的textContent，即可实现解析）
+    // 解析普通文本 且带有 &符号，可能是html 实体，如 在html dom文档body中使用小于号 <，在通过 innerHTML获取模版内容时，会被转译为 &lt; 。因此解析时为了获取实际的内容，需要decodeEntities解析实体内容
+    // 通过创建一个dom实例，将rawText作为innerHTML，然后获取其中的textContent，即可实现解析
     return context.options.decodeEntities(
       rawText,
       mode === TextModes.ATTRIBUTE_VALUE // 3.0.2版本暂未发现有使用该参数
@@ -1155,19 +1204,26 @@ function emitError(
   )
 }
 
+// 判断当前解析内容是否是结束边界
 function isEnd(
   context: ParserContext,
   mode: TextModes,
   ancestors: ElementNode[]
 ): boolean {
+  /**
+   * 如 template: '<span class="abc"></span>'
+   * 当解析完开始标签后，此时 context.source = '</span>'
+   */
+
   const s = context.source
 
   switch (mode) {
-    case TextModes.DATA:
+    case TextModes.DATA: // 元素默认为DATA
       if (startsWith(s, '</')) {
-        // 模板代码 innerHTML，包括换行和缩进（缩进以空格表示）
         //TODO: probably bad performance
         for (let i = ancestors.length - 1; i >= 0; --i) {
+          // 判断是否是某一个开始标签对应的结束标签
+          // s='</span>', ancestors[0].tag = 'span'
           if (startsWithEndTagOpen(s, ancestors[i].tag)) {
             return true
           }
@@ -1175,8 +1231,11 @@ function isEnd(
       }
       break
 
-    case TextModes.RCDATA:
+    // 以下内容也不需要进行解析
+    case TextModes.RCDATA: // 富文本框textarea 或 文档标题title标签
     case TextModes.RAWTEXT: {
+      // 纯文本标签：style,iframe,script,noscript
+      // 如 RCDATA: template='<textarea class="abc"></textarea>'
       const parent = last(ancestors)
       if (parent && startsWithEndTagOpen(s, parent.tag)) {
         return true
@@ -1184,7 +1243,7 @@ function isEnd(
       break
     }
 
-    case TextModes.CDATA:
+    case TextModes.CDATA: // xhtml/xml
       if (startsWith(s, ']]>')) {
         return true
       }
@@ -1194,10 +1253,15 @@ function isEnd(
   return !s
 }
 
+/**
+ * 判断开始标签带有对应的结束标签
+ * 即判断当前结束标签是否是其开始标签对应的结束标签
+ */
 function startsWithEndTagOpen(source: string, tag: string): boolean {
+  //  // source='</span>', tag = 'span'
   return (
-    startsWith(source, '</') &&
-    source.substr(2, tag.length).toLowerCase() === tag.toLowerCase() &&
-    /[\t\r\n\f />]/.test(source[2 + tag.length] || '>')
+    startsWith(source, '</') && // 结束标签 标志
+    source.substr(2, tag.length).toLowerCase() === tag.toLowerCase() && // 结束标签名 与开始标签名一致
+    /[\t\r\n\f />]/.test(source[2 + tag.length] || '>') // 判断结束标签 最后一个字符，必须关闭
   )
 }

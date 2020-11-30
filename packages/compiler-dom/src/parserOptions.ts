@@ -89,12 +89,15 @@ export const parserOptions: ParserOptions = {
   getTextMode({ tag, ns }: ElementNode): TextModes {
     if (ns === DOMNamespaces.HTML) {
       if (tag === 'textarea' || tag === 'title') {
+        // 富文本框textarea 或 文档标题title标签
         return TextModes.RCDATA
       }
       if (isRawTextContainer(tag)) {
+        // 解析为纯文本标签：style,iframe,script,noscript
         return TextModes.RAWTEXT
       }
     }
+    // 默认值，如果不是以上标签，默认都是DATA
     return TextModes.DATA
   }
 }
