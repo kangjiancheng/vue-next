@@ -88,7 +88,7 @@ export function baseParse(
   content: string,
   options: ParserOptions = {}
 ): RootNode {
-  // 创建解析环境，记录解析进度
+  // 创建解析上下文信息，记录解析进度等
   const context = createParserContext(content, options)
 
   // 获取解析位置
@@ -120,15 +120,15 @@ function createParserContext(
     offset: 0, // 当前操作的模板字符串source的起始位置
     originalSource: content, // 模板代码 innerHTML，开头包括换行和代码缩进（缩进以空格表示）
     source: content, // 当前正在操作的模板内容，即 originalSource.slice(offset)
-    inPre: false,
-    inVPre: false
+    inPre: false, // 当前解析上下文在 pre 标签内，如解析pre标签内的子元素
+    inVPre: false // v-pre 指令内
   }
 }
 
 /**
  * 解析元素、子元素
  * @param context
- * @param mode  - 文本类型：
+ * @param mode  - 文本类型
  * @param ancestors - 祖先元素列表，即已解析的父元素
  */
 function parseChildren(
@@ -136,7 +136,7 @@ function parseChildren(
   mode: TextModes,
   ancestors: ElementNode[] // 祖先元素列表
 ): TemplateChildNode[] {
-  const parent = last(ancestors) // 返回最近的祖先元素 即父元素
+  const parent = last(ancestors) // 获取最近的祖先元素 即父元素
   const ns = parent ? parent.ns : Namespaces.HTML
   const nodes: TemplateChildNode[] = []
 
@@ -151,6 +151,7 @@ function parseChildren(
     if (mode === TextModes.DATA || mode === TextModes.RCDATA) {
       // '{{' 解析插值、delimiters = ['{{', '}}']
       if (!context.inVPre && startsWith(s, context.options.delimiters[0])) {
+        // 解析插值
         node = parseInterpolation(context, mode)
       } else if (mode === TextModes.DATA && s[0] === '<') {
         // 解析注释、结束标签、开始标签、 注释特殊注释标签(如'<!DOCTYPE>' =》 '<!--DOCTYPE-->')
@@ -308,7 +309,7 @@ function parseChildren(
         !context.options.comments
       ) {
         removedWhitespace = true
-        nodes[i] = null as any
+        nodes[i] = null as any // 删除节点
       }
     }
     if (context.inPre && parent && context.options.isPreTag(parent.tag)) {
@@ -316,9 +317,10 @@ function parseChildren(
       // https://html.spec.whatwg.org/multipage/grouping-content.html#the-pre-element
       const first = nodes[0]
       if (first && first.type === NodeTypes.TEXT) {
-        // 去掉纯文本内容的首个换行，结果为: '<pre>   abc</pre>'
+        // 去掉pre纯文本内容的首个换行，注意此时 pre元素里只有文本内容
         // 如：template: `<pre>
         //     abc</pre>`
+        // 结果为: '<pre>   abc</pre>'
         first.content = first.content.replace(/^\r?\n/, '')
       }
     }
@@ -477,7 +479,7 @@ function parseElement(
   __TEST__ && assert(/^<[a-z]/i.test(context.source))
 
   // 解析开始标签：标签名、标签属性列表、属性指令等
-  const wasInPre = context.inPre
+  const wasInPre = context.inPre // 记录祖先元素中是否有pre元素
   const wasInVPre = context.inVPre
   const parent = last(ancestors) // 获取父元素
   // 解析元素标签：指令等
@@ -538,7 +540,7 @@ function parseElement(
 
   element.loc = getSelection(context, element.loc.start)
 
-  // 解析完一个元素后，重置上下文的状态
+  // 解析pre元素后，重置上下文的pre环境，在解析子元素时，若祖先元素有pre元素，不会重置inpre状态
   if (isPreBoundary) {
     context.inPre = false
   }
@@ -587,7 +589,7 @@ function parseTag(
   // 此时 context.source = 'class="abc">'
 
   // save current state in case we need to re-parse attributes with v-pre
-  // 解析完标签名，保存此刻解析状态，光标位置，与当前解析内容，为了识别标签为pre时，在解析完元素属性列表后，重置回此刻光标状态
+  // 解析完标签名，保存此刻解析状态，光标位置，与当前解析内容，为了之后解析识别到标签为pre时，在解析完元素属性列表后，重置回此刻光标状态
   const cursor = getCursor(context)
   const currentSource = context.source
 
@@ -1007,47 +1009,62 @@ function parseAttributeValue(
   return { content, isQuoted, loc: getSelection(context, start) }
 }
 
+/**
+ * 解析插值 {{ }}
+ * @param context
+ * @param mode
+ */
 function parseInterpolation(
   context: ParserContext,
   mode: TextModes
 ): InterpolationNode | undefined {
-  const [open, close] = context.options.delimiters
+  const [open, close] = context.options.delimiters // ['{{', '}}']
   __TEST__ && assert(startsWith(context.source, open))
 
+  // 查找结束边界位置
   const closeIndex = context.source.indexOf(close, open.length)
   if (closeIndex === -1) {
+    // 无效解析
     emitError(context, ErrorCodes.X_MISSING_INTERPOLATION_END)
     return undefined
   }
 
   const start = getCursor(context)
-  advanceBy(context, open.length)
-  const innerStart = getCursor(context)
+  advanceBy(context, open.length) // 前进光标，跳过 '{{'
+  const innerStart = getCursor(context) // 获取插值内容开始位置
   const innerEnd = getCursor(context)
-  const rawContentLength = closeIndex - open.length
-  const rawContent = context.source.slice(0, rawContentLength)
+  const rawContentLength = closeIndex - open.length // 内容长度
+  const rawContent = context.source.slice(0, rawContentLength) //插值初始内容
+
   const preTrimContent = parseTextData(context, rawContentLength, mode)
+  // 去掉插值内容两端空白，得到具体插值内容
   const content = preTrimContent.trim()
+  // 插值内容开始位置
   const startOffset = preTrimContent.indexOf(content)
   if (startOffset > 0) {
-    advancePositionWithMutation(innerStart, rawContent, startOffset)
+    // template: '{{ abc }}'，preTrimContent = ' abc '，content = 'abc'，startOffset = 1
+    advancePositionWithMutation(innerStart, rawContent, startOffset) // 如果插值开始位置存在空格，则改变 innerStart 光标信息，调整到具体插值内容开始位置
   }
+  // 内容结束位置
   const endOffset =
     rawContentLength - (preTrimContent.length - content.length - startOffset)
+
+  // 调整结束位置对应的光标信息
   advancePositionWithMutation(innerEnd, rawContent, endOffset)
-  advanceBy(context, close.length)
+
+  advanceBy(context, close.length) // 前进光标，跳过 '}}'
 
   return {
-    type: NodeTypes.INTERPOLATION,
+    type: NodeTypes.INTERPOLATION, // 插值类型
     content: {
       type: NodeTypes.SIMPLE_EXPRESSION,
       isStatic: false,
       // Set `isConstant` to false by default and will decide in transformExpression
       constType: ConstantTypes.NOT_CONSTANT,
       content,
-      loc: getSelection(context, innerStart, innerEnd)
+      loc: getSelection(context, innerStart, innerEnd) // 记录具体插值内容在模版中的位置信息
     },
-    loc: getSelection(context, start)
+    loc: getSelection(context, start) // 记录插值节点的位置信息
   }
 }
 

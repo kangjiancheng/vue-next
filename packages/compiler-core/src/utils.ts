@@ -87,7 +87,7 @@ export function getInnerRange(
   return newLoc
 }
 
-// 复制模版某一范围内的内容，避免影响该范围原先的位置信息
+// 复制模版某一范围内的内容，改变其光标位置，当不会改变pos参数，并返回结果
 export function advancePositionWithClone(
   pos: Position,
   source: string,
@@ -100,6 +100,7 @@ export function advancePositionWithClone(
   )
 }
 
+// 改变解析光标位置，会改变 pos 参数，并返回结果
 // advance by mutation without cloning (for performance reasons), since this
 // gets called a lot in the parser
 export function advancePositionWithMutation(
