@@ -95,8 +95,8 @@ export function baseParse(
   const start = getCursor(context)
 
   return createRoot(
-    parseChildren(context, TextModes.DATA, []),
-    getSelection(context, start)
+    parseChildren(context, TextModes.DATA, []), // 返回解析后的子元素列表
+    getSelection(context, start) // 解析开始位置
   )
 }
 
@@ -140,7 +140,7 @@ function parseChildren(
   const ns = parent ? parent.ns : Namespaces.HTML
   const nodes: TemplateChildNode[] = []
 
-  // 如果是结束边界，如是父元素对应的结束标签，则跳过
+  // 如果是结束边界，如 是ancestors里的父元素对应的结束标签，则跳过
   while (!isEnd(context, mode, ancestors)) {
     __TEST__ && assert(context.source.length > 0)
     const s = context.source
