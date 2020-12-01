@@ -87,7 +87,7 @@ export function baseCompile(
     onError(createCompilerError(ErrorCodes.X_SCOPE_ID_NOT_SUPPORTED))
   }
 
-  // 解析模板，生成语法树ast
+  // 解析模板，生成语法树ast：解析模版元素、元素标签、元素指令、元素内容、子元素内容等
   const ast = isString(template) ? baseParse(template, options) : template
 
   const [nodeTransforms, directiveTransforms] = getBaseTransformPreset(

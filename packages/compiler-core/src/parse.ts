@@ -94,9 +94,10 @@ export function baseParse(
   // 获取解析位置
   const start = getCursor(context)
 
+  // 创建语法树根节点
   return createRoot(
     parseChildren(context, TextModes.DATA, []), // 返回解析后的子元素列表
-    getSelection(context, start) // 解析开始位置
+    getSelection(context, start) // 模版位置信息
   )
 }
 
