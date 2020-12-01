@@ -74,6 +74,7 @@ import { startMeasure, endMeasure } from './profiling'
 import { ComponentPublicInstance } from './componentPublicInstance'
 import { devtoolsComponentRemoved, devtoolsComponentUpdated } from './devtools'
 import { initFeatureFlags } from './featureFlags'
+import { isAsyncWrapper } from './apiAsyncComponent'
 
 export interface Renderer<HostElement = RendererElement> {
   render: RootRenderFunction<HostElement>
@@ -289,7 +290,6 @@ export const queuePostRenderEffect = __FEATURE_SUSPENSE__
 export const setRef = (
   rawRef: VNodeNormalizedRef,
   oldRawRef: VNodeNormalizedRef | null,
-  parentComponent: ComponentInternalInstance,
   parentSuspense: SuspenseBoundary | null,
   vnode: VNode | null
 ) => {
@@ -298,7 +298,6 @@ export const setRef = (
       setRef(
         r,
         oldRawRef && (isArray(oldRawRef) ? oldRawRef[i] : oldRawRef),
-        parentComponent,
         parentSuspense,
         vnode
       )
@@ -307,7 +306,7 @@ export const setRef = (
   }
 
   let value: ComponentPublicInstance | RendererNode | Record<string, any> | null
-  if (!vnode) {
+  if (!vnode || isAsyncWrapper(vnode)) {
     value = null
   } else {
     if (vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
@@ -368,10 +367,7 @@ export const setRef = (
       doSet()
     }
   } else if (isFunction(ref)) {
-    callWithErrorHandling(ref, parentComponent, ErrorCodes.FUNCTION_REF, [
-      value,
-      refs
-    ])
+    callWithErrorHandling(ref, owner, ErrorCodes.FUNCTION_REF, [value, refs])
   } else if (__DEV__) {
     warn('Invalid template ref type:', value, `(${typeof value})`)
   }
@@ -569,7 +565,7 @@ function baseCreateRenderer(
 
     // set ref
     if (ref != null && parentComponent) {
-      setRef(ref, n1 && n1.ref, parentComponent, parentSuspense, n2)
+      setRef(ref, n1 && n1.ref, parentSuspense, n2)
     }
   }
 
@@ -649,35 +645,28 @@ function baseCreateRenderer(
     }
   }
 
-  /**
-   * Dev / HMR only
-   */
   const moveStaticNode = (
-    vnode: VNode,
+    { el, anchor }: VNode,
     container: RendererElement,
-    anchor: RendererNode | null
+    nextSibling: RendererNode | null
   ) => {
-    let cur = vnode.el
-    const end = vnode.anchor!
-    while (cur && cur !== end) {
-      const next = hostNextSibling(cur)
-      hostInsert(cur, container, anchor)
-      cur = next
+    let next
+    while (el && el !== anchor) {
+      next = hostNextSibling(el)
+      hostInsert(el, container, nextSibling)
+      el = next
     }
-    hostInsert(end, container, anchor)
+    hostInsert(anchor!, container, nextSibling)
   }
 
-  /**
-   * Dev / HMR only
-   */
-  const removeStaticNode = (vnode: VNode) => {
-    let cur = vnode.el
-    while (cur && cur !== vnode.anchor) {
-      const next = hostNextSibling(cur)
-      hostRemove(cur)
-      cur = next
+  const removeStaticNode = ({ el, anchor }: VNode) => {
+    let next
+    while (el && el !== anchor) {
+      next = hostNextSibling(el)
+      hostRemove(el)
+      el = next
     }
-    hostRemove(vnode.anchor!)
+    hostRemove(anchor!)
   }
 
   const processElement = (
@@ -1964,8 +1953,7 @@ function baseCreateRenderer(
       return
     }
 
-    // static node move can only happen when force updating HMR
-    if (__DEV__ && type === Static) {
+    if (type === Static) {
       moveStaticNode(vnode, container, anchor)
       return
     }
@@ -2018,8 +2006,8 @@ function baseCreateRenderer(
       dirs
     } = vnode
     // unset ref
-    if (ref != null && parentComponent) {
-      setRef(ref, null, parentComponent, parentSuspense, null)
+    if (ref != null) {
+      setRef(ref, null, parentSuspense, null)
     }
 
     if (shapeFlag & ShapeFlags.COMPONENT_SHOULD_KEEP_ALIVE) {
@@ -2098,7 +2086,7 @@ function baseCreateRenderer(
       return
     }
 
-    if (__DEV__ && type === Static) {
+    if (type === Static) {
       removeStaticNode(vnode)
       return
     }
