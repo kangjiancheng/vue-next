@@ -278,6 +278,11 @@ export function createTransformContext(
   return context
 }
 
+/**
+ *
+ * @param root - 模版对应的 ast 语法树
+ * @param options
+ */
 export function transform(root: RootNode, options: TransformOptions) {
   const context = createTransformContext(root, options)
   traverseNode(root, context)
@@ -287,6 +292,7 @@ export function transform(root: RootNode, options: TransformOptions) {
   if (!options.ssr) {
     createRootCodegen(root, context)
   }
+  // 设置属性最终信息
   // finalize meta information
   root.helpers = [...context.helpers]
   root.components = [...context.components]

@@ -30,6 +30,7 @@ export function getBaseTransformPreset(
   prefixIdentifiers?: boolean
 ): TransformPreset {
   return [
+    // 默认 nodeTransforms
     [
       transformOnce,
       transformIf,
@@ -48,6 +49,7 @@ export function getBaseTransformPreset(
       trackSlotScopes,
       transformText
     ],
+    // 默认 directiveTransforms
     {
       on: transformOn,
       bind: transformBind,
