@@ -371,17 +371,49 @@ export function traverseChildren(
   }
 }
 
+/**
+ * 遍历节点
+ * @param node
+ * @param context
+ */
 export function traverseNode(
-  node: RootNode | TemplateChildNode,
+  node: RootNode | TemplateChildNode, // ast 语法树的根节点
   context: TransformContext
 ) {
   context.currentNode = node
   // apply transform plugins
-  const { nodeTransforms } = context
-  const exitFns = []
+  /**
+   *
+   * nodeTransforms = [
+       transformOnce,
+       transformIf,
+       transformFor,
+       ...(!__BROWSER__ && prefixIdentifiers
+        ? [
+        // order is important
+          trackVForSlotScopes,
+          transformExpression
+        ]
+        : __BROWSER__ && __DEV__
+          ? [transformExpression]
+          : []),
+       transformSlotOutlet,
+       transformElement,
+       trackSlotScopes,
+       transformText,
+       ignoreSideEffectTags,
+       ...[
+        transformStyle,
+        ...(__DEV__ ? [warnTransitionChildren] : [])
+       ],
+    ]
+   */
+  const { nodeTransforms } = context // 获取transform 方法列表
+  const exitFns = [] // 存储 nodeTransforms 的回调函数
   for (let i = 0; i < nodeTransforms.length; i++) {
     const onExit = nodeTransforms[i](node, context)
     if (onExit) {
+      // 是否存在回调函数
       if (isArray(onExit)) {
         exitFns.push(...onExit)
       } else {
@@ -421,7 +453,7 @@ export function traverseNode(
     case NodeTypes.IF_BRANCH:
     case NodeTypes.FOR:
     case NodeTypes.ELEMENT:
-    case NodeTypes.ROOT:
+    case NodeTypes.ROOT: // 一开始遍历跟节点
       traverseChildren(node, context)
       break
   }
@@ -434,6 +466,11 @@ export function traverseNode(
   }
 }
 
+/**
+ * 创建 vif
+ * @param name
+ * @param fn
+ */
 export function createStructuralDirectiveTransform(
   name: string | RegExp,
   fn: StructuralDirectiveTransform

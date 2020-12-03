@@ -137,15 +137,16 @@ export function assert(condition: boolean, msg?: string) {
   }
 }
 
+// find directive 查找匹配的指令，返回对应的指令属性节点
 export function findDir(
   node: ElementNode,
-  name: string | RegExp,
+  name: string | RegExp, // 指令名
   allowEmpty: boolean = false
 ): DirectiveNode | undefined {
   for (let i = 0; i < node.props.length; i++) {
     const p = node.props[i]
     if (
-      p.type === NodeTypes.DIRECTIVE &&
+      p.type === NodeTypes.DIRECTIVE && // 指令属性
       (allowEmpty || p.exp) &&
       (isString(name) ? p.name === name : name.test(p.name))
     ) {
