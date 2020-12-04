@@ -141,14 +141,16 @@ export function assert(condition: boolean, msg?: string) {
 export function findDir(
   node: ElementNode,
   name: string | RegExp, // 指令名
-  allowEmpty: boolean = false
+  allowEmpty: boolean = false //  指令属性值是否可以为空
 ): DirectiveNode | undefined {
+  // 在元素节点的属性列表中
   for (let i = 0; i < node.props.length; i++) {
-    const p = node.props[i]
+    // 处理指令属性节点
+    const p = node.props[i] // 元素属性
     if (
-      p.type === NodeTypes.DIRECTIVE && // 指令属性
-      (allowEmpty || p.exp) &&
-      (isString(name) ? p.name === name : name.test(p.name))
+      p.type === NodeTypes.DIRECTIVE && // 属性类别为：指令
+      (allowEmpty || p.exp) && // 指令属性值是否可以为空
+      (isString(name) ? p.name === name : name.test(p.name)) // 匹配指令名
     ) {
       return p
     }
@@ -193,6 +195,7 @@ export function hasDynamicKeyVBind(node: ElementNode): boolean {
   )
 }
 
+// 判断是否是 文本节点 或 插值节点
 export function isText(
   node: TemplateChildNode
 ): node is TextNode | InterpolationNode {
@@ -211,6 +214,7 @@ export function isTemplateNode(
   )
 }
 
+// slot 组件
 export function isSlotOutlet(
   node: RootNode | TemplateChildNode
 ): node is SlotOutletNode {

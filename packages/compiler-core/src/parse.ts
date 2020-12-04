@@ -294,7 +294,7 @@ function parseChildren(
           } else {
             // Otherwise, condensed consecutive whitespace inside the text
             // down to a single space
-            // 如同一行内的两个元素之间的连续空白
+            // 如同一行内的两个元素之间的连续空白，如： template: '{{ foo }}   {{ bar }}'，两个插值节点间的空白
             node.content = ' '
           }
         } else {
@@ -683,7 +683,7 @@ function parseTag(
     isSelfClosing, // 标签是否自闭和
     children: [],
     loc: getSelection(context, start), // 元素标签位置信息，如：template='<span class="abc"></span>'，完成解析开始标签后，其中的 loc.source = '<span class="abc">'
-    codegenNode: undefined // to be created during transform phase
+    codegenNode: undefined // to be created during transform phase  在 transform 阶段进行赋值
   }
 }
 
@@ -918,7 +918,7 @@ function parseAttribute(
       exp: value && {
         // 指令值表达式内容信息
         type: NodeTypes.SIMPLE_EXPRESSION,
-        content: value.content,
+        content: value.content, // 指令属性值
         isStatic: false,
         // Treat as non-constant by default. This can be potentially set to
         // other values by `transformExpression` to make it eligible for hoisting.
@@ -926,7 +926,7 @@ function parseAttribute(
         loc: value.loc
       },
       arg, // 指令类别的内容信息
-      modifiers: match[3] ? match[3].substr(1).split('.') : [], // 指令的修饰符 '@click.prevent'中的 'prevent'
+      modifiers: match[3] ? match[3].substr(1).split('.') : [], // 指令的修饰符列表 '@click.prevent.once'中的 'prevent'、'once'
       loc // 指令属性位置，包括属性名与属性值
     }
   }

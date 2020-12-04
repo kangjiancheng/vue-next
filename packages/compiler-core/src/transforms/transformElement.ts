@@ -61,6 +61,7 @@ import { BindingTypes } from '../options'
 const directiveImportMap = new WeakMap<DirectiveNode, symbol>()
 
 // generate a JavaScript AST for this element's codegen
+// 为当前节点的ast生成对应的codegen 编译结果
 export const transformElement: NodeTransform = (node, context) => {
   if (
     !(
@@ -73,6 +74,7 @@ export const transformElement: NodeTransform = (node, context) => {
   }
   // perform the work on exit, after all child expressions have been
   // processed and merged.
+  // 在所有子元素表达式被处理与合并后，在执行这个回调函数
   return function postTransformElement() {
     const { tag, props } = node
     const isComponent = node.tagType === ElementTypes.COMPONENT

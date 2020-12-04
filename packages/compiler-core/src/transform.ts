@@ -353,6 +353,7 @@ function createRootCodegen(root: RootNode, context: TransformContext) {
   }
 }
 
+// 处理当前节点的子节点
 export function traverseChildren(
   parent: ParentNode,
   context: TransformContext
@@ -361,18 +362,19 @@ export function traverseChildren(
   const nodeRemoved = () => {
     i--
   }
+  // 如果存在子节点
   for (; i < parent.children.length; i++) {
     const child = parent.children[i]
     if (isString(child)) continue
-    context.parent = parent
-    context.childIndex = i
+    context.parent = parent // 当前节点的父节点
+    context.childIndex = i // 子节点位置
     context.onNodeRemoved = nodeRemoved
-    traverseNode(child, context)
+    traverseNode(child, context) // 遍历处理子节点
   }
 }
 
 /**
- * 遍历节点
+ * 遍历每个ast语法树节点，同时运用nodeTransforms中的每个插件就行调整当前节点信息
  * @param node
  * @param context
  */
@@ -380,14 +382,14 @@ export function traverseNode(
   node: RootNode | TemplateChildNode, // ast 语法树的根节点
   context: TransformContext
 ) {
-  context.currentNode = node
+  context.currentNode = node // 当前在处理的节点
   // apply transform plugins
   /**
    *
    * nodeTransforms = [
-       transformOnce,
-       transformIf,
-       transformFor,
+       transformOnce, // 处理 v-once 指令属性节点
+       transformIf,  // 处理 v-if 指令属性节点
+       transformFor, // 处理 v-for 指令属性节点
        ...(!__BROWSER__ && prefixIdentifiers
         ? [
         // order is important
@@ -397,23 +399,24 @@ export function traverseNode(
         : __BROWSER__ && __DEV__
           ? [transformExpression]
           : []),
-       transformSlotOutlet,
-       transformElement,
+       transformSlotOutlet, // 处理slot元素组件
+       transformElement,  // 处理ast 树，生成codegen
        trackSlotScopes,
-       transformText,
-       ignoreSideEffectTags,
+       transformText, // 处理 文本节点/表达式节点 的合并，root 跟节点有返回值
+       ignoreSideEffectTags, // 删减style/script元素节点
        ...[
-        transformStyle,
-        ...(__DEV__ ? [warnTransitionChildren] : [])
+        transformStyle, // 转换静态style属性为对应的动态style指令属性节点
+        ...(__DEV__ ? [warnTransitionChildren] : []) // transition组件只接收一个子元素/子组件
        ],
     ]
    */
-  const { nodeTransforms } = context // 获取transform 方法列表
+  const { nodeTransforms } = context // transform 节点所有插件列表
   const exitFns = [] // 存储 nodeTransforms 的回调函数
+  // 获取当前节点所对应的插件列表
   for (let i = 0; i < nodeTransforms.length; i++) {
     const onExit = nodeTransforms[i](node, context)
     if (onExit) {
-      // 是否存在回调函数
+      // 此节点是否匹配此插件
       if (isArray(onExit)) {
         exitFns.push(...onExit)
       } else {
@@ -421,10 +424,12 @@ export function traverseNode(
       }
     }
     if (!context.currentNode) {
+      // 如果在运用插件调整过程中，节点可能会被删除，如style/script元素节点
       // node was removed
       return
     } else {
       // node may have been replaced
+      // 保持当前循环的节点不变，继续处理当前节点中的内容
       node = context.currentNode
     }
   }
@@ -454,10 +459,11 @@ export function traverseNode(
     case NodeTypes.FOR:
     case NodeTypes.ELEMENT:
     case NodeTypes.ROOT: // 一开始遍历跟节点
-      traverseChildren(node, context)
+      traverseChildren(node, context) // 如果存在子节点，继续遍历
       break
   }
 
+  // 结束 transforms，处理节点的transform之后的回调函数 列表，依次从后往前执行
   // exit transforms
   context.currentNode = node
   let i = exitFns.length

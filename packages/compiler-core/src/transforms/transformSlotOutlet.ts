@@ -13,6 +13,7 @@ import { createCompilerError, ErrorCodes } from '../errors'
 import { RENDER_SLOT } from '../runtimeHelpers'
 import { camelize } from '@vue/shared/'
 
+// 处理slot 组件
 export const transformSlotOutlet: NodeTransform = (node, context) => {
   if (isSlotOutlet(node)) {
     const { children, loc } = node

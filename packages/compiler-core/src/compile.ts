@@ -95,13 +95,14 @@ export function baseCompile(
   const [nodeTransforms, directiveTransforms] = getBaseTransformPreset(
     prefixIdentifiers
   )
+  // 进一步调整、转换 ast语法树 中的节点，如删减style/script标签节点、将元素节点的静态style属性转换为指令属性
   transform(
     ast,
     extend({}, options, {
       prefixIdentifiers,
       nodeTransforms: [
-        ...nodeTransforms,
-        ...(options.nodeTransforms || []) // user transforms
+        ...nodeTransforms, // 默认需要调整的配置
+        ...(options.nodeTransforms || []) // user transforms，不同环境下，用户可能需要额外调整，如删减style/script标签节点、将元素节点的静态style属性转换为指令属性
       ],
       directiveTransforms: extend(
         {},

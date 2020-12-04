@@ -8,6 +8,7 @@ import {
 import { TRANSITION } from '../runtimeHelpers'
 import { createDOMCompilerError, DOMErrorCodes } from '../errors'
 
+// <transition>...</transition> 组件下不可以有多个子元素（不包括注释）
 export const warnTransitionChildren: NodeTransform = (node, context) => {
   if (
     node.type === NodeTypes.ELEMENT &&
