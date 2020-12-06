@@ -33,6 +33,13 @@ import {
 type OptionalOptions = 'isNativeTag' | 'isBuiltInComponent'
 type MergedParserOptions = Omit<Required<ParserOptions>, OptionalOptions> &
   Pick<ParserOptions, OptionalOptions>
+type AttributeValue =
+  | {
+      content: string
+      isQuoted: boolean
+      loc: SourceLocation
+    }
+  | undefined
 
 // The default decoder only provides escapes for characters reserved as part of
 // the template syntax, and is only used if the custom renderer did not provide
@@ -782,14 +789,9 @@ function parseAttribute(
   advanceBy(context, name.length)
 
   // 开始解析：属性值
-  let value:
-    | {
-        content: string
-        isQuoted: boolean
-        loc: SourceLocation
-      }
-    | undefined = undefined
   // 属性值在 '=' 之后，如：template: '<span class = "abc">'，此时 context.source: ' = "abc">'，注意可以 空格、换行 间隔
+  let value: AttributeValue = undefined
+
   if (/^[\t\r\n\f ]*=/.test(context.source)) {
     advanceSpaces(context) // 跳过空格
     advanceBy(context, 1) // 跳过 '='
@@ -946,16 +948,9 @@ function parseAttribute(
 
 /**
  * 解析属性值（属性值在 '=' 之后），并返回属性值内容节点、移动光标
+ * 返回值： content 不包括引号、loc 包括引号
  */
-function parseAttributeValue(
-  context: ParserContext
-):
-  | {
-      content: string // 不包括引号
-      isQuoted: boolean
-      loc: SourceLocation // 包括引号
-    }
-  | undefined {
+function parseAttributeValue(context: ParserContext): AttributeValue {
   const start = getCursor(context)
   let content: string
 

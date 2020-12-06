@@ -70,7 +70,7 @@ export const createApp = ((...args) => {
   // 针对客户端，增强 mount 功能
   const { mount } = app
   // containerOrSelector: 挂载目标，dom节点实例 或 节点选择器
-  app.mount = (containerOrSelector: Element | string): any => {
+  app.mount = (containerOrSelector: Element | ShadowRoot | string): any => {
     // 校验 挂载目标，并返回dom实例
     const container = normalizeContainer(containerOrSelector)
     if (!container) return
@@ -87,9 +87,10 @@ export const createApp = ((...args) => {
 
     // 执行 mount
     const proxy = mount(container)
-    container.removeAttribute('v-cloak')
-    container.setAttribute('data-v-app', '')
-
+    if (container instanceof Element) {
+      container.removeAttribute('v-cloak')
+      container.setAttribute('data-v-app', '')
+    }
     return proxy
   }
 
@@ -104,7 +105,7 @@ export const createSSRApp = ((...args) => {
   }
 
   const { mount } = app
-  app.mount = (containerOrSelector: Element | string): any => {
+  app.mount = (containerOrSelector: Element | ShadowRoot | string): any => {
     const container = normalizeContainer(containerOrSelector)
     if (container) {
       return mount(container, true)
@@ -123,15 +124,28 @@ function injectNativeTagCheck(app: App) {
   })
 }
 
-function normalizeContainer(container: Element | string): Element | null {
+function normalizeContainer(
+  container: Element | ShadowRoot | string
+): Element | null {
   if (isString(container)) {
     const res = document.querySelector(container)
     if (__DEV__ && !res) {
-      warn(`Failed to mount app: mount target selector returned null.`)
+      warn(
+        `Failed to mount app: mount target selector "${container}" returned null.`
+      )
     }
     return res
   }
-  return container
+  if (
+    __DEV__ &&
+    container instanceof ShadowRoot &&
+    container.mode === 'closed'
+  ) {
+    warn(
+      `mounting on a ShadowRoot with \`{mode: "closed"}\` may lead to unpredictable bugs`
+    )
+  }
+  return container as any
 }
 
 // SFC CSS utilities

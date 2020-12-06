@@ -4,6 +4,17 @@
  * 同时可以组合使用标记 位运算： '|'或者 '&'，表明对这个节点 vdom 要进行多部分更新。
  *
  * @see: https://github.com/vuejs/vue-next/blob/master/packages/shared/src/patchFlags.ts
+ *
+ * Patch flags can be combined using the | bitwise operator and can be checked
+ * using the & operator, e.g.
+ *
+ * ```js
+ * const flag = TEXT | CLASS
+ * if (flag & TEXT) { ... }
+ * ```
+ *
+ * Check the `patchElement` function in '../../runtime-core/src/renderer.ts' to see how the
+ * flags are handled during diff.
  */
 
 // 可以在 packages/runtime-core/src/renderer.ts 查看这些标志是怎么在diff时被处理的
