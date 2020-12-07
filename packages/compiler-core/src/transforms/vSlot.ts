@@ -37,6 +37,8 @@ import { SlotFlags, slotFlagsText } from '@vue/shared'
 
 const defaultFallback = createSimpleExpression(`undefined`, false)
 
+// 如 template: '<slot-demo v-slot:test>v-slot test</slot-demo>'
+// SlotDemo template: '<div class="slot-demo"><slot name="test"></slot></div>'
 // A NodeTransform that:
 // 1. Tracks scope identifiers for scoped slots so that they don't get prefixed
 //    by transformExpression. This is only applied in non-browser builds with

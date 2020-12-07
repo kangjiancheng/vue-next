@@ -88,6 +88,7 @@ export const transformText: NodeTransform = (node, context) => {
 
       // 当前节点内容有文本子节点也有其它类型子节点
       // 继续调整文本节点内容：创建对应文本的patch表达式
+      // 如 template: '{{ foo }}   {{ bar }} <span>123</span>'，合并文本并创建对应的patch createTextVNode(text)方法
 
       // pre-convert text nodes into createTextVNode(text) calls to avoid
       // runtime normalization.
