@@ -402,12 +402,12 @@ export function traverseNode(
           ? [transformExpression]
           : []),
        transformSlotOutlet, // 处理slot元素组件
-       transformElement,  // 处理ast 树，生成codegen
+       transformElement,  // 处理ast节点，生成codegen
        trackSlotScopes,
-       transformText, // 处理 文本节点/表达式节点 的合并，root 跟节点有返回值
+       transformText, // 处理 连续子文本节点/表达式节点 的合并；或 如果即包含文本又包含其它类型节点时，则需要设置该子节点文本/表达式的diff patch codegenNode 信息，同时也重新定义当前节点的子节点配置
        ignoreSideEffectTags, // 删减style/script元素节点
        ...[
-        transformStyle, // 转换静态style属性为对应的动态style指令属性节点
+        transformStyle, // 不返回回调转换插件， html元素全部转换静态style属性为对应的动态style指令属性节点
         ...(__DEV__ ? [warnTransitionChildren] : []) // transition组件只接收一个子元素/子组件
        ],
     ]
@@ -418,7 +418,7 @@ export function traverseNode(
   for (let i = 0; i < nodeTransforms.length; i++) {
     const onExit = nodeTransforms[i](node, context)
     if (onExit) {
-      // 此节点是否匹配此插件
+      // 当前节点是否添加对应的转换插件，注意添加插件后，先执行最新添加的插件，即由后向前执行
       if (isArray(onExit)) {
         exitFns.push(...onExit)
       } else {
@@ -475,13 +475,13 @@ export function traverseNode(
 }
 
 /**
- * 创建 vif
- * @param name
- * @param fn
+ * 插件指令的transform转换插件
+ * @param name 指令名
+ * @param fn 指令回调
  */
 export function createStructuralDirectiveTransform(
   name: string | RegExp,
-  fn: StructuralDirectiveTransform
+  fn: StructuralDirectiveTransform // 指令回调
 ): NodeTransform {
   const matches = isString(name)
     ? (n: string) => n === name

@@ -9,6 +9,7 @@ export const ignoreSideEffectTags: NodeTransform = (node, context) => {
     (node.tag === 'script' || node.tag === 'style')
   ) {
     context.onError(
+      // 提示用户不需要有style,script标签，会被忽略
       createDOMCompilerError(DOMErrorCodes.X_IGNORED_SIDE_EFFECT_TAG, node.loc)
     )
     // 移除 script 与 style 标签节点

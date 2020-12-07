@@ -222,22 +222,33 @@ export function getConstantType(
     case NodeTypes.FOR:
     case NodeTypes.IF_BRANCH:
       return ConstantTypes.NOT_CONSTANT
-    case NodeTypes.INTERPOLATION:
+    case NodeTypes.INTERPOLATION: // 如果是插值节点，需要处理的是插值的内容节点
     case NodeTypes.TEXT_CALL:
       return getConstantType(node.content, context)
-    case NodeTypes.SIMPLE_EXPRESSION:
+    case NodeTypes.SIMPLE_EXPRESSION: // 如，插值节点（由插值内容节点控制）
       return node.constType
-    case NodeTypes.COMPOUND_EXPRESSION:
+
+    case NodeTypes.COMPOUND_EXPRESSION: // 合并后的包含连续子文本节点
       let returnType = ConstantTypes.CAN_STRINGIFY
+
+      // 处理连续子文本节点列表中的每一个子节点
+      // 如：template: '{{ foo }}   {{ bar }} <span>123</span>'，当前node为： '{{ foo }}   {{ bar }} '，其子节点为合并后的连续子节点列表，即node.children : [{foo...}, ' + ', {' '...}, ' + ', {bar...}, ' + ', {' '...}]
+
       for (let i = 0; i < node.children.length; i++) {
         const child = node.children[i]
         if (isString(child) || isSymbol(child)) {
+          // 跳过分隔元素：加号 ' + '
           continue
         }
+        // 通过子元素类型 判断当前元素联合元素类型
         const childType = getConstantType(child, context)
         if (childType === ConstantTypes.NOT_CONSTANT) {
-          return ConstantTypes.NOT_CONSTANT
+          return ConstantTypes.NOT_CONSTANT // 如：插值文本节点
         } else if (childType < returnType) {
+          //   NOT_CONSTANT = 0, 识别优先级高
+          //   CAN_SKIP_PATCH = 1,
+          //   CAN_HOIST = 2,
+          //   CAN_STRINGIFY = 3
           returnType = childType
         }
       }

@@ -23,13 +23,14 @@ export function normalizeStyle(value: unknown): NormalizedStyle | undefined {
   }
 }
 
-// 定界符/分隔符 ： 即 ';' 后边不能是 /[^(]*\)/ 即不能是 ';xxxx)'，但是如果后边 存在 '(' 则也匹配： ';x(xx)' 或者 ';xxxx' —— 匹配成功
-const listDelimiterRE = /;(?![^(]*\))/g
+// 行内 style样式属性 定界符/分隔符 ： 即 ';' 后边不能是 /[^(]*\)/ 即不能是 ';xxxx)'，但是如果后边 存在 '(' 则也匹配： ';x(xx)' 或者 ';xxxx' —— 匹配 ';' 成功
+// 如：style = 'color:blue; background-url: (url)'，可以匹配到 ';'， 如果是 style = 'color:blue; background-url: url)'，则匹配不到
+const listDelimiterRE = /;(?![^(]*\))/g // 注意 断言匹配'空隙'，所以只匹配的是 ';'，空隙后面只是额外条件，不进行捕获
 // 属性分隔符
 const propertyDelimiterRE = /:(.+)/
 
 // 行内样式转换对象样式
-// 如：parseStringStyle('color: red;font-size: 12px;') =》 {color: "red", font-size: "12px"}
+// 如：parseStringStyle('color: red;font-size: 12px;') =》 {color: "red", font-size: "12px"}，匹配到符号条件的分隔符 ';'
 // 注意：parseStringStyle('color: red;font-size: 12px;)') =》 {color: "red;font-size: 12px;)"} 错误写法，没有匹配的分隔符 ';'
 export function parseStringStyle(cssText: string): NormalizedStyle {
   const ret: NormalizedStyle = {}

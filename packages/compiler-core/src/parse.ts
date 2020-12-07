@@ -1053,10 +1053,11 @@ function parseInterpolation(
   return {
     type: NodeTypes.INTERPOLATION, // 插值类型
     content: {
+      // 插值内容节点
       type: NodeTypes.SIMPLE_EXPRESSION,
       isStatic: false,
       // Set `isConstant` to false by default and will decide in transformExpression
-      constType: ConstantTypes.NOT_CONSTANT,
+      constType: ConstantTypes.NOT_CONSTANT, // transformText 会用到
       content,
       loc: getSelection(context, innerStart, innerEnd) // 记录具体插值内容在模版中的位置信息
     },

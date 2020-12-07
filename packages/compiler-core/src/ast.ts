@@ -616,7 +616,7 @@ export function createObjectProperty(
 
 export function createSimpleExpression(
   content: SimpleExpressionNode['content'],
-  isStatic: SimpleExpressionNode['isStatic'],
+  isStatic: SimpleExpressionNode['isStatic'], // Boolean
   loc: SourceLocation = locStub,
   constType: ConstantTypes = ConstantTypes.NOT_CONSTANT
 ): SimpleExpressionNode {
@@ -624,7 +624,7 @@ export function createSimpleExpression(
     type: NodeTypes.SIMPLE_EXPRESSION,
     loc,
     content,
-    isStatic,
+    isStatic, // 静态表达式
     constType: isStatic ? ConstantTypes.CAN_STRINGIFY : constType
   }
 }
@@ -658,7 +658,7 @@ type InferCodegenNodeType<T> = T extends typeof RENDER_SLOT
   : CallExpression
 
 export function createCallExpression<T extends CallExpression['callee']>(
-  callee: T,
+  callee: T, // 如 transforms的上下文context.helpers集合
   args: CallExpression['arguments'] = [],
   loc: SourceLocation = locStub
 ): InferCodegenNodeType<T> {
