@@ -38,7 +38,8 @@ import { SlotFlags, slotFlagsText } from '@vue/shared'
 const defaultFallback = createSimpleExpression(`undefined`, false)
 
 // 如 template: '<slot-demo v-slot:test>v-slot test</slot-demo>'
-// SlotDemo template: '<div class="slot-demo"><slot name="test"></slot></div>'
+// 组件 SlotDemo template: '<div class="slot-demo"><slot name="test"></slot></div>'
+
 // A NodeTransform that:
 // 1. Tracks scope identifiers for scoped slots so that they don't get prefixed
 //    by transformExpression. This is only applied in non-browser builds with
@@ -54,13 +55,16 @@ export const trackSlotScopes: NodeTransform = (node, context) => {
   ) {
     // We are only checking non-empty v-slot here
     // since we only care about slots that introduce scope variables.
+
+    // 处理带有slot指令的元素节点
+    // 查找指令属性节点，并返回指令属性节点
     const vSlot = findDir(node, 'slot')
     if (vSlot) {
-      const slotProps = vSlot.exp
+      const slotProps = vSlot.exp // 指令属性值内容节点
       if (!__BROWSER__ && context.prefixIdentifiers) {
         slotProps && context.addIdentifiers(slotProps)
       }
-      context.scopes.vSlot++
+      context.scopes.vSlot++ // 通过数量来判断是否包含在另一个slot里面
       return () => {
         if (!__BROWSER__ && context.prefixIdentifiers) {
           slotProps && context.removeIdentifiers(slotProps)

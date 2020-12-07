@@ -170,7 +170,7 @@ export function createTransformContext(
     identifiers: Object.create(null),
     scopes: {
       vFor: 0,
-      vSlot: 0,
+      vSlot: 0, // 上下文识别到slot指令属性，添加transform slot插件时：加1；执行完transform slot插件时：减1，以此来判断是否包含在另一个slot中
       vPre: 0,
       vOnce: 0
     },
@@ -403,7 +403,7 @@ export function traverseNode(
           : []),
        transformSlotOutlet, // 处理slot元素组件
        transformElement,  // 处理ast节点，生成codegen
-       trackSlotScopes,
+       trackSlotScopes, // 处理并跟踪节点的slot指令，通过计数来识别出是否内嵌了slot指令
        transformText, // 处理 连续子文本节点/表达式节点 的合并；或 如果即包含文本又包含其它类型节点时，则需要设置该子节点文本/表达式的diff patch codegenNode 信息，同时也重新定义当前节点的子节点配置
        ignoreSideEffectTags, // 删减style/script元素节点
        ...[
