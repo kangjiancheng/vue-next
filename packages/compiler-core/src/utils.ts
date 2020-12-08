@@ -34,7 +34,9 @@ import {
 } from './runtimeHelpers'
 import { isString, isObject, hyphenate, extend } from '@vue/shared'
 
+// 判断一个指令属性节点是否是静态指令;  (动态指令：':[dynamicName]="value"')
 export const isStaticExp = (p: JSChildNode): p is SimpleExpressionNode =>
+  // 指令名节点表达式，如 template: <component :is='HelloWold' />， 静态is返回true
   p.type === NodeTypes.SIMPLE_EXPRESSION && p.isStatic
 
 export const isBuiltInType = (tag: string, expected: string): boolean =>
@@ -71,7 +73,7 @@ export function getInnerRange(
   const source = loc.source.substr(offset, length)
   const newLoc: SourceLocation = {
     source,
-    start: advancePositionWithClone(loc.start, loc.source, offset),
+    start: advancePositionWithClone(loc.start, loc.source, offset), // 移动offset距离
     end: loc.end
   }
 
@@ -91,7 +93,7 @@ export function getInnerRange(
 export function advancePositionWithClone(
   pos: Position,
   source: string,
-  numberOfCharacters: number = source.length
+  numberOfCharacters: number = source.length // 移动距离
 ): Position {
   return advancePositionWithMutation(
     extend({}, pos),
@@ -157,29 +159,32 @@ export function findDir(
   }
 }
 
+// 返回节点标签指定属性名或指令名的属性节点
 export function findProp(
   node: ElementNode,
-  name: string,
-  dynamicOnly: boolean = false,
-  allowEmpty: boolean = false
+  name: string, // 静态dom属性名 或 bind的某个指令名
+  dynamicOnly: boolean = false, // 动态属性，如指令属性
+  allowEmpty: boolean = false // 是否属性值为空
 ): ElementNode['props'][0] | undefined {
   for (let i = 0; i < node.props.length; i++) {
     const p = node.props[i]
     if (p.type === NodeTypes.ATTRIBUTE) {
+      // dom节点标签静态属性，如 'is'；DIRECTIVE 为指令属性，如 ':is'
       if (dynamicOnly) continue
       if (p.name === name && (p.value || allowEmpty)) {
         return p
       }
     } else if (
-      p.name === 'bind' &&
-      (p.exp || allowEmpty) &&
-      isBindKey(p.arg, name)
+      p.name === 'bind' && // v-bind 指令属性，如 ':is'
+      (p.exp || allowEmpty) && // p.exp 为指令值节点
+      isBindKey(p.arg, name) // 是否静态bind某个指令， p.arg 为指令名表达式节点，如 ':is' 指令中的 'is' 字符串表达式信息节点
     ) {
       return p
     }
   }
 }
 
+// 静态bind某个指令，如 ':is' 绑定了is指令
 export function isBindKey(arg: DirectiveNode['arg'], name: string): boolean {
   return !!(arg && isStaticExp(arg) && arg.content === name)
 }
@@ -283,7 +288,7 @@ export function toValidAssetId(
   name: string,
   type: 'component' | 'directive'
 ): string {
-  return `_${type}_${name.replace(/[^\w]/g, '_')}`
+  return `_${type}_${name.replace(/[^\w]/g, '_')}` // name = 'hello  world' 转换为 '_component_hello__world'
 }
 
 // Check if a node contains expressions that reference current context scope ids

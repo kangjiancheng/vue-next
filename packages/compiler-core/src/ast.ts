@@ -602,18 +602,20 @@ export function createObjectExpression(
   }
 }
 
+// 创建一个js 类型的属性对象
 export function createObjectProperty(
-  key: Property['key'] | string,
-  value: Property['value']
+  key: Property['key'] | string, // 属性值表达式，对象 形如指令属性值节点结构
+  value: Property['value'] // 属性名表达式，形如指令属性值节点结构
 ): Property {
   return {
     type: NodeTypes.JS_PROPERTY,
     loc: locStub,
-    key: isString(key) ? createSimpleExpression(key, true) : key,
+    key: isString(key) ? createSimpleExpression(key, true) : key, // 属性值表达式对象
     value
   }
 }
 
+// 创建一个表达式，形式如ast指令属性节点值的结构
 export function createSimpleExpression(
   content: SimpleExpressionNode['content'],
   isStatic: SimpleExpressionNode['isStatic'], // Boolean
@@ -657,6 +659,7 @@ type InferCodegenNodeType<T> = T extends typeof RENDER_SLOT
   ? RenderSlotCall
   : CallExpression
 
+// 创建运行函数配置
 export function createCallExpression<T extends CallExpression['callee']>(
   callee: T, // 如 transforms的上下文context.helpers集合
   args: CallExpression['arguments'] = [],

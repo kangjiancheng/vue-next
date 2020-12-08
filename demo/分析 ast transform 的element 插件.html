@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Vue 3 调试 - 分析 ast transform 的 element 插件</title>
+</head>
+<body>
+
+  <div id="app">
+    <button onclick="click1" @click="'click2'" v-on:click="'click3'"  v-on="{click: 'click4'}"></button>
+  </div>
+
+  <!-- 开发模式 -->
+  <script src="../packages/vue/dist/vue.global.js"></script>
+  <!-- 生产模式-->
+  <!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
+  <script>
+
+    const {
+      createApp,
+      ref,
+      reactive,
+      onMounted,
+    } = Vue
+
+    // 定义局部组件
+    const ElementDemo = {
+      name: 'element-demo',
+      template: '<div class="element-demo">element demo test</div>',
+    }
+    // 定义局部组件
+    const HelloWorld = {
+      name: 'hello-world',
+      template: '<div class="hello-world">Hello World</div>',
+    }
+
+
+    const rootComponent = {
+      name: 'root-component',
+      components: {
+        ElementDemo,
+        HelloWorld,
+      },
+      props: {
+        age: Number,
+      },
+      // props 不可通过解构来获取对应值
+      setup(props, context ) {
+        const count = ref(0)
+
+        const handleClick = () => {
+          count.value++
+        }
+
+        return {
+          count,
+          handleClick,
+        }
+      }
+    }
+    const rootProps = {
+      age: 10, // props
+      // sex: 'man', // attrs
+    }
+
+    const app = createApp(rootComponent, rootProps)
+    app.mount('#app')
+
+  </script>
+</body>
+</html>

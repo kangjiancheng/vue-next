@@ -105,6 +105,7 @@ export function baseCompile(
         ...(options.nodeTransforms || []) // user transforms，不同环境下，用户可能需要额外调整，如删减style/script标签节点、将元素节点的静态style属性转换为指令属性
       ],
       directiveTransforms: extend(
+        // 处理指令
         {},
         directiveTransforms,
         options.directiveTransforms || {} // user transforms

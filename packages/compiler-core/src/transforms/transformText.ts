@@ -12,6 +12,8 @@ import { CREATE_TEXT } from '../runtimeHelpers'
 import { PatchFlags, PatchFlagNames } from '@vue/shared'
 import { getConstantType } from './hoistStatic'
 
+// 合并处理节点的子文本节点内容
+
 // 如果当前节点没有文本/表达式节点 或只有文本/表达式节点，则合并处理连续子文本节点/表达式节点，转换为新的 混合子节点，即混合子节点的children属性存储着原先的连续子文本节点
 // 如 template: '{{ foo }}   {{ bar }}'，合并文本/表达式节点
 
@@ -22,8 +24,9 @@ import { getConstantType } from './hoistStatic'
 // Merge adjacent text nodes and expressions into a single expression
 // e.g. <div>abc {{ d }} {{ e }}</div> should have a single expression node as child.
 export const transformText: NodeTransform = (node, context) => {
+  // 不处理 文本节点
   if (
-    node.type === NodeTypes.ROOT ||
+    node.type === NodeTypes.ROOT || // ast跟节点下，存在text文本/插值表达式节点
     node.type === NodeTypes.ELEMENT ||
     node.type === NodeTypes.FOR ||
     node.type === NodeTypes.IF_BRANCH
@@ -77,16 +80,15 @@ export const transformText: NodeTransform = (node, context) => {
         // 或者：
         //    当前节点为ast根节点（即组件根节点）或html元素节点，且经过前边的合并文本处理后，此刻只有一个子节点而且还是文本/插值节点或连续文本节点
         // 如，template: '{{ foo }}   {{ bar }}'，此时 当前节点即ast根节点只有一个子元素，但是该子元素有5个子元素 存储着：[{foo...}, ' + ', {' '...}, ' + ', {bar...}]
-        (children.length === 1 &&
-          (node.type === NodeTypes.ROOT ||
-            (node.type === NodeTypes.ELEMENT &&
+        (children.length === 1 && // 子节点为1
+          (node.type === NodeTypes.ROOT || // 根节点
+            (node.type === NodeTypes.ELEMENT && // 或 html dom元素节点
               node.tagType === ElementTypes.ELEMENT)))
       ) {
-        // 没有文本/插值子节点 或着都是文本/插值子节点
         return
       }
 
-      // 当前节点内容有文本子节点也有其它类型子节点
+      // 当前节点内容有文本子节点也有其它类型子节点，或者当前节点是组件类型节点
       // 继续调整文本节点内容：创建对应文本的patch表达式
       // 如 template: '{{ foo }}   {{ bar }} <span>123</span>'，合并文本并创建对应的patch createTextVNode(text)方法
 

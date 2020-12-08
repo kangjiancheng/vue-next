@@ -755,7 +755,7 @@ function parseAttribute(
   const start = getCursor(context) // 记录当前光标解析位置
   // 匹配属性名，不能以：'空格、/、>' 开头， 且之后以：'空格、换行、/、>、=' 为结束边界
   const match = /^[^\t\r\n\f />][^\t\r\n\f />=]*/.exec(context.source)!
-  // match[0] 为 匹配到的内容: 'class'
+  // match[0] 为 匹配到的内容: 'class'、':hello'
   const name = match[0]
 
   // 校验属性名
@@ -848,6 +848,7 @@ function parseAttribute(
       match[1] ||
       (startsWith(name, ':') ? 'bind' : startsWith(name, '@') ? 'on' : 'slot')
 
+    // 动态指令参数，指令名表达式，match[2]，如 @click.prevent 中的 'click'
     let arg: ExpressionNode | undefined
 
     // match[2] 捕获 (?:(?::|^@|^#)(\[[^\]]+\]|[^\.]+)) 其中括号内容：(\[[^\]]+\]|[^\.]+) ，即跟在 :、@、# 后的内容
@@ -892,11 +893,12 @@ function parseAttribute(
         content += match[3] || ''
       }
 
-      // 返回指令内容信息
+      // 动态指令参数
+      // 返回指令名内容信息，如 v-slot:default 中的 'default'，:is 中的 'is'
       arg = {
         type: NodeTypes.SIMPLE_EXPRESSION, // 节点类型为表达式
         content,
-        isStatic, // 是否静态指令
+        isStatic, // 是否静态指令，在transform element 中查找组件 is指令判断是否静态时，会用到
         constType: isStatic
           ? ConstantTypes.CAN_STRINGIFY
           : ConstantTypes.NOT_CONSTANT, // 动态指令时，参数不能设置 const 类型
@@ -918,7 +920,7 @@ function parseAttribute(
       type: NodeTypes.DIRECTIVE, // 节点类型为指令类型
       name: dirName, // 指令类别，如 if、show、或 bind、on、slot等指令名
       exp: value && {
-        // 指令值表达式内容信息
+        // 指令值表达式节点
         type: NodeTypes.SIMPLE_EXPRESSION,
         content: value.content, // 指令属性值
         isStatic: false,
@@ -927,7 +929,7 @@ function parseAttribute(
         constType: ConstantTypes.NOT_CONSTANT,
         loc: value.loc
       },
-      arg, // 指令类别的内容信息
+      arg, // 指令表达式名内容信息
       modifiers: match[3] ? match[3].substr(1).split('.') : [], // 指令的修饰符列表 '@click.prevent.once'中的 'prevent'、'once'
       loc // 指令属性位置，包括属性名与属性值
     }

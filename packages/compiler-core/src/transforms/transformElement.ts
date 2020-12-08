@@ -66,24 +66,29 @@ export const transformElement: NodeTransform = (node, context) => {
   if (
     !(
       node.type === NodeTypes.ELEMENT &&
-      (node.tagType === ElementTypes.ELEMENT ||
+      (node.tagType === ElementTypes.ELEMENT || // 转换处理 html元素节点、 组件节点
         node.tagType === ElementTypes.COMPONENT)
     )
   ) {
     return
   }
+
   // perform the work on exit, after all child expressions have been
   // processed and merged.
-  // 在所有子元素表达式被处理与合并后，在执行这个回调函数
+  // 由于当前节点的transform插件列表是先添加后执行，所以会在当前节点的子节点经过 transformText即文本内容合并后，再执行这个插件
   return function postTransformElement() {
-    const { tag, props } = node
-    const isComponent = node.tagType === ElementTypes.COMPONENT
+    const { tag, props } = node // node.type ELEMENT 类型节点: dom元素、 组件节点
+    const isComponent = node.tagType === ElementTypes.COMPONENT //  当前节点为组件类型
 
     // The goal of the transform is to create a codegenNode implementing the
     // VNodeCall interface.
+    // 该transform插件主要是为了创建 codegenNode 信息，为了在vnode时调用
+
+    // 解析组件类型，返回相关内容，如动态is组件的 vnode patch方法、内置组件名、区分用户自定义组件名
     const vnodeTag = isComponent
       ? resolveComponentType(node as ComponentNode, context)
-      : `"${tag}"`
+      : `"${tag}"` // dom 元素标签名
+    // 是否是动态组件
     const isDynamicComponent =
       isObject(vnodeTag) && vnodeTag.callee === RESOLVE_DYNAMIC_COMPONENT
 
@@ -97,20 +102,20 @@ export const transformElement: NodeTransform = (node, context) => {
 
     let shouldUseBlock =
       // dynamic component may resolve to plain elements
-      isDynamicComponent ||
-      vnodeTag === TELEPORT ||
-      vnodeTag === SUSPENSE ||
+      isDynamicComponent || // 动态is组件
+      vnodeTag === TELEPORT || // Teleport
+      vnodeTag === SUSPENSE || // Suspense
       (!isComponent &&
         // <svg> and <foreignObject> must be forced into blocks so that block
         // updates inside get proper isSVG flag at runtime. (#639, #643)
         // This is technically web-specific, but splitting the logic out of core
         // leads to too much unnecessary complexity.
-        (tag === 'svg' ||
+        (tag === 'svg' || // web规范的一些特殊标签
           tag === 'foreignObject' ||
           // #938: elements with dynamic keys should be forced into blocks
-          findProp(node, 'key', true)))
+          findProp(node, 'key', true))) //  绑定了key指令， ':key'，非静态属性
 
-    // props
+    // props 节点属性列表：dom属性、指令属性
     if (props.length > 0) {
       const propsBuildResult = buildProps(node, context)
       vnodeProps = propsBuildResult.props
@@ -224,22 +229,25 @@ export const transformElement: NodeTransform = (node, context) => {
   }
 }
 
+// 解析组件类型，返回相关内容，如动态is组件的 vnode patch方法、内置组件名、区分用户自定义组件名
 export function resolveComponentType(
-  node: ComponentNode,
-  context: TransformContext,
+  node: ComponentNode, // 当前节点 即组件节点
+  context: TransformContext, // transform 上下文
   ssr = false
 ) {
-  const { tag } = node
+  const { tag } = node // 组件标签名
 
   // 1. dynamic component
   const isProp =
-    node.tag === 'component' ? findProp(node, 'is') : findDir(node, 'is')
+    node.tag === 'component' ? findProp(node, 'is') : findDir(node, 'is') // 查找 is 指令，并返回is指令属性节点; findProp 查找属性静态或bind静态属性； findDir查找指令，不是静态dom
   if (isProp) {
+    // 注意： 如 template = '<HelloWorld is="Welcome" />' 则不符合此条件
     const exp =
-      isProp.type === NodeTypes.ATTRIBUTE
-        ? isProp.value && createSimpleExpression(isProp.value.content, true)
-        : isProp.exp
+      isProp.type === NodeTypes.ATTRIBUTE // dom静态is属性，如 '<component is="HelloWorld" />'
+        ? isProp.value && createSimpleExpression(isProp.value.content, true) // 返回属性值相应的表达式对象
+        : isProp.exp // 指令形式is属性，如 '<component :is="HelloWorld" />'
     if (exp) {
+      // 创建 is属性值表达式对应的组件patch方法：Symbol(`resolveDynamicComponent`)
       return createCallExpression(context.helper(RESOLVE_DYNAMIC_COMPONENT), [
         exp
       ])
@@ -247,6 +255,7 @@ export function resolveComponentType(
   }
 
   // 2. built-in components (Teleport, Transition, KeepAlive, Suspense...)
+  // 如果是内置组件，直接返回
   const builtIn = isCoreComponent(tag) || context.isBuiltInComponent(tag)
   if (builtIn) {
     // built-ins are simply fallthroughs / have special handling during ssr
@@ -255,6 +264,7 @@ export function resolveComponentType(
     return builtIn
   }
 
+  // TODO: analyze cfs
   // 3. user component (from setup bindings)
   // this is skipped in browser build since browser builds do not perform
   // binding analysis.
@@ -264,7 +274,7 @@ export function resolveComponentType(
       return fromSetup
     }
   }
-
+  // TODO: analyze cfs
   // 4. Self referencing component (inferred from filename)
   if (!__BROWSER__ && context.selfName) {
     if (capitalize(camelize(tag)) === context.selfName) {
@@ -275,11 +285,13 @@ export function resolveComponentType(
   }
 
   // 5. user component (resolve)
+  //将用户自定义组件加入上下文
   context.helper(RESOLVE_COMPONENT)
   context.components.add(tag)
-  return toValidAssetId(tag, `component`)
+  return toValidAssetId(tag, `component`) // 如 tag = 'hello  world' 转换为 '_component_hello__world'
 }
 
+// TODO: analyze cfs
 function resolveSetupReference(name: string, context: TransformContext) {
   const bindings = context.bindingMetadata
   if (!bindings) {
@@ -323,7 +335,7 @@ function resolveSetupReference(name: string, context: TransformContext) {
 export type PropsExpression = ObjectExpression | CallExpression | ExpressionNode
 
 export function buildProps(
-  node: ElementNode,
+  node: ElementNode, // dom元素节点 或组件节点
   context: TransformContext,
   props: ElementNode['props'] = node.props,
   ssr = false
@@ -334,14 +346,14 @@ export function buildProps(
   dynamicPropNames: string[]
 } {
   const { tag, loc: elementLoc } = node
-  const isComponent = node.tagType === ElementTypes.COMPONENT
-  let properties: ObjectExpression['properties'] = []
+  const isComponent = node.tagType === ElementTypes.COMPONENT // 是否是组件
+  let properties: ObjectExpression['properties'] = [] // 存储props对应的js结构对象：每个元素key、value的形式如 指令值形式
   const mergeArgs: PropsExpression[] = []
   const runtimeDirectives: DirectiveNode[] = []
 
   // patchFlag analysis
   let patchFlag = 0
-  let hasRef = false
+  let hasRef = false // 节点是否存在ref属性
   let hasClassBinding = false
   let hasStyleBinding = false
   let hasHydrationEventBinding = false
@@ -398,10 +410,14 @@ export function buildProps(
     // static attribute
     const prop = props[i]
     if (prop.type === NodeTypes.ATTRIBUTE) {
+      // dom 静态属性，模版位置、属性名、属性值
       const { loc, name, value } = prop
       let isStatic = true
       if (name === 'ref') {
+        // 存在ref属性
         hasRef = true
+
+        // TODO: analyze cfs
         // in inline mode there is no setupState object, so we can't use string
         // keys to set the ref. Instead, we need to transform it to pass the
         // acrtual ref instead.
@@ -411,16 +427,23 @@ export function buildProps(
       }
       // skip :is on <component>
       if (name === 'is' && tag === 'component') {
+        // 不处理静态is组件属性: <component is="HelloWorld" />
         continue
       }
+
       properties.push(
+        // 创建此prop属性对应的js形式属性对象objProp: {type, loc, key, value}
         createObjectProperty(
+          // objProp.key: {type, loc, content, isStatic, constType }
           createSimpleExpression(
-            name,
-            true,
-            getInnerRange(loc, 0, name.length)
+            // 创建 属性名表达式对象 （形如ast指令属性值节点的结构）
+            name, // 静态属性名，如'style'、'class'
+            true, // 静态属性
+            getInnerRange(loc, 0, name.length) // 获取属性名的模版解析的光标位置信息
           ),
+          // objProp.value: {type, loc, content, isStatic, constType }
           createSimpleExpression(
+            // 创建 属性值表达式对象 （形如ast指令属性值节点的结构）
             value ? value.content : '',
             isStatic,
             value ? value.loc : loc
@@ -428,50 +451,59 @@ export function buildProps(
         )
       )
     } else {
-      // directives
+      // directives 指令属性
       const { name, arg, exp, loc } = prop
       const isBind = name === 'bind'
       const isOn = name === 'on'
 
       // skip v-slot - it is handled by its dedicated transform.
+      // slot 有专门的transform插件处理
       if (name === 'slot') {
         if (!isComponent) {
           context.onError(
-            createCompilerError(ErrorCodes.X_V_SLOT_MISPLACED, loc)
+            createCompilerError(ErrorCodes.X_V_SLOT_MISPLACED, loc) // v-slot can only be used on components or <template> tags
           )
         }
         continue
       }
       // skip v-once - it is handled by its dedicated transform.
+      // // v-once 有专门的transform插件处理
       if (name === 'once') {
         continue
       }
       // skip v-is and :is on <component>
+      // 跳过is指令，如 template: <component :is='HelloWold' />
       if (
         name === 'is' ||
-        (isBind && tag === 'component' && isBindKey(arg, 'is'))
+        (isBind && tag === 'component' && isBindKey(arg, 'is')) // 绑定静态is属性，如 <component :is='HelloWold' />
       ) {
         continue
       }
       // skip v-on in SSR compilation
+      // 跳过 ssr中的on指令
       if (isOn && ssr) {
         continue
       }
 
       // special case for v-bind and v-on with no argument
+      // v-on/v-bind 不带指令名表达式参数 如 template: '<button v-bind="{name: 'btn-name', class: 'btn-class'}" v-on="{ mousedown: handleDown, mouseup: handleUp }"></button>'
       if (!arg && (isBind || isOn)) {
-        hasDynamicKeys = true
+        hasDynamicKeys = true // 存在动态绑定参数指令
         if (exp) {
+          // 属性值节点
           if (properties.length) {
+            // TODO 属性合并去重属性
             mergeArgs.push(
               createObjectExpression(dedupeProperties(properties), elementLoc)
             )
             properties = []
           }
           if (isBind) {
-            mergeArgs.push(exp)
+            // <button class="red" :class="'green'" v-bind="{class: 'blue'}"></button> 有3个prop，第3个bind的arg=undefined
+            mergeArgs.push(exp) // 属性值节点 "{class: 'blue'}"
           } else {
             // v-on="obj" -> toHandlers(obj)
+            // <button onclick="click1" @click="'click2'" v-on:click="'click3'"  v-on="{click: 'click4'}"></button>, parse ast时，会生成4个prop，1个name='onclick'， 3个 name='on'
             mergeArgs.push({
               type: NodeTypes.JS_CALL_EXPRESSION,
               loc,
@@ -480,10 +512,11 @@ export function buildProps(
             })
           }
         } else {
+          // 没有属性值，'<button v-bind v-on></button>'
           context.onError(
             createCompilerError(
               isBind
-                ? ErrorCodes.X_V_BIND_NO_EXPRESSION
+                ? ErrorCodes.X_V_BIND_NO_EXPRESSION // 缺少v-bind值表达式
                 : ErrorCodes.X_V_ON_NO_EXPRESSION,
               loc
             )
@@ -492,7 +525,7 @@ export function buildProps(
         continue
       }
 
-      const directiveTransform = context.directiveTransforms[name]
+      const directiveTransform = context.directiveTransforms[name] // 指令属性名，如 if、show、或 bind、on、slot等指令名
       if (directiveTransform) {
         // has built-in directive transform.
         const { props, needRuntime } = directiveTransform(prop, node, context)
@@ -569,6 +602,7 @@ export function buildProps(
   }
 }
 
+// 属性合并去重
 // Dedupe props in an object literal.
 // Literal duplicated attributes would have been warned during the parse phase,
 // however, it's possible to encounter duplicated `onXXX` handlers with different
@@ -577,24 +611,26 @@ export function buildProps(
 // - class: merge into single expression with concatenation
 function dedupeProperties(properties: Property[]): Property[] {
   const knownProps: Map<string, Property> = new Map()
-  const deduped: Property[] = []
+  const deduped: Property[] = [] // 合并去重后的属性列表
   for (let i = 0; i < properties.length; i++) {
-    const prop = properties[i]
+    const prop = properties[i] // js对象属性objProp: {type, loc, key, value}，key/value为属性名/属性值对应的js表达式对象：{type, loc, content, isStatic, constType }
     // dynamic keys are always allowed
+    // 属性名是动态key时，不需要合并去重
     if (prop.key.type === NodeTypes.COMPOUND_EXPRESSION || !prop.key.isStatic) {
       deduped.push(prop)
       continue
     }
-    const name = prop.key.content
-    const existing = knownProps.get(name)
+    const name = prop.key.content // 属性名，如 class、style
+    const existing = knownProps.get(name) // 属性名js表达式对象
+    // 如：template=`<button class="red" onclick="handleClick" v-on="{class: 'blue', click: 'handlClick'}"></button>`
     if (existing) {
       if (name === 'style' || name === 'class' || name.startsWith('on')) {
         mergeAsArray(existing, prop)
       }
       // unexpected duplicate, should have emitted error during parse
     } else {
-      knownProps.set(name, prop)
-      deduped.push(prop)
+      knownProps.set(name, prop) // 添加
+      deduped.push(prop) // 添加
     }
   }
   return deduped
