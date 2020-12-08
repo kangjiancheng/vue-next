@@ -500,15 +500,16 @@ export function buildProps(
           }
           if (isBind) {
             // <button class="red" :class="'green'" v-bind="{class: 'blue'}"></button> 有3个prop，第3个bind的arg=undefined
-            mergeArgs.push(exp) // 属性值节点 "{class: 'blue'}"
+            mergeArgs.push(exp) // v-bind="{class: 'blue'}"
           } else {
             // v-on="obj" -> toHandlers(obj)
             // <button onclick="click1" @click="'click2'" v-on:click="'click3'"  v-on="{click: 'click4'}"></button>, parse ast时，会生成4个prop，1个name='onclick'， 3个 name='on'
             mergeArgs.push({
-              type: NodeTypes.JS_CALL_EXPRESSION,
+              // v-on="{click: 'click4'}"
+              type: NodeTypes.JS_CALL_EXPRESSION, // 执行表达式
               loc,
-              callee: context.helper(TO_HANDLERS),
-              arguments: [exp]
+              callee: context.helper(TO_HANDLERS), // TO_HANDLERS = Symbol('toHandlers')
+              arguments: [exp] // 属性值
             })
           }
         } else {
