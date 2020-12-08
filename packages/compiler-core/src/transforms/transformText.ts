@@ -110,7 +110,7 @@ export const transformText: NodeTransform = (node, context) => {
             callArgs.push(child)
           }
 
-          // 标记 插值文本、或者 混合列表里如果也有插值文本 对应的patchflag
+          // 如果是插值子节点、混合子节点下存在插值子节点，需要添加额外patch信息
           // mark dynamic text with flag so it gets patched inside a block
           if (
             !context.ssr &&
