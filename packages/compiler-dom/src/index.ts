@@ -36,7 +36,7 @@ export const DOMDirectiveTransforms: Record<string, DirectiveTransform> = {
   cloak: noopDirectiveTransform,
   html: transformVHtml,
   text: transformVText,
-  model: transformModel, // override compiler-core
+  model: transformModel, // override compiler-core， 注意 ast transform时， 会覆盖 compiler-core里的transform插件
   on: transformOn, // override compiler-core
   show: transformShow
 }

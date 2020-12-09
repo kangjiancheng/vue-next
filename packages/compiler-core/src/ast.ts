@@ -602,7 +602,7 @@ export function createObjectExpression(
   }
 }
 
-// 创建一个js 类型的属性对象
+// 创建一个js 类型的属性对象节点
 export function createObjectProperty(
   key: Property['key'] | string, // 属性值表达式，对象 形如指令属性值节点结构
   value: Property['value'] // 属性名表达式，形如指令属性值节点结构
@@ -615,7 +615,7 @@ export function createObjectProperty(
   }
 }
 
-// 创建一个表达式，形式如ast指令属性节点值的结构
+// 创建一个基本表达式节点，如为：transform阶段的 prop 属性格式转换、动态指令名参数节点的格式转换
 export function createSimpleExpression(
   content: SimpleExpressionNode['content'],
   isStatic: SimpleExpressionNode['isStatic'], // Boolean
@@ -631,6 +631,7 @@ export function createSimpleExpression(
   }
 }
 
+// 创建一个插值
 export function createInterpolation(
   content: InterpolationNode['content'] | string,
   loc: SourceLocation
@@ -644,6 +645,7 @@ export function createInterpolation(
   }
 }
 
+// 创建一个复合/合成表达式，如 ast的连续文本节点合并后就是该类型、或者是动态指令on的transform
 export function createCompoundExpression(
   children: CompoundExpressionNode['children'],
   loc: SourceLocation = locStub

@@ -9,7 +9,8 @@
 <body>
 
   <div id="app">
-    <button onclick="click1" @click="'click2'" v-on:click="'click3'"  v-on="{click: 'click4'}"></button>
+    <button @click.prevent="handleClick"></button>
+<!--    <button onclick="click1" @click="'click2'" v-on:click="'click3'"  v-on="{click: 'click4'}"></button>-->
   </div>
 
   <!-- 开发模式 -->
@@ -57,6 +58,7 @@
         return {
           count,
           handleClick,
+          console,
         }
       }
     }

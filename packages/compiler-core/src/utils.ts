@@ -58,6 +58,14 @@ const nonIdentifierRE = /^\d|[^\$\w]/
 export const isSimpleIdentifier = (name: string): boolean =>
   !nonIdentifierRE.test(name)
 
+// \w 匹配字母、数字、下划线。等价于'[A-Za-z0-9_]'。
+// \W 匹配非字母、数字、下划线。等价于 '[^A-Za-z0-9_]'。
+// \s 匹配任何空白字符，包括空格、制表符、换页符等等。等价于 [ \f\n\r\t\v]。
+// \S 匹配任何非空白字符。等价于 [^ \f\n\r\t\v]。
+
+// 匹配一个指令属性值的表达式，即有效的函数名调用： 以 [A-Za-z_$] 开头，如 <button @click="$_abc[foo][bar]"></button>
+// '$_abc$123 . $_abc$123$ . $_abc$123' 或 '$_abc[foo][bar]'
+// 不匹配： '1 + 1'、handleClick(1)
 const memberExpRE = /^[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*|\[[^\]]+\])*$/
 export const isMemberExpression = (path: string): boolean => {
   if (!path) return false

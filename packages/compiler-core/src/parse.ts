@@ -116,6 +116,7 @@ function createParserContext(
   // 初始化 解析options
   const options = extend({}, defaultParserOptions)
   for (const key in rawOptions) {
+    // 为了不影响之前的options
     // 将rawOptions存在值的key 添加到 options：等价于 =》 if (rawOptions[key]) options[key] = rawOptions[key]
     // @ts-ignore
     options[key] = rawOptions[key] || defaultParserOptions[key]
@@ -777,6 +778,7 @@ function parseAttribute(
     while ((m = pattern.exec(name))) {
       // 如：<span cl"as's<="abc">，则 name = `cla"as's<`
       // 如：没有关闭标签 template= '<span class="abc" </span>'，则第二次解析属性时 name = '<'
+      // 如：动态指令 @['click'].prevent="handleClick"
       emitError(
         context,
         ErrorCodes.UNEXPECTED_CHARACTER_IN_ATTRIBUTE_NAME,
@@ -821,7 +823,7 @@ function parseAttribute(
   if (!context.inVPre && /^(v-|:|@|#)/.test(name)) {
     // 指令分类：v-xxx指令、v-xxx:xxx指令、 :[xxx]（参数形式的指令）、:xxx指令
     // 还有：@[xxx]指令、@xxx指令、#[xxx]、#xxx
-    // 注意 ':'、 '@'、'#' 后边 不能马上跟 '.'，如：'<span @.click="someHandler"></span>'
+    // 注意 ':'、 '@'、'#' 后边 不能马上跟 '.'，如：'<span @.click="someHandler"></span>'，此时 match[2] = undefined，match[3] = '@.click'，即只符合 (.+)?
     // 如： template = '<span v-if="true"></span>'，则 name = 'v-if'
     // 如： template = '<span :attr1='true' @[attr2]="false"></span>'，则 name = 'v-if'
     // '?:' 表示不进行捕获这个括号中内容
@@ -848,7 +850,7 @@ function parseAttribute(
       match[1] ||
       (startsWith(name, ':') ? 'bind' : startsWith(name, '@') ? 'on' : 'slot')
 
-    // 动态指令参数，指令名表达式，match[2]，如 @click.prevent 中的 'click'
+    // 动态指令参数，指令名表达式，match[2]，如 @click.prevent 中的 'click'，注意 动态指令时，不能是 @['click']，指令名不可以有 ' " < 这3个字符，必须是个变量
     let arg: ExpressionNode | undefined
 
     // match[2] 捕获 (?:(?::|^@|^#)(\[[^\]]+\]|[^\.]+)) 其中括号内容：(\[[^\]]+\]|[^\.]+) ，即跟在 :、@、# 后的内容
@@ -872,7 +874,7 @@ function parseAttribute(
       let content = match[2]
       let isStatic = true // 是否静态指令
 
-      // 动态指令 '@["eventType (如click或change)"]'
+      // 动态指令 '@[someEvent]'，其中变量someEvent: 'click'
       if (content.startsWith('[')) {
         isStatic = false
 
@@ -883,7 +885,7 @@ function parseAttribute(
           )
         }
 
-        // 进一步调整指令内容，设定为动态参数
+        // 去掉双括号： [ 和 ]
         content = content.substr(1, content.length - 2)
       } else if (isSlot) {
         // #1241 special case for v-slot: vuetify relies extensively on slot
@@ -893,12 +895,12 @@ function parseAttribute(
         content += match[3] || ''
       }
 
-      // 动态指令参数
+      // 指令参数节点
       // 返回指令名内容信息，如 v-slot:default 中的 'default'，:is 中的 'is'
       arg = {
         type: NodeTypes.SIMPLE_EXPRESSION, // 节点类型为表达式
         content,
-        isStatic, // 是否静态指令，在transform element 中查找组件 is指令判断是否静态时，会用到
+        isStatic, // 静态/动态指令，在transform element 中查找组件 is指令判断是否静态时，会用到
         constType: isStatic
           ? ConstantTypes.CAN_STRINGIFY
           : ConstantTypes.NOT_CONSTANT, // 动态指令时，参数不能设置 const 类型
@@ -929,7 +931,7 @@ function parseAttribute(
         constType: ConstantTypes.NOT_CONSTANT,
         loc: value.loc
       },
-      arg, // 指令表达式名内容信息
+      arg, // 指令表达式名内容信息，注意必须是个变量 @['click'] 不符合语法，指令名不能包含 ' " <
       modifiers: match[3] ? match[3].substr(1).split('.') : [], // 指令的修饰符列表 '@click.prevent.once'中的 'prevent'、'once'
       loc // 指令属性位置，包括属性名与属性值
     }
@@ -1056,7 +1058,7 @@ function parseInterpolation(
     type: NodeTypes.INTERPOLATION, // 插值类型
     content: {
       // 插值内容节点
-      type: NodeTypes.SIMPLE_EXPRESSION,
+      type: NodeTypes.SIMPLE_EXPRESSION, // 一个简单的表达式类型节点（此表达式基础 由 ./ast.ts/createSimpleExpression创建，在后续会常见）
       isStatic: false,
       // Set `isConstant` to false by default and will decide in transformExpression
       constType: ConstantTypes.NOT_CONSTANT, // transformText 会用到

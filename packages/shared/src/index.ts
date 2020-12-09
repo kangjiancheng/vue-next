@@ -134,14 +134,14 @@ export const hyphenate = cacheStringFunction((str: string) =>
 )
 
 /**
- * @private
+ * @private 大写第一个字母
  */
 export const capitalize = cacheStringFunction(
   (str: string) => str.charAt(0).toUpperCase() + str.slice(1)
 )
 
 /**
- * @private
+ * @private 添加事件前缀 on，并大写第一个字母
  */
 export const toHandlerKey = cacheStringFunction(
   (str: string) => (str ? `on${capitalize(str)}` : ``)

@@ -410,7 +410,7 @@ export function buildProps(
     // static attribute
     const prop = props[i]
     if (prop.type === NodeTypes.ATTRIBUTE) {
-      // dom 静态属性，模版位置、属性名、属性值
+      // dom 静态属性，节点光标位置、属性名、属性值
       const { loc, name, value } = prop
       let isStatic = true
       if (name === 'ref') {
@@ -432,7 +432,7 @@ export function buildProps(
       }
 
       properties.push(
-        // 创建此prop属性对应的js形式属性对象objProp: {type, loc, key, value}
+        // 创建静态prop属性对应的js形式属性对象objProp: {type, loc, key, value}
         createObjectProperty(
           // objProp.key: {type, loc, content, isStatic, constType }
           createSimpleExpression(
@@ -485,8 +485,9 @@ export function buildProps(
         continue
       }
 
-      // special case for v-bind and v-on with no argument
+      // 分析 v-on 与 v-bind 指令
       // v-on/v-bind 不带指令名表达式参数 如 template: '<button v-bind="{name: 'btn-name', class: 'btn-class'}" v-on="{ mousedown: handleDown, mouseup: handleUp }"></button>'
+      // special case for v-bind and v-on with no argument
       if (!arg && (isBind || isOn)) {
         hasDynamicKeys = true // 存在动态绑定参数指令
         if (exp) {
@@ -506,7 +507,7 @@ export function buildProps(
             // <button onclick="click1" @click="'click2'" v-on:click="'click3'"  v-on="{click: 'click4'}"></button>, parse ast时，会生成4个prop，1个name='onclick'， 3个 name='on'
             mergeArgs.push({
               // v-on="{click: 'click4'}"
-              type: NodeTypes.JS_CALL_EXPRESSION, // 执行表达式
+              type: NodeTypes.JS_CALL_EXPRESSION, // codegen 执行表达式
               loc,
               callee: context.helper(TO_HANDLERS), // TO_HANDLERS = Symbol('toHandlers')
               arguments: [exp] // 属性值
@@ -526,6 +527,23 @@ export function buildProps(
         continue
       }
 
+      // tronsfrom 处理指令插件
+      // 默认 compiler-core: directiveTransforms
+      //     {
+      //       on: transformOn,
+      //       bind: transformBind,
+      //       model: transformModel
+      //     }
+      // object.assign 覆盖上方默认
+      // 用户 compiler-dom: DOMDirectiveTransforms
+      //    {
+      //      cloak: noopDirectiveTransform,
+      //      html: transformVHtml,
+      //      text: transformVText,
+      //      model: transformModel, // override compiler-core
+      //      on: transformOn, // override compiler-core
+      //      show: transformShow
+      //    }
       const directiveTransform = context.directiveTransforms[name] // 指令属性名，如 if、show、或 bind、on、slot等指令名
       if (directiveTransform) {
         // has built-in directive transform.
