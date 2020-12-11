@@ -530,7 +530,7 @@ export function buildProps(
       // tronsfrom 处理指令插件
       // 默认 compiler-core: directiveTransforms
       //     {
-      //       on: transformOn,
+      //       on: transformOn, // 转换指令属性名、属性值节点为codegen节点，校验属性值js语法
       //       bind: transformBind,
       //       model: transformModel
       //     }
@@ -541,12 +541,14 @@ export function buildProps(
       //      html: transformVHtml,
       //      text: transformVText,
       //      model: transformModel, // override compiler-core
-      //      on: transformOn, // override compiler-core
+      //      on: transformOn, // override compiler-core ，先执行compiler-core on 再处理指令修饰符modifiers，进一步转换属性值节点、属性名节点格式
       //      show: transformShow
       //    }
       const directiveTransform = context.directiveTransforms[name] // 指令属性名，如 if、show、或 bind、on、slot等指令名
       if (directiveTransform) {
         // has built-in directive transform.
+        // 处理vue内置指令， 转换属性节点格式
+        // props 为codegen转换后
         const { props, needRuntime } = directiveTransform(prop, node, context)
         !ssr && props.forEach(analyzePatchFlag)
         properties.push(...props)
@@ -557,6 +559,7 @@ export function buildProps(
           }
         }
       } else {
+        // 用户自定义指令列表
         // no built-in transform, this is a user custom directive.
         runtimeDirectives.push(prop)
       }

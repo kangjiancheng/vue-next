@@ -26,12 +26,12 @@ const stripStringRE = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*\$\{|
  * doesn't prefix expressions.
  */
 export function validateBrowserExpression(
-  node: SimpleExpressionNode,
+  node: SimpleExpressionNode, // 如 v-on 的指令属性值 节点
   context: TransformContext,
-  asParams = false,
-  asRawStatements = false
+  asParams = false, // node.content 是否作为参数，还是函数体
+  asRawStatements = false // 指令值 多行执行语句，存在 ';'，如 '<button @click="count++; total-"></button>'
 ) {
-  const exp = node.content
+  const exp = node.content // 指令值内容
 
   // empty expressions are validated per-directive since some directives
   // do allow empty expressions.
@@ -40,24 +40,27 @@ export function validateBrowserExpression(
   }
 
   try {
+    // 创建一个函数，最后一个参数为函数体，前边为函数参数
     new Function(
-      asRawStatements
-        ? ` ${exp} `
-        : `return ${asParams ? `(${exp}) => {}` : `(${exp})`}`
+      asRawStatements // 存在分隔符 ';' 或 多行执行语句
+        ? ` ${exp} ` // 如  <button @click="if (count > 1) count++; "></button> ，则exp='if (count > 1) count++;'，结果为 (function anonymous ) { if (count > 1) count++; })
+        : `return ${asParams ? `(${exp}) => {}` : `(${exp})`}` // 如 '<button @click="count++"></button>'， exp = node.content='count++' 转换后为 (function anonymous() { return (count++) })
     )
+    // 注意
   } catch (e) {
     let message = e.message
     const keywordMatch = exp
       .replace(stripStringRE, '')
       .match(prohibitedKeywordRE)
     if (keywordMatch) {
+      // 如  <button @click="if (count > 1) count++ "></button>， 在上方 new Function() 时，会接在 return 关键字之后
       message = `avoid using JavaScript keyword as property name: "${
         keywordMatch[0]
       }"`
     }
     context.onError(
       createCompilerError(
-        ErrorCodes.X_INVALID_EXPRESSION,
+        ErrorCodes.X_INVALID_EXPRESSION, // on/if/for 指令的属性值为不合理的js语句
         node.loc,
         undefined,
         message

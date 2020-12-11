@@ -22,7 +22,7 @@ import { TO_HANDLER_KEY } from '../runtimeHelpers'
 // \S 匹配任何非空白字符。等价于 [^ \f\n\r\t\v]。
 
 // 匹配函数语句结构
-// 'param => foo ('  或 '(param1, param2) => foo ('
+// 'param => '  或 '(param1, param2) => '
 // 或 'function foo ('
 const fnExpRE = /^\s*([\w$_]+|\([^)]*?\))\s*=>|^\s*function(?:\s+[\w$]+)?\s*\(/
 
@@ -102,10 +102,13 @@ export const transformOn: DirectiveTransform = (
     // 匹配一个指令属性值的表达式： 以 [A-Za-z_$] 开头，如 <button @keyup="handleKeyup" @click="$_abc[foo][bar]" @change="abc  . foo . (可以换行)  bar"></button>
     const isMemberExp = isMemberExpression(exp.content)
 
-    // 验证是否是简单的行内执行语句，如： <button @click="count ++" @change="handleChange()">{{ count }}</button>
+    // 验证是行内声明执行表达式，即非函数声明：不是函数名赋值也不是函数定义
+    // 如： <button @click="count ++; total --" @change="handleChange()">{{ count }}</button>
     const isInlineStatement = !(isMemberExp || fnExpRE.test(exp.content))
 
-    // 多行代码 <button @click="console.log(1); console.log(2)"></button>
+    // 明确表达式结束符（多行代码）
+    // 如 <button @click="count++ ;" @click="count ++; total--" @click="if ( count>1 ) count++;></button>
+    // 注意如果出现js关键字，则必须加上分隔符 ';'， 因为之后会validateBrowserExpression通过new Function() 验证此表达式符合js语法
     const hasMultipleStatements = exp.content.includes(`;`)
 
     // TODO: analyze cfs
@@ -149,6 +152,7 @@ export const transformOn: DirectiveTransform = (
     }
 
     if (__DEV__ && __BROWSER__) {
+      // 验证指令值表达式是否符合js语法规范
       validateBrowserExpression(
         exp as SimpleExpressionNode,
         context,
@@ -157,12 +161,14 @@ export const transformOn: DirectiveTransform = (
       )
     }
 
+    // 行内可执行的js语句 ，包装成函数格式
     if (isInlineStatement || (shouldCache && isMemberExp)) {
       // wrap inline statement in a function expression
       // 将行内语句转换为等价的函数结构语句
-      // 如： <button @click="count ++; foo --">{{ count }}</button> 转换为 [`'$event' => '{'`, exp, '}']
-      // 如： <button @click="obj.handleClick"></button> 转换为 [`'(...args)' => '('`, exp, ')']
+      // 如： <button @click="count ++; foo --">{{ count }}</button> 转换为 ['$event => {', exp, '}']
+      // 如： <button @click="obj.handleClick"></button> 转换为 ['(...args) => (', exp, ')']
 
+      // 创建codegen复合表达式节点
       exp = createCompoundExpression([
         `${
           isInlineStatement
@@ -183,14 +189,14 @@ export const transformOn: DirectiveTransform = (
     props: [
       // 创建指令属性对应的js属性表达式节点
       createObjectProperty(
-        eventName, // 节点属性名
-        exp || createSimpleExpression(`() => {}`, false, loc) // 节点属性值
+        eventName, // codegen指令属性名节点
+        exp || createSimpleExpression(`() => {}`, false, loc) // codegen指令属性值节点
       )
     ]
   }
 
   // apply extended compiler augmentor
-  // 扩展解析，如 由 compiler-dom 的transformOn
+  // 扩展解析，如 由 compiler-dom 的transformOn 解析modifiers修饰符
   if (augmentor) {
     ret = augmentor(ret)
   }
