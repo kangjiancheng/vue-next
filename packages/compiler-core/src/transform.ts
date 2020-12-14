@@ -154,7 +154,7 @@ export function createTransformContext(
     ssrCssVars,
     bindingMetadata,
     inline,
-    isTS,
+    isTS, //ts 格式，编译成ts代码
     onError,
 
     // state

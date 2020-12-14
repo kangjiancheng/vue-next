@@ -54,7 +54,10 @@ export function isCoreComponent(tag: string): symbol | void {
   }
 }
 
+// 数字开头：'123abc$'
+// 或不能只有： $、字母、数字、下划线，比如 '{foo:true}'
 const nonIdentifierRE = /^\d|[^\$\w]/
+// 非数字开头，且都是'[\$A-Za-z0-9_]'，如：'$foo_123'
 export const isSimpleIdentifier = (name: string): boolean =>
   !nonIdentifierRE.test(name)
 

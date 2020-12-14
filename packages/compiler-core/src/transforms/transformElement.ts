@@ -334,10 +334,13 @@ function resolveSetupReference(name: string, context: TransformContext) {
 
 export type PropsExpression = ObjectExpression | CallExpression | ExpressionNode
 
+/**
+ * 处理并转换元素属性列表，处理静态属性、静态/动态指令属性、合并去重属性
+ */
 export function buildProps(
   node: ElementNode, // dom元素节点 或组件节点
   context: TransformContext,
-  props: ElementNode['props'] = node.props,
+  props: ElementNode['props'] = node.props, // 属性列表
   ssr = false
 ): {
   props: PropsExpression | undefined
@@ -451,7 +454,7 @@ export function buildProps(
         )
       )
     } else {
-      // directives 指令属性
+      // directives 指令属性，合并去重，转换处理指令
       const { name, arg, exp, loc } = prop
       const isBind = name === 'bind'
       const isOn = name === 'on'
@@ -485,13 +488,13 @@ export function buildProps(
         continue
       }
 
-      // 分析 v-on 与 v-bind 指令
-      // v-on/v-bind 不带指令名表达式参数 如 template: '<button v-bind="{name: 'btn-name', class: 'btn-class'}" v-on="{ mousedown: handleDown, mouseup: handleUp }"></button>'
+      // 分析 v-on 与 v-bind 指令，v-on/v-bind 不带指令名表达式参数
+      // 如 template: '<button v-bind="{name: 'btn-name', class: 'btn-class'}" v-on="{ mousedown: handleDown, mouseup: handleUp }"></button>'
       // special case for v-bind and v-on with no argument
       if (!arg && (isBind || isOn)) {
         hasDynamicKeys = true // 存在动态绑定参数指令
         if (exp) {
-          // 属性值节点
+          // 存在属性值节点
           if (properties.length) {
             // TODO 属性合并去重属性
             mergeArgs.push(
@@ -530,9 +533,9 @@ export function buildProps(
       // tronsfrom 处理指令插件
       // 默认 compiler-core: directiveTransforms
       //     {
-      //       on: transformOn, // 转换指令属性名、属性值节点为codegen节点，校验属性值js语法
-      //       bind: transformBind,
-      //       model: transformModel
+      //       on: transformOn, // 转换指令属性名、校验属性值、属性值节点为codegen节点，校验属性值js语法
+      //       bind: transformBind, // 转换v-bind指令属性节点，如转换属性名为小驼峰、校验属性值
+      //       model: transformModel // 转换 v-model指令，返回 { props: [属性名节点、属性值节点、修饰符节点]}，如校验属性值节点不能为空，属性值内容格式必须是一个有效的js变量应用：$_abc[foo][bar] 或 $_abc.foo.bar
       //     }
       // object.assign 覆盖上方默认
       // 用户 compiler-dom: DOMDirectiveTransforms

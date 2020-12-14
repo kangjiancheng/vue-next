@@ -790,6 +790,9 @@ function parseAttribute(
   // 完成解析：属性名，前进解析光标、模版中移除解析名
   advanceBy(context, name.length)
 
+  // 注意：在html 文档中，<div id="app"><span v-model></span></div>，通过innerHTML，获取模版信息时，属性默认值为""，即得到的template = document.querySelector('#app').innerHTML = '<span v-model=""></span>'
+  // 与在组件上直接定义属性 template: '<span v-model></span>' 不同
+
   // 开始解析：属性值
   // 属性值在 '=' 之后，如：template: '<span class = "abc">'，此时 context.source: ' = "abc">'，注意可以 空格、换行 间隔
   let value: AttributeValue = undefined
@@ -804,7 +807,8 @@ function parseAttribute(
     // 结果都是：class="abc"
     value = parseAttributeValue(context) // 返回属性值节点
 
-    // 有 '=' 时，必须有属性值
+    // 判断节点是否存在
+    // 有 '=' 时，必须设置属性值节点，如: template = '<span class = ></span>'，context.source = '></span>'，注意，class=""
     if (!value) {
       emitError(context, ErrorCodes.MISSING_ATTRIBUTE_VALUE)
     }
@@ -850,10 +854,12 @@ function parseAttribute(
       match[1] ||
       (startsWith(name, ':') ? 'bind' : startsWith(name, '@') ? 'on' : 'slot')
 
-    // 动态指令参数，指令名表达式，match[2]，如 @click.prevent 中的 'click'，注意 动态指令时，不能是 @['click']，指令名不可以有 ' " < 这3个字符，必须是个变量
+    // 指令属性名节点/指令名表达式，match[2]，如 @click.prevent 中的 'click'；
+    // 注意 动态指令时，不能是 @['click']，指令名不可以有 ' " < 这3个字符，必须是个变量
     let arg: ExpressionNode | undefined
 
     // match[2] 捕获 (?:(?::|^@|^#)(\[[^\]]+\]|[^\.]+)) 其中括号内容：(\[[^\]]+\]|[^\.]+) ，即跟在 :、@、# 后的内容
+    // 如 <span v-bind="{}"></span> 则此时 match2 = undefined
     if (match[2]) {
       const isSlot = dirName === 'slot' // 如：template: '<span #header="nav"></span>' 或 'v-slot'，则 name = '#header'，match[2] = 'header'，dirName = 'slot'
       const startOffset = name.indexOf(match[2]) // 指令内容开始位置

@@ -16,7 +16,10 @@ import {
 } from '../runtimeHelpers'
 
 export const transformModel: DirectiveTransform = (dir, node, context) => {
+  // 先使用 compiler-core 的 transform model 进行处理
+  // 返回 { props: [属性名节点、属性值节点、修饰符节点]}
   const baseResult = baseTransform(dir, node, context)
+
   // base transform has errors OR component v-model (only need props)
   if (!baseResult.props.length || node.tagType === ElementTypes.COMPONENT) {
     return baseResult

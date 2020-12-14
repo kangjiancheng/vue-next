@@ -49,7 +49,7 @@ function compileToFunction(
     extend(
       {
         hoistStatic: true, // 变量提升，静态
-        // 解析失败时，比如解析注释失败，当 template = 'abc<!--123' => 错误提示：'Template compilation error: Unexpected EOF in comment.'
+        // 解析失败时，比如解析注释失败，当 template = 'abc<!--123' 错误提示：'Template compilation error: Unexpected EOF in comment.'
         onError(err: CompilerError) {
           if (__DEV__) {
             const message = `Template compilation error: ${err.message}` // 错误范围

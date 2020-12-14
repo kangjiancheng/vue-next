@@ -190,7 +190,7 @@ export const transformOn: DirectiveTransform = (
       // 创建指令属性对应的js属性表达式节点
       createObjectProperty(
         eventName, // codegen指令属性名节点
-        exp || createSimpleExpression(`() => {}`, false, loc) // codegen指令属性值节点
+        exp || createSimpleExpression(`() => {}`, false, loc) // codegen指令属性值节点，如果不存在属性值或为空白，创建一个空的属性值节点
       )
     ]
   }
