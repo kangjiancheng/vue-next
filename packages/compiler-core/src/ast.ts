@@ -602,15 +602,15 @@ export function createObjectExpression(
   }
 }
 
-// 创建一个js 类型的属性对象节点
+// 创建一个js类型的属性节点
 export function createObjectProperty(
-  key: Property['key'] | string, // 属性值表达式，对象 形如指令属性值节点结构
-  value: Property['value'] // 属性名表达式，形如指令属性值节点结构
+  key: Property['key'] | string, // key
+  value: Property['value'] // value
 ): Property {
   return {
     type: NodeTypes.JS_PROPERTY,
     loc: locStub,
-    key: isString(key) ? createSimpleExpression(key, true) : key, // 属性值表达式对象
+    key: isString(key) ? createSimpleExpression(key, true) : key,
     value
   }
 }

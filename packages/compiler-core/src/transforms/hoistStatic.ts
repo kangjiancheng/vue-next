@@ -234,10 +234,12 @@ export function getConstantType(
       // 处理连续子文本节点列表中的每一个子节点
       // 如：template: '{{ foo }}   {{ bar }} <span>123</span>'，当前node为： '{{ foo }}   {{ bar }} '，其子节点为合并后的连续子节点列表，即node.children : [{foo...}, ' + ', {' '...}, ' + ', {bar...}, ' + ', {' '...}]
 
+      // 或v-on指令属性值内容，children: ['$event => {', exp, '}']
+
       for (let i = 0; i < node.children.length; i++) {
         const child = node.children[i]
         if (isString(child) || isSymbol(child)) {
-          // 跳过分隔元素：加号 ' + '
+          // 跳过分隔元素，如加号 ' + '
           continue
         }
         // 通过子元素类型 判断当前元素联合元素类型
@@ -258,6 +260,7 @@ export function getConstantType(
         const exhaustiveCheck: never = node
         exhaustiveCheck
       }
+      // 如 JS_CALL_EXPRESSION
       return ConstantTypes.NOT_CONSTANT
   }
 }

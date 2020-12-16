@@ -17,7 +17,7 @@ import {
 
 /**
  * 解析v-model指令：
- *    在compiler-core中解析：指令属性名节点、属性值节点、修饰符节点。
+ *    在compiler-core中解析：指令属性名节点、属性值节点、（组件）修饰符节点。
  *    在compiler-dom中解析：进一步针对dom元素上的v-model，解析使用环境，如需在文本框中使用，并设置needRuntime，过滤一些只在组件上有意义的v-model属性节点信息。
  * @param dir v-model指令节点
  * @param node  dom元素或组件元素
@@ -25,7 +25,7 @@ import {
  */
 export const transformModel: DirectiveTransform = (dir, node, context) => {
   // 先使用 compiler-core 的 transform model 进行处理
-  // 返回 { props: [属性名节点、属性值节点、修饰符节点]}
+  // 返回 { props: [属性名节点、属性值节点、修饰符节点]}，组件会有修饰符节点
   const baseResult = baseTransform(dir, node, context)
 
   // base transform has errors OR component v-model (only need props)
@@ -129,7 +129,7 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
     if (!isInvalidType) {
       // 默认都有进行
       // input type=file, isInvalidType=true
-      baseResult.needRuntime = context.helper(directiveToUse)
+      baseResult.needRuntime = context.helper(directiveToUse) // 指令使用环境
     }
   } else {
     // 无效的使用方式，如： template: '<span v-model='someText'></span>
@@ -146,6 +146,7 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
   baseResult.props = baseResult.props.filter(
     p =>
       // 过滤一些只针对组件节点的信息，以减少运行时的代码量
+      // 移除属性名节点信息，还剩属性值节点、修饰符节点
       !(
         p.key.type === NodeTypes.SIMPLE_EXPRESSION &&
         p.key.content === 'modelValue'

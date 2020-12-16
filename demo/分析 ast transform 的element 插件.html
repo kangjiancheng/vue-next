@@ -9,8 +9,7 @@
 <body>
 
   <div id="app">
-    <input-component v-model.{foo: rue}="changeText" placeholder="input test" />
-<!--    <button onclick="click1" @click="'click2'" v-on:click="'click3'"  v-on="{click: 'click4'}"></button>-->
+    <input @click="handleChange" />
   </div>
 
   <!-- 开发模式 -->
@@ -44,7 +43,7 @@
         ElementDemo,
         HelloWorld,
       },
-      template: '<input-component v-model.{foo:123}="changeText" placeholder="input test" />',
+      // template: '<input-component v-model.{foo:123}="changeText" placeholder="input test" />',
       props: {
         age: Number,
       },

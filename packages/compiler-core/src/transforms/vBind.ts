@@ -26,7 +26,8 @@ export const transformBind: DirectiveTransform = (dir, node, context) => {
     arg.children.unshift(`(`)
     arg.children.push(`) || ""`)
   } else if (!arg.isStatic) {
-    // 动态指令，如 <button :[propName]='...'></button>，如 propName='data-xxx'，转换为 arg.content='propName || ""'
+    // 动态指令
+    // 如 <button :[propName]='...'></button>，如 propName='data-xxx'，转换为 arg.content='propName || ""'
     arg.content = `${arg.content} || ""` // 属性名表达参数空值处理
   }
 

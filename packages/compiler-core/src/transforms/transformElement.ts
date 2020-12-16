@@ -58,6 +58,7 @@ import { BindingTypes } from '../options'
 
 // some directive transforms (e.g. v-model) may return a symbol for runtime
 // import, which should be used instead of a resolveDirective call.
+// 运行时的指令导入，如 v-model、v-show
 const directiveImportMap = new WeakMap<DirectiveNode, symbol>()
 
 // generate a JavaScript AST for this element's codegen
@@ -352,40 +353,54 @@ export function buildProps(
   const isComponent = node.tagType === ElementTypes.COMPONENT // 是否是组件
   let properties: ObjectExpression['properties'] = [] // 存储props对应的js结构对象：每个元素key、value的形式如 指令值形式
   const mergeArgs: PropsExpression[] = []
-  const runtimeDirectives: DirectiveNode[] = []
+  const runtimeDirectives: DirectiveNode[] = [] // 如运行时指令，如 v-model，v-show
 
   // patchFlag analysis
   let patchFlag = 0
   let hasRef = false // 节点是否存在ref属性
-  let hasClassBinding = false
-  let hasStyleBinding = false
-  let hasHydrationEventBinding = false
-  let hasDynamicKeys = false
-  let hasVnodeHook = false
-  const dynamicPropNames: string[] = []
+  let hasClassBinding = false // 是否 v-bind:class
+  let hasStyleBinding = false // 是否 v-bind:style
+  let hasHydrationEventBinding = false // dom添加其它事件绑定
+  let hasDynamicKeys = false // 是否存在动态指令
+  let hasVnodeHook = false // 存在vnodehook，如onVnodeMounted
+  const dynamicPropNames: string[] = [] // 存储动态属性信息，v-bind,v-model,v-on:click事件
 
+  // directiveTransforms后，进一步分析指令：v-on、v-bind、v-model、v-html、v-text
+  // createObjectProperty/createCompoundExpression...(key, value)
   const analyzePatchFlag = ({ key, value }: Property) => {
     if (isStaticExp(key)) {
-      const name = key.content
-      const isEventHandler = isOn(name)
+      // 静态js节点
+      const name = key.content // （属性名/属性值/修饰符）节点名内容
+      const isEventHandler = isOn(name) // /^on[^a-z]/  on 事件
       if (
-        !isComponent &&
+        !isComponent && // 非组件节点，即dom节点
         isEventHandler &&
         // omit the flag for click handlers because hydration gives click
         // dedicated fast path.
         name.toLowerCase() !== 'onclick' &&
         // omit v-model handlers
-        name !== 'onUpdate:modelValue' &&
+        name !== 'onUpdate:modelValue' && // <input v-model="inputText" />，属性值prop
         // omit onVnodeXXX hooks
         !isReservedProp(name)
       ) {
+        // v-on:change、mouseover...
         hasHydrationEventBinding = true
       }
 
       if (isEventHandler && isReservedProp(name)) {
+        // ',key,ref,' +
+        // 'onVnodeBeforeMount,onVnodeMounted,' +
+        // 'onVnodeBeforeUpdate,onVnodeUpdated,' +
+        // 'onVnodeBeforeUnmount,onVnodeUnmounted'
         hasVnodeHook = true
       }
 
+      // v-on 指令，value type 默认 SIMPLE_EXPRESSION ConstantType =0，行内执行 COMPOUND_EXPRESSION ConstantType =0 ，修饰符 JS_CALL_EXPRESSION ConstantType = 0
+      // v-bind 指令，SIMPLE_EXPRESSION ConstantType =0
+      // v-model 指令，props: [属性名节点, 属性值节点, 修饰符节点]
+      //     属性名的value type: SIMPLE_EXPRESSION ConstantType =0，属性值的value: COMPOUND_EXPRESSION ConstantType =0, 修饰符的value：SIMPLE_EXPRESSION ConstantType =0
+      // v-html 指令，SIMPLE_EXPRESSION ConstantType =0
+      // v-text 指令，JS_CALL_EXPRESSION ConstantType = 0
       if (
         value.type === NodeTypes.JS_CACHE_EXPRESSION ||
         ((value.type === NodeTypes.SIMPLE_EXPRESSION ||
@@ -395,6 +410,9 @@ export function buildProps(
         // skip if the prop is a cached handler or has constant value
         return
       }
+
+      // 解析 v-on:click、 v-bind、v-model属性值
+
       if (name === 'ref') {
         hasRef = true
       } else if (name === 'class' && !isComponent) {
@@ -402,9 +420,13 @@ export function buildProps(
       } else if (name === 'style' && !isComponent) {
         hasStyleBinding = true
       } else if (name !== 'key' && !dynamicPropNames.includes(name)) {
+        //如 v-bind
+        //如 v-model，template: '<input v-model="textInput" />'，v-model属性值节点的prop，key.content='onUpdate:modelValue'
+        //如 v-on:click事件，<button @click="handleClick" />
         dynamicPropNames.push(name)
       }
     } else {
+      // 动态节点
       hasDynamicKeys = true
     }
   }
@@ -546,9 +568,9 @@ export function buildProps(
       //      cloak: noopDirectiveTransform,  // 解析 v-cloak，返回空属性列表 { props: [] }
       //      html: transformVHtml,  // 解析 v-html指令，属性值必须存在，覆盖子内容
       //      text: transformVText,  //  解析 v-text指令，需要有属性值，覆盖节点子内容
-      //      model: transformModel, // override compiler-core，进一步针对dom元素上的v-model，解析使用环境，如需在文本框中使用，并设置needRuntime，过滤一些只在组件上有意义的v-model属性节点信息
+      //      model: transformModel, // override compiler-core，进一步针对dom元素上的v-model，解析使用环境，如需在文本框中使用，并设置needRuntime，移除一些v-model属性名节点信息
       //      on: transformOn, // override compiler-core ，先执行compiler-core on 再处理指令修饰符modifiers，进一步转换属性值节点、属性名节点格式
-      //      show: transformShow // 解析v-show，必须设置属性值，返回空属性列表，设置needRuntime
+      //      show: transformShow // 解析v-show，必须设置属性值，返回空属性列表[]，设置needRuntime
       //    }
       const directiveTransform = context.directiveTransforms[name] // 指令属性名，如 if、show、或 bind、on、slot等指令名
       if (directiveTransform) {
@@ -559,9 +581,11 @@ export function buildProps(
         !ssr && props.forEach(analyzePatchFlag)
         properties.push(...props)
         if (needRuntime) {
-          // 如 v-model指令在dom元素上
+          // 如 v-model，指令使用环境type，如文本input V_MODEL_TEXT = Symbol(__DEV__ ? `vModelText` : ``)
+          // 如 v-show，V_SHOW = Symbol(__DEV__ ? `vShow` : ``)
           runtimeDirectives.push(prop)
           if (isSymbol(needRuntime)) {
+            // 开发环境下，唯一
             directiveImportMap.set(prop, needRuntime)
           }
         }
