@@ -351,7 +351,7 @@ export function buildProps(
 } {
   const { tag, loc: elementLoc } = node
   const isComponent = node.tagType === ElementTypes.COMPONENT // 是否是组件
-  let properties: ObjectExpression['properties'] = [] // 存储props对应的js结构对象：每个元素key、value的形式如 指令值形式
+  let properties: ObjectExpression['properties'] = [] // 存储props对应的js结构对象：每个元素key、value的形式如 指令值形式，存储静态属性节点、内置指令属性节点
   const mergeArgs: PropsExpression[] = []
   const runtimeDirectives: DirectiveNode[] = [] // 如运行时指令，如 v-model，v-show
 
@@ -579,6 +579,7 @@ export function buildProps(
         // props 为codegen转换后
         const { props, needRuntime } = directiveTransform(prop, node, context)
         !ssr && props.forEach(analyzePatchFlag)
+        // 保存属性props
         properties.push(...props)
         if (needRuntime) {
           // 如 v-model，指令使用环境type，如文本input V_MODEL_TEXT = Symbol(__DEV__ ? `vModelText` : ``)
