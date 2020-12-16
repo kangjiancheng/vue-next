@@ -50,10 +50,11 @@ export function getBaseTransformPreset(
       transformText
     ],
     // 默认 directiveTransforms
+    // transformElement阶段
     {
-      on: transformOn,
-      bind: transformBind,
-      model: transformModel
+      on: transformOn, // 转换指令属性名、校验属性值、属性值节点为codegen节点，校验属性值js语法
+      bind: transformBind, // 转换v-bind指令属性节点，如转换属性名为小驼峰、校验属性值
+      model: transformModel // 解析dom/组件节点上 v-model指令，返回 { props: [属性名节点、属性值节点、修饰符节点]}，如校验属性值节点不能为空，属性值内容格式必须是一个有效的js变量应用：$_abc[foo][bar] 或 $_abc.foo.bar
     }
   ]
 }
