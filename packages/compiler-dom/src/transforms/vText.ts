@@ -7,6 +7,10 @@ import {
 } from '@vue/compiler-core'
 import { createDOMCompilerError, DOMErrorCodes } from '../errors'
 
+// 解析 v-text指令，需要有属性值，覆盖节点子内容
+// <span v-text="msg"></span>
+// <!-- same as -->
+// <span>{{msg}}</span>
 export const transformVText: DirectiveTransform = (dir, node, context) => {
   const { exp, loc } = dir
   if (!exp) {
@@ -15,8 +19,9 @@ export const transformVText: DirectiveTransform = (dir, node, context) => {
     )
   }
   if (node.children.length) {
+    // 覆盖子内容
     context.onError(
-      createDOMCompilerError(DOMErrorCodes.X_V_TEXT_WITH_CHILDREN, loc)
+      createDOMCompilerError(DOMErrorCodes.X_V_TEXT_WITH_CHILDREN, loc) //v-text will override element children.
     )
     node.children.length = 0
   }
@@ -24,9 +29,9 @@ export const transformVText: DirectiveTransform = (dir, node, context) => {
     props: [
       createObjectProperty(
         createSimpleExpression(`textContent`, true),
-        exp
+        exp // 存在属性值
           ? createCallExpression(
-              context.helperString(TO_DISPLAY_STRING),
+              context.helperString(TO_DISPLAY_STRING), // Symbol(__DEV__ ? `toDisplayString` : ``)
               [exp],
               loc
             )

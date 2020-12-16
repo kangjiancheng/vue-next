@@ -78,7 +78,7 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
     return createTransformProps()
   }
 
-  // 属性名节点，如 <input v-model="inputText" placeholder="input text" />，此时 arg = undefined
+  // 属性名 参数内容，如 <input v-model="inputText" placeholder="input text" />，此时 arg = undefined
   const propName = arg ? arg : createSimpleExpression('modelValue', true)
 
   // 属性值

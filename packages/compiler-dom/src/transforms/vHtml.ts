@@ -5,6 +5,7 @@ import {
 } from '@vue/compiler-core'
 import { createDOMCompilerError, DOMErrorCodes } from '../errors'
 
+// 解析 v-html指令，属性值必须存在，覆盖子内容
 export const transformVHtml: DirectiveTransform = (dir, node, context) => {
   const { exp, loc } = dir
   if (!exp) {

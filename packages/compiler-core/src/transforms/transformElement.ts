@@ -455,6 +455,7 @@ export function buildProps(
       )
     } else {
       // directives 指令属性，合并去重，转换处理指令
+
       const { name, arg, exp, loc } = prop
       const isBind = name === 'bind'
       const isOn = name === 'on'
@@ -530,22 +531,24 @@ export function buildProps(
         continue
       }
 
+      // 解析指令
+
       // tronsfrom 处理指令插件
       // 默认 compiler-core: directiveTransforms
       //     {
       //       on: transformOn, // 转换指令属性名、校验属性值、属性值节点为codegen节点，校验属性值js语法
       //       bind: transformBind, // 转换v-bind指令属性节点，如转换属性名为小驼峰、校验属性值
-      //       model: transformModel // 转换 v-model指令，返回 { props: [属性名节点、属性值节点、修饰符节点]}，如校验属性值节点不能为空，属性值内容格式必须是一个有效的js变量应用：$_abc[foo][bar] 或 $_abc.foo.bar
+      //       model: transformModel // 解析dom/组件节点上 v-model指令，返回 { props: [属性名节点、属性值节点、修饰符节点]}，如校验属性值节点不能为空，属性值内容格式必须是一个有效的js变量应用：$_abc[foo][bar] 或 $_abc.foo.bar
       //     }
       // object.assign 覆盖上方默认
       // 用户 compiler-dom: DOMDirectiveTransforms
       //    {
-      //      cloak: noopDirectiveTransform,
-      //      html: transformVHtml,
-      //      text: transformVText,
-      //      model: transformModel, // override compiler-core
+      //      cloak: noopDirectiveTransform,  // 解析 v-cloak，返回空属性列表 { props: [] }
+      //      html: transformVHtml,  // 解析 v-html指令，属性值必须存在，覆盖子内容
+      //      text: transformVText,  //  解析 v-text指令，需要有属性值，覆盖节点子内容
+      //      model: transformModel, // override compiler-core，进一步针对dom元素上的v-model，解析使用环境，如需在文本框中使用，并设置needRuntime，过滤一些只在组件上有意义的v-model属性节点信息
       //      on: transformOn, // override compiler-core ，先执行compiler-core on 再处理指令修饰符modifiers，进一步转换属性值节点、属性名节点格式
-      //      show: transformShow
+      //      show: transformShow // 解析v-show，必须设置属性值，返回空属性列表，设置needRuntime
       //    }
       const directiveTransform = context.directiveTransforms[name] // 指令属性名，如 if、show、或 bind、on、slot等指令名
       if (directiveTransform) {
@@ -556,6 +559,7 @@ export function buildProps(
         !ssr && props.forEach(analyzePatchFlag)
         properties.push(...props)
         if (needRuntime) {
+          // 如 v-model指令在dom元素上
           runtimeDirectives.push(prop)
           if (isSymbol(needRuntime)) {
             directiveImportMap.set(prop, needRuntime)

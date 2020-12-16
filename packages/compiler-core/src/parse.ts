@@ -644,11 +644,13 @@ function parseTag(
   // 至此标签的模版光标解析结束
 
   /**
-   * 判断元素标签类型： ELEMENT、 COMPONENT、 SLOT、 TEMPLATE
+   * 非用户自定义元素时，需要判断元素标签类型： ELEMENT、 COMPONENT、 SLOT、 TEMPLATE
+   * 默认都是 ELEMENT
    */
   let tagType = ElementTypes.ELEMENT
   const options = context.options
   if (!context.inVPre && !options.isCustomElement(tag)) {
+    // 非用户自定义元素： NO = () => false
     // 判断是 v-is 指令，动态组件
     const hasVIs = props.some(
       p => p.type === NodeTypes.DIRECTIVE && p.name === 'is'

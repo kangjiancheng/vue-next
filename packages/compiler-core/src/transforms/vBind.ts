@@ -30,7 +30,7 @@ export const transformBind: DirectiveTransform = (dir, node, context) => {
     arg.content = `${arg.content} || ""` // 属性名表达参数空值处理
   }
 
-  // 属性名 格式小驼峰
+  // 修饰符 格式小驼峰
 
   // .prop is no longer necessary due to new patch behavior
   // .sync is replaced by v-model:arg
