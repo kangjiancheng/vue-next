@@ -602,7 +602,7 @@ export function createObjectExpression(
   }
 }
 
-// 创建一个js类型的属性节点
+// 转换元素节点的属性节点
 export function createObjectProperty(
   key: Property['key'] | string, // key
   value: Property['value'] // value

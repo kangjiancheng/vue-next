@@ -205,7 +205,7 @@ export const transformOn: DirectiveTransform = (
     // cache handlers so that it's always the same handler being passed down.
     // this avoids unnecessary re-renders when users use inline handlers on
     // components.
-    // 缓存解析，避免渲染时，重复解析
+    // 缓存解析，避免渲染时，重复解析，创建一个 JS_CACHE_EXPRESSION类型的value节点
     ret.props[0].value = context.cache(ret.props[0].value)
   }
 

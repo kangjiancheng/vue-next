@@ -17,7 +17,7 @@ import { CAMELIZE } from '../runtimeHelpers'
 export const transformBind: DirectiveTransform = (dir, node, context) => {
   // 指令值、修饰符、模版位置信息
   const { exp, modifiers, loc } = dir
-  const arg = dir.arg! // 指令属性名节点， ts 排除null/undefined
+  const arg = dir.arg! // 指令参数节点， ts 排除null/undefined
 
   // 属性名 内容处理
 
@@ -28,7 +28,7 @@ export const transformBind: DirectiveTransform = (dir, node, context) => {
   } else if (!arg.isStatic) {
     // 动态指令
     // 如 <button :[propName]='...'></button>，如 propName='data-xxx'，转换为 arg.content='propName || ""'
-    arg.content = `${arg.content} || ""` // 属性名表达参数空值处理
+    arg.content = `${arg.content} || ""` // 属性名表达参数
   }
 
   // 修饰符 格式小驼峰

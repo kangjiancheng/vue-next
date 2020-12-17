@@ -337,6 +337,7 @@ export type PropsExpression = ObjectExpression | CallExpression | ExpressionNode
 
 /**
  * 处理并转换元素属性列表，处理静态属性、静态/动态指令属性、合并去重属性
+ * prop节点经createObjectProperty(key, value) 转换
  */
 export function buildProps(
   node: ElementNode, // dom元素节点 或组件节点
@@ -351,11 +352,11 @@ export function buildProps(
 } {
   const { tag, loc: elementLoc } = node
   const isComponent = node.tagType === ElementTypes.COMPONENT // 是否是组件
-  let properties: ObjectExpression['properties'] = [] // 存储props对应的js结构对象：每个元素key、value的形式如 指令值形式，存储静态属性节点、内置指令属性节点
-  const mergeArgs: PropsExpression[] = []
+  let properties: ObjectExpression['properties'] = [] // createObjectProperty(key, value) 存储props中经过转换的属性值节点/属性名节点
+  const mergeArgs: PropsExpression[] = [] // 配合v-on/v-bind（无参数指令） 合并去重属性
   const runtimeDirectives: DirectiveNode[] = [] // 如运行时指令，如 v-model，v-show
 
-  // patchFlag analysis
+  // 依据相关信息，生成对应的patchFlag
   let patchFlag = 0
   let hasRef = false // 节点是否存在ref属性
   let hasClassBinding = false // 是否 v-bind:class
@@ -363,10 +364,11 @@ export function buildProps(
   let hasHydrationEventBinding = false // dom添加其它事件绑定
   let hasDynamicKeys = false // 是否存在动态指令
   let hasVnodeHook = false // 存在vnodehook，如onVnodeMounted
-  const dynamicPropNames: string[] = [] // 存储动态属性信息，v-bind,v-model,v-on:click事件
+  const dynamicPropNames: string[] = [] // 动态prop名列表：是静态指令节点，且非 ref、style、class，且该指令没有被设置缓存，指令范围：v-on、v-bind、v-model、v-html、v-text
 
-  // directiveTransforms后，进一步分析指令：v-on、v-bind、v-model、v-html、v-text
-  // createObjectProperty/createCompoundExpression...(key, value)
+  // 根据属性列表设置相应的 PatchFlag 值
+  // directiveTransforms后，进一步分析指令props属性节点：v-on、v-bind、v-model、v-html、v-text
+  // prop属性节点 createObjectProperty(key, value)
   const analyzePatchFlag = ({ key, value }: Property) => {
     if (isStaticExp(key)) {
       // 静态js节点
@@ -402,7 +404,7 @@ export function buildProps(
       // v-html 指令，SIMPLE_EXPRESSION ConstantType =0
       // v-text 指令，JS_CALL_EXPRESSION ConstantType = 0
       if (
-        value.type === NodeTypes.JS_CACHE_EXPRESSION ||
+        value.type === NodeTypes.JS_CACHE_EXPRESSION || // 解析v-on指令时，如果设置了shouldCache，则 context.cache() 会生成JS_CACHE_EXPRESSION
         ((value.type === NodeTypes.SIMPLE_EXPRESSION ||
           value.type === NodeTypes.COMPOUND_EXPRESSION) &&
           getConstantType(value, context) > 0)
@@ -420,6 +422,7 @@ export function buildProps(
       } else if (name === 'style' && !isComponent) {
         hasStyleBinding = true
       } else if (name !== 'key' && !dynamicPropNames.includes(name)) {
+        // 属性名 是动态的
         //如 v-bind
         //如 v-model，template: '<input v-model="textInput" />'，v-model属性值节点的prop，key.content='onUpdate:modelValue'
         //如 v-on:click事件，<button @click="handleClick" />
@@ -456,6 +459,7 @@ export function buildProps(
         continue
       }
 
+      // 保存属性列表
       properties.push(
         // 创建静态prop属性对应的js形式属性对象objProp: {type, loc, key, value}
         createObjectProperty(
@@ -518,19 +522,30 @@ export function buildProps(
         hasDynamicKeys = true // 存在动态绑定参数指令
         if (exp) {
           // 存在属性值节点
+
           if (properties.length) {
-            // TODO 属性合并去重属性
+            // 在v-bind/v-on之前如果存在属性，则需要先对之前的属性进行去重合并 dedupeProperties(properties)
+            // 如：<span class="red" :class="['blue', { green: true}]" v-bind="{ class: 'yellow'}"></span>
+            // 合并前两个属性：class="red"、:class="['blue', { green: true}]"
             mergeArgs.push(
+              // createObjectExpression {
+              //   type: NodeTypes.JS_OBJECT_EXPRESSION,
+              //   loc,
+              //   properties // 已经合并去重
+              // }
               createObjectExpression(dedupeProperties(properties), elementLoc)
             )
+            // 如果存在v-bind/v-on指令，之后都依据mergeArgs合并后的列表
             properties = []
           }
           if (isBind) {
-            // <button class="red" :class="'green'" v-bind="{class: 'blue'}"></button> 有3个prop，第3个bind的arg=undefined
-            mergeArgs.push(exp) // v-bind="{class: 'blue'}"
+            // 如：<span class="red" :class="['blue', { green: true}]" v-bind="{ class: 'yellow'}"></span>
+            // 直接保存v-bind属性值节点
+            mergeArgs.push(exp)
           } else {
             // v-on="obj" -> toHandlers(obj)
             // <button onclick="click1" @click="'click2'" v-on:click="'click3'"  v-on="{click: 'click4'}"></button>, parse ast时，会生成4个prop，1个name='onclick'， 3个 name='on'
+            // 此刻：1个 prop.key.content = 'onclick，2个 prop.key.content = 'onClick'，mergeArgs[0]有两个元素
             mergeArgs.push({
               // v-on="{click: 'click4'}"
               type: NodeTypes.JS_CALL_EXPRESSION, // codegen 执行表达式
@@ -579,7 +594,7 @@ export function buildProps(
         // props 为codegen转换后
         const { props, needRuntime } = directiveTransform(prop, node, context)
         !ssr && props.forEach(analyzePatchFlag)
-        // 保存属性props
+        // 保存属性props, prop为createObjectProperty(key, value)
         properties.push(...props)
         if (needRuntime) {
           // 如 v-model，指令使用环境type，如文本input V_MODEL_TEXT = Symbol(__DEV__ ? `vModelText` : ``)
@@ -598,46 +613,67 @@ export function buildProps(
     }
   }
 
+  // 转换后的属性列表节点
   let propsExpression: PropsExpression | undefined = undefined
 
   // has v-bind="object" or v-on="object", wrap with mergeProps
   if (mergeArgs.length) {
+    // mergeArgs 由 v-bind/v-on （无指令参数）过程创建
     if (properties.length) {
+      // 如：<span class="red" :class="['blue', { green: true}]" v-bind="{ class: 'yellow'}" style="color: blue" :style="{color: 'red'}"></span>
+      // 在处理完v-bind/v-on属性之后，需要继续处理之后可能存在的重复属性
       mergeArgs.push(
+        // createObjectExpression {
+        //   type: NodeTypes.JS_OBJECT_EXPRESSION,
+        //   loc,
+        //   properties // 已经合并去重 dedupeProperties(properties)
+        // }
         createObjectExpression(dedupeProperties(properties), elementLoc)
       )
     }
     if (mergeArgs.length > 1) {
+      // 创建执行合并props函数
       propsExpression = createCallExpression(
         context.helper(MERGE_PROPS),
         mergeArgs,
         elementLoc
       )
     } else {
+      // 元素节点属性 只有v-on或v-bind(无参数)一个属性，则不需要创建合并函数
+      // 如 <span v-bind="{class: 'red'}"></span>
       // single v-bind with nothing else - no need for a mergeProps call
-      propsExpression = mergeArgs[0]
+      propsExpression = mergeArgs[0] // 返回v-bind属性值节点、v-on createCallExpression节点
     }
   } else if (properties.length) {
+    // 不存在v-on/v-bind(无参数)属性，同样需要合并去重属性
+    // 如 <span class="red"></span>
     propsExpression = createObjectExpression(
       dedupeProperties(properties),
       elementLoc
     )
   }
 
-  // patchFlag analysis
+  // 生成指定的patchFlag，通过二进制运算
   if (hasDynamicKeys) {
+    // 存在动态指令参数 或 v-on/v-bind（无参数）指令
     patchFlag |= PatchFlags.FULL_PROPS
   } else {
+    // 否则，只针对部分patch
     if (hasClassBinding) {
+      // 存在class属性，非组件
       patchFlag |= PatchFlags.CLASS
     }
     if (hasStyleBinding) {
+      // 存在v-bind:style属性，非组件
       patchFlag |= PatchFlags.STYLE
     }
     if (dynamicPropNames.length) {
+      // 存在静态指令节点，且非 ref、style、class，且该指令没有被设置缓存
+      // 如：v-bind、 v-model、 v-on
       patchFlag |= PatchFlags.PROPS
     }
     if (hasHydrationEventBinding) {
+      // dom添加其它事件绑定 或 prop转换后以on开头的事件(如v-model)： 非组件且以on开头，但不包括click事件，非vnodehook事件
       patchFlag |= PatchFlags.HYDRATE_EVENTS
     }
   }
@@ -649,10 +685,10 @@ export function buildProps(
   }
 
   return {
-    props: propsExpression,
-    directives: runtimeDirectives,
+    props: propsExpression, // 属性列表节点， 已处理所有属性包括静态属性、静态/动态指令属性，并进行了合并去重处理
+    directives: runtimeDirectives, // 运行时的指令
     patchFlag,
-    dynamicPropNames
+    dynamicPropNames // 动态prop名列表：是静态指令节点，且非 ref、style、class，且该指令没有被设置缓存
   }
 }
 
@@ -666,19 +702,29 @@ export function buildProps(
 function dedupeProperties(properties: Property[]): Property[] {
   const knownProps: Map<string, Property> = new Map()
   const deduped: Property[] = [] // 合并去重后的属性列表
+
   for (let i = 0; i < properties.length; i++) {
-    const prop = properties[i] // js对象属性objProp: {type, loc, key, value}，key/value为属性名/属性值对应的js表达式对象：{type, loc, content, isStatic, constType }
+    // prop节点由createObjectProperty(key, value) 创建
+    const prop = properties[i]
+
     // dynamic keys are always allowed
-    // 属性名是动态key时，不需要合并去重
     if (prop.key.type === NodeTypes.COMPOUND_EXPRESSION || !prop.key.isStatic) {
       deduped.push(prop)
       continue
     }
-    const name = prop.key.content // 属性名，如 class、style
+
+    // <span class="red" :class="['blue', { green: true}]" v-bind="{ class: 'yellow'}"></span>
+    const name = prop.key.content
+
     const existing = knownProps.get(name) // 属性名js表达式对象
-    // 如：template=`<button class="red" onclick="handleClick" v-on="{class: 'blue', click: 'handlClick'}"></button>`
     if (existing) {
+      // 如果已经存在，则创建新属性值节点并合并属性值
       if (name === 'style' || name === 'class' || name.startsWith('on')) {
+        // 合并属性值内容：existing.value = {
+        //   type: NodeTypes.JS_ARRAY_EXPRESSION,
+        //   loc,
+        //   elements  // elements = [existing.value, prop.value]
+        // }
         mergeAsArray(existing, prop)
       }
       // unexpected duplicate, should have emitted error during parse
@@ -690,10 +736,22 @@ function dedupeProperties(properties: Property[]): Property[] {
   return deduped
 }
 
+/**
+ * 合并prop属性值节点
+ * @param existing 已处理的prop属性节点
+ * @param incoming 待处理的prop属性节点
+ */
 function mergeAsArray(existing: Property, incoming: Property) {
+  // <span class="red" :class="['blue', { green: true}]" v-bind="{ class: 'yellow'}"></span>
+  // 已处理 class="red"、待处理 :class="['blue', { green: true}]"
   if (existing.value.type === NodeTypes.JS_ARRAY_EXPRESSION) {
     existing.value.elements.push(incoming.value)
   } else {
+    // existing.value = {
+    //   type: NodeTypes.JS_ARRAY_EXPRESSION,
+    //   loc,
+    //   elements
+    // }
     existing.value = createArrayExpression(
       [existing.value, incoming.value],
       existing.loc

@@ -911,7 +911,7 @@ function parseAttribute(
         isStatic, // 静态/动态指令，在transform element 中查找组件 is指令判断是否静态时，会用到
         constType: isStatic
           ? ConstantTypes.CAN_STRINGIFY
-          : ConstantTypes.NOT_CONSTANT, // 动态指令时，参数不能设置 const 类型
+          : ConstantTypes.NOT_CONSTANT,
         loc // 属性名中指令内容 的开始位置与结束位置还有对应的模版内容，如：'@click'属性的指令内容即： 'click'字符串在解析模版中的位置信息
       }
     }
