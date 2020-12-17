@@ -338,6 +338,7 @@ export type PropsExpression = ObjectExpression | CallExpression | ExpressionNode
 /**
  * 处理并转换元素属性列表，处理静态属性、静态/动态指令属性、合并去重属性
  * prop节点经createObjectProperty(key, value) 转换
+ * 并设置节点的patchFlag
  */
 export function buildProps(
   node: ElementNode, // dom元素节点 或组件节点
