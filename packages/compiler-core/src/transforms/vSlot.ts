@@ -112,24 +112,25 @@ export type SlotFnBuilder = (
 
 const buildClientSlotFn: SlotFnBuilder = (props, children, loc) =>
   createFunctionExpression(
-    props,
-    children,
+    props, // 参数
+    children, // 返回值
     false /* newline */,
-    true /* isSlot */,
+    true /* isSlot */, // 创建slot 函数
     children.length ? children[0].loc : loc
   )
 
+// 解析节点上的 slot属性
 // Instead of being a DirectiveTransform, v-slot processing is called during
 // transformElement to build the slots object for a component.
 export function buildSlots(
   node: ElementNode,
   context: TransformContext,
-  buildSlotFn: SlotFnBuilder = buildClientSlotFn
+  buildSlotFn: SlotFnBuilder = buildClientSlotFn // 创建构建slot的函数节点
 ): {
   slots: SlotsExpression
-  hasDynamicSlots: boolean
+  hasDynamicSlots: boolean // 是否存在嵌套的slot，根据 trackSlotScopes 插件; 或 slot指令是动态，v-slot:[xxx]
 } {
-  context.helper(WITH_CTX)
+  context.helper(WITH_CTX) // WITH_CTX = Symbol(__DEV__ ? `withCtx` : ``)
 
   // 节点子元素列表
   const { children, loc } = node
@@ -141,9 +142,12 @@ export function buildSlots(
     children: TemplateChildNode[]
   ) => createObjectProperty(`default`, buildSlotFn(props, children, loc))
 
+  // 是否存在嵌套的slot，根据 trackSlotScopes 插件
   // If the slot is inside a v-for or another v-slot, force it to be dynamic
   // since it likely uses a scope variable.
   let hasDynamicSlots = context.scopes.vSlot > 0 || context.scopes.vFor > 0
+
+  // TODO: analyze - !__BROWSER__
   // with `prefixIdentifiers: true`, this can be further optimized to make
   // it dynamic only when the slot actually uses the scope variables.
   if (!__BROWSER__ && !context.ssr && context.prefixIdentifiers) {
@@ -151,17 +155,21 @@ export function buildSlots(
   }
 
   // 1. Check for slot with slotProps on component itself.
-  //    <Comp v-slot="{ prop }"/>
+  //    <Comp v-slot="{ prop }"/> 或 <Comp #header="propObj" />，注意：v-slot 缩写 #，ast解析时，把 # 解析为 slot
   const onComponentSlot = findDir(node, 'slot', true)
   if (onComponentSlot) {
-    const { arg, exp } = onComponentSlot
+    // 解析 slot 指令
+
+    const { arg, exp } = onComponentSlot // arg指令参数：插槽名；exp 插槽prop
     if (arg && !isStaticExp(arg)) {
+      // 动态slot，<Comp v-slot:[xxx]="{ prop }" />
       hasDynamicSlots = true
     }
     slotsProperties.push(
+      // 创建slot prop属性节点
       createObjectProperty(
-        arg || createSimpleExpression('default', true),
-        buildSlotFn(exp, children, loc)
+        arg || createSimpleExpression('default', true), // key: 插件默认插槽
+        buildSlotFn(exp, children, loc) // value: 创建一个slot执行函数节点
       )
     )
   }

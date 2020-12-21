@@ -675,11 +675,12 @@ export function createCallExpression<T extends CallExpression['callee']>(
   } as any
 }
 
+// 如 构建slot函数节点
 export function createFunctionExpression(
   params: FunctionExpression['params'],
   returns: FunctionExpression['returns'] = undefined,
   newline: boolean = false,
-  isSlot: boolean = false,
+  isSlot: boolean = false, // 创建slot 函数
   loc: SourceLocation = locStub
 ): FunctionExpression {
   return {

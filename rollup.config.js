@@ -172,8 +172,8 @@ function createConfig(format, output, plugins = []) {
         isBundlerESMBuild,
         isBrowserESMBuild,
         // isBrowserBuild?
-        (isGlobalBuild || isBrowserESMBuild || isBundlerESMBuild) &&
-          !packageOptions.enableNonBrowserBranches,
+        (isGlobalBuild || isBrowserESMBuild || isBundlerESMBuild) && // global、浏览器es6 esm-browser、构建构建 esm-bundler
+          !packageOptions.enableNonBrowserBranches, // 非浏览器包：template-explorer、compiler-sfc
         isGlobalBuild,
         isNodeBuild
       ),
