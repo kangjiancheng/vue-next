@@ -69,6 +69,7 @@ export const helperNameMap: any = {
   [IS_REF]: `isRef`
 }
 
+// 如添加compile-dom下的runtimeHelpers
 export function registerRuntimeHelpers(helpers: any) {
   Object.getOwnPropertySymbols(helpers).forEach(s => {
     helperNameMap[s] = helpers[s]

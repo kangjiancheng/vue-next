@@ -38,7 +38,7 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
   // 解析 ElementTypes.ELEMENT 标签类型上的v-model指令，获取input上的使用情况
 
   if (dir.arg) {
-    // 不支持 动态指令参数，如： v-model:someArg='inputValue'
+    // 不支持指令参数，如： v-model:someArg='inputValue'
     context.onError(
       createDOMCompilerError(
         DOMErrorCodes.X_V_MODEL_ARG_ON_ELEMENT, // v-model argument is not supported on plain elements.

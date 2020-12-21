@@ -30,8 +30,10 @@ export const parserOptions: ParserOptions = {
 
   isBuiltInComponent: (tag: string): symbol | undefined => {
     if (isBuiltInType(tag, `Transition`)) {
+      // transition 或 Transition
       return TRANSITION
     } else if (isBuiltInType(tag, `TransitionGroup`)) {
+      // transition-group 或 TransitionGroup
       return TRANSITION_GROUP
     }
   },

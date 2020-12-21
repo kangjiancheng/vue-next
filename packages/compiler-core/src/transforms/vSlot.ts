@@ -131,6 +131,7 @@ export function buildSlots(
 } {
   context.helper(WITH_CTX)
 
+  // 节点子元素列表
   const { children, loc } = node
   const slotsProperties: Property[] = []
   const dynamicSlots: (ConditionalExpression | CallExpression)[] = []

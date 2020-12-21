@@ -42,7 +42,7 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
     return createTransformProps() // { props: [] }
   }
 
-  const rawExp = exp.loc.source // 属性值节点内容源码
+  const rawExp = exp.loc.source // 指令节点值源码
   const expString =
     exp.type === NodeTypes.SIMPLE_EXPRESSION ? exp.content : rawExp
 
@@ -78,10 +78,11 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
     return createTransformProps()
   }
 
-  // 属性名 参数内容，如 <input v-model="inputText" placeholder="input text" />，此时 arg = undefined
+  // 属性名 指令参数内容，如 <input v-model:xxx="inputText" placeholder="input text" />， arg为xxx节点
+  // dom 环境下，v-model不该有arg
   const propName = arg ? arg : createSimpleExpression('modelValue', true)
 
-  // 属性值
+  // 属性值节点 key
 
   const eventName = arg
     ? isStaticExp(arg) // arg不存在时 false
@@ -89,7 +90,8 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
       : createCompoundExpression(['"onUpdate:" + ', arg]) // 动态指令， v-model:[someProp]
     : `onUpdate:modelValue` // 空指令参数 <input v-model="inputText" />， 默认： eventName = 'onUpdate:modelValue'
 
-  // 属性值赋值
+  // 属性值节点 value
+
   let assignmentExp: ExpressionNode
   const eventArg = context.isTS ? `($event: any)` : `$event` // isTS，编译为TS格式代码
   if (maybeRef) {
@@ -151,6 +153,7 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
       .map(m => (isSimpleIdentifier(m) ? m : JSON.stringify(m)) + `: true`)
       .join(`, `)
 
+    // 修饰符节点 key
     const modifiersKey = arg
       ? isStaticExp(arg) // 存在指令参数
         ? `${arg.content}Modifiers` // 静态指令
@@ -160,7 +163,7 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
     props.push(
       // 修饰符节点 添加修饰符属性codegen节点
       createObjectProperty(
-        modifiersKey, // 修饰符 属性名
+        modifiersKey,
         createSimpleExpression(
           // 修饰符 属性值
           `{ ${modifiers} }`,

@@ -184,6 +184,7 @@ export function createTransformContext(
       return name
     },
     helperString(name) {
+      // 获取对应的运行时函数名
       return `_${helperNameMap[context.helper(name)]}`
     },
     replaceNode(node) {

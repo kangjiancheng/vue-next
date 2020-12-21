@@ -99,7 +99,7 @@ export const isIntegerKey = (key: unknown) =>
 
 export const isReservedProp = /*#__PURE__*/ makeMap(
   // the leading comma is intentional so empty string "" is also included
-  // 禁止 空key: ''
+  // 也禁止 空key: ''
   ',key,ref,' +
     'onVnodeBeforeMount,onVnodeMounted,' +
     'onVnodeBeforeUpdate,onVnodeUpdated,' +
@@ -125,9 +125,12 @@ export const camelize = cacheStringFunction(
   }
 )
 
+// 匹配非单词边界中的大写字母
 const hyphenateRE = /\B([A-Z])/g
 /**
  * @private
+ *
+ * 连字符分割：匹配非单词边界的第一个大写字母，在其前边加上 - ，如 'MyComponentABc' 结果为： 'my-componentabc'
  */
 export const hyphenate = cacheStringFunction((str: string) =>
   str.replace(hyphenateRE, '-$1').toLowerCase()

@@ -40,7 +40,7 @@ export const isStaticExp = (p: JSChildNode): p is SimpleExpressionNode =>
   p.type === NodeTypes.SIMPLE_EXPRESSION && p.isStatic
 
 export const isBuiltInType = (tag: string, expected: string): boolean =>
-  tag === expected || tag === hyphenate(expected)
+  tag === expected || tag === hyphenate(expected) // 匹配非单词边界的第一个大写字母，在其前边加上 - , 并小写后面所有，如 'MyComponentABc' 结果为： 'my-componentabc'
 
 export function isCoreComponent(tag: string): symbol | void {
   if (isBuiltInType(tag, 'Teleport')) {
@@ -48,7 +48,8 @@ export function isCoreComponent(tag: string): symbol | void {
   } else if (isBuiltInType(tag, 'Suspense')) {
     return SUSPENSE
   } else if (isBuiltInType(tag, 'KeepAlive')) {
-    return KEEP_ALIVE
+    // tag： 'KeepAlive' 或 'keep-alive'
+    return KEEP_ALIVE // Symbol(__DEV__ ? `KeepAlive` : ``)
   } else if (isBuiltInType(tag, 'BaseTransition')) {
     return BASE_TRANSITION
   }
@@ -150,7 +151,7 @@ export function assert(condition: boolean, msg?: string) {
   }
 }
 
-// find directive 查找匹配的指令，返回对应的指令属性节点
+// 查找指令属性节点
 export function findDir(
   node: ElementNode,
   name: string | RegExp, // 指令名
@@ -170,7 +171,7 @@ export function findDir(
   }
 }
 
-// 返回节点标签指定属性名或指令名的属性节点
+// 查找属性节点：静态属性、静态bind属性
 export function findProp(
   node: ElementNode,
   name: string, // 静态dom属性名 或 bind的某个指令名
@@ -299,7 +300,7 @@ export function toValidAssetId(
   name: string,
   type: 'component' | 'directive'
 ): string {
-  return `_${type}_${name.replace(/[^\w]/g, '_')}` // name = 'hello  world' 转换为 '_component_hello__world'
+  return `_${type}_${name.replace(/[^\w]/g, '_')}` // 非[A-Za-z0-9_]， 如 name = 'hello  world' 转换为 '_component_hello__world'
 }
 
 // Check if a node contains expressions that reference current context scope ids

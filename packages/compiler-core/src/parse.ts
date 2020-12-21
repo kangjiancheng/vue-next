@@ -661,7 +661,7 @@ function parseTag(
       if (!options.isNativeTag(tag)) tagType = ElementTypes.COMPONENT // 如果不是html 标签，则判定为组件
     } else if (
       hasVIs ||
-      isCoreComponent(tag) || // 内置组件：Teleport、Suspense、KeepAlive、BaseTransition
+      isCoreComponent(tag) || // 内置组件：Teleport、Suspense、KeepAlive、BaseTransition  (可以大小写横线)
       (options.isBuiltInComponent && options.isBuiltInComponent(tag)) || // 内置组件 Transition、TransitionGroup
       /^[A-Z]/.test(tag) || // 大写标签默认被识别为组件
       tag === 'component'

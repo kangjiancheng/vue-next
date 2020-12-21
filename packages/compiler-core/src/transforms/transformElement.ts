@@ -85,9 +85,11 @@ export const transformElement: NodeTransform = (node, context) => {
     // VNodeCall interface.
     // 该transform插件主要是为了创建 codegenNode 信息，为了在vnode时调用
 
+    // 解析is指令
+
     // 解析组件类型，返回相关内容，如动态is组件的 vnode patch方法、内置组件名、区分用户自定义组件名
     const vnodeTag = isComponent
-      ? resolveComponentType(node as ComponentNode, context)
+      ? resolveComponentType(node as ComponentNode, context) // 解析is指令
       : `"${tag}"` // dom 元素标签名
     // 是否是动态组件
     const isDynamicComponent =
@@ -116,17 +118,23 @@ export const transformElement: NodeTransform = (node, context) => {
           // #938: elements with dynamic keys should be forced into blocks
           findProp(node, 'key', true))) //  绑定了key指令， ':key'，非静态属性
 
-    // props 节点属性列表：dom属性、指令属性
+    // props 节点属性列表
+
     if (props.length > 0) {
+      // 解析属性列表：静态属性、指令属性
+      // 指令属性：v-bind、v-on、v-model、v-html、v-text、v-show、v-cloak、用户自定义指令; 跳过解析：slot、once、is、ssr下的on
+      // 属性去重合并，转换key/value
+      // 设置node的 patchFlag
       const propsBuildResult = buildProps(node, context)
-      vnodeProps = propsBuildResult.props
-      patchFlag = propsBuildResult.patchFlag
-      dynamicPropNames = propsBuildResult.dynamicPropNames
-      const directives = propsBuildResult.directives
+
+      vnodeProps = propsBuildResult.props // 解析后的props列表
+      patchFlag = propsBuildResult.patchFlag // 根据相关prop信息，进行二进制运算设置patchFlag
+      dynamicPropNames = propsBuildResult.dynamicPropNames // 静态prop key的name列表
+      const directives = propsBuildResult.directives // 需要在运行时，重新处理的：v-model、v-show、用户自定义指令
       vnodeDirectives =
         directives && directives.length
           ? (createArrayExpression(
-              directives.map(dir => buildDirectiveArgs(dir, context))
+              directives.map(dir => buildDirectiveArgs(dir, context)) // 进一步解析 buildProps() 中的 runtimeDirectives：v-show、v-model、用户自定义指令；处理要运行的指令的参数、值、修饰符
             ) as DirectiveArguments)
           : undefined
     }
@@ -134,18 +142,24 @@ export const transformElement: NodeTransform = (node, context) => {
     // children
     if (node.children.length > 0) {
       if (vnodeTag === KEEP_ALIVE) {
+        // Symbol(__DEV__ ? `KeepAlive` : ``)
+        // 节点tag标签为 'keep-alive' 或 'KeepAlive'
+
         // Although a built-in component, we compile KeepAlive with raw children
         // instead of slot functions so that it can be used inside Transition
-        // or other Transition-wrapping HOCs.
+        // or other Transition-wrapping HOCs. // 高阶组件
         // To ensure correct updates with block optimizations, we need to:
         // 1. Force keep-alive into a block. This avoids its children being
         //    collected by a parent block.
-        shouldUseBlock = true
+        shouldUseBlock = true // 转换为block包裹，避免受到父节点影响
+
         // 2. Force keep-alive to always be updated, since it uses raw children.
-        patchFlag |= PatchFlags.DYNAMIC_SLOTS
+        patchFlag |= PatchFlags.DYNAMIC_SLOTS // 加上动态slot
         if (__DEV__ && node.children.length > 1) {
+          // 一个子元素/组件
           context.onError(
             createCompilerError(ErrorCodes.X_KEEP_ALIVE_INVALID_CHILDREN, {
+              // <KeepAlive> expects exactly one child component.
               start: node.children[0].loc.start,
               end: node.children[node.children.length - 1].loc.end,
               source: ''
@@ -154,9 +168,13 @@ export const transformElement: NodeTransform = (node, context) => {
         }
       }
 
+      // 处理slot
+
+      // 组件，非 teleport、keep-alive组件（不是真实的组件）
       const shouldBuildAsSlots =
-        isComponent &&
+        isComponent && // 组件类型的节点
         // Teleport is not a real component and has dedicated runtime handling
+        // Teleport、keep-alive 均不是一个真实的组件，且已经有专门的运行时处理逻辑
         vnodeTag !== TELEPORT &&
         // explained above.
         vnodeTag !== KEEP_ALIVE
@@ -230,7 +248,7 @@ export const transformElement: NodeTransform = (node, context) => {
   }
 }
 
-// 解析组件类型，返回相关内容，如动态is组件的 vnode patch方法、内置组件名、区分用户自定义组件名
+// 解析组件类型、解析v-is指令：返回相关内容，如动态is组件的 vnode patch方法、内置组件名、区分用户自定义组件名
 export function resolveComponentType(
   node: ComponentNode, // 当前节点 即组件节点
   context: TransformContext, // transform 上下文
@@ -239,14 +257,15 @@ export function resolveComponentType(
   const { tag } = node // 组件标签名
 
   // 1. dynamic component
+  // 动态组件，存在is属性节点
   const isProp =
-    node.tag === 'component' ? findProp(node, 'is') : findDir(node, 'is') // 查找 is 指令，并返回is指令属性节点; findProp 查找属性静态或bind静态属性； findDir查找指令，不是静态dom
+    node.tag === 'component' ? findProp(node, 'is') : findDir(node, 'is') // findProp 查找属性静态 is、bind静态属性 :is 。 findDir查找指令 v-is 。
   if (isProp) {
     // 注意： 如 template = '<HelloWorld is="Welcome" />' 则不符合此条件
     const exp =
       isProp.type === NodeTypes.ATTRIBUTE // dom静态is属性，如 '<component is="HelloWorld" />'
         ? isProp.value && createSimpleExpression(isProp.value.content, true) // 返回属性值相应的表达式对象
-        : isProp.exp // 指令形式is属性，如 '<component :is="HelloWorld" />'
+        : isProp.exp // 指令形式is属性，如 '<component :is="HelloWorld"/>' 或 v-is
     if (exp) {
       // 创建 is属性值表达式对应的组件patch方法：Symbol(`resolveDynamicComponent`)
       return createCallExpression(context.helper(RESOLVE_DYNAMIC_COMPONENT), [
@@ -256,13 +275,13 @@ export function resolveComponentType(
   }
 
   // 2. built-in components (Teleport, Transition, KeepAlive, Suspense...)
-  // 如果是内置组件，直接返回
+  // 如果是内置组件，直接返回，如核心组件tag：keep-alive 或 KeepAlive；或内置组件 transition
   const builtIn = isCoreComponent(tag) || context.isBuiltInComponent(tag)
   if (builtIn) {
     // built-ins are simply fallthroughs / have special handling during ssr
     // so we don't need to import their runtime equivalents
     if (!ssr) context.helper(builtIn)
-    return builtIn
+    return builtIn // 内置属性返回相应的KEEP_ALIVE= Symbol(__DEV__ ? `KeepAlive` : ``)
   }
 
   // TODO: analyze cfs
@@ -289,7 +308,7 @@ export function resolveComponentType(
   //将用户自定义组件加入上下文
   context.helper(RESOLVE_COMPONENT)
   context.components.add(tag)
-  return toValidAssetId(tag, `component`) // 如 tag = 'hello  world' 转换为 '_component_hello__world'
+  return toValidAssetId(tag, `component`) // 设置组件id信息 如 tag = 'hello  world' 转换为 '_component_hello__world'
 }
 
 // TODO: analyze cfs
@@ -336,9 +355,10 @@ function resolveSetupReference(name: string, context: TransformContext) {
 export type PropsExpression = ObjectExpression | CallExpression | ExpressionNode
 
 /**
- * 处理并转换元素属性列表，处理静态属性、静态/动态指令属性、合并去重属性
- * prop节点经createObjectProperty(key, value) 转换
- * 并设置节点的patchFlag
+ * 解析ast节点的属性列表props
+ * 解析指令：v-bind、v-on、v-model、v-html、v-text、v-show、v-cloak、用户自定义指令; 跳过解析：slot、once、is、ssr下的on
+ * 处理静态属性、静态/动态指令属性、合并去重属性
+ * prop节点经createObjectProperty(key, value) 转换、并设置元素node节点的patchFlag
  */
 export function buildProps(
   node: ElementNode, // dom元素节点 或组件节点
@@ -423,10 +443,8 @@ export function buildProps(
       } else if (name === 'style' && !isComponent) {
         hasStyleBinding = true
       } else if (name !== 'key' && !dynamicPropNames.includes(name)) {
-        // 属性名 是动态的
-        //如 v-bind
-        //如 v-model，template: '<input v-model="textInput" />'，v-model属性值节点的prop，key.content='onUpdate:modelValue'
-        //如 v-on:click事件，<button @click="handleClick" />
+        // 静态指令属性名列表
+        // 注意： v-model，template: '<input v-model="textInput" />'，v-model属性值节点的prop，key.content='onUpdate:modelValue'
         dynamicPropNames.push(name)
       }
     } else {
@@ -503,9 +521,9 @@ export function buildProps(
         continue
       }
       // skip v-is and :is on <component>
-      // 跳过is指令，如 template: <component :is='HelloWold' />
+      // 跳过is指令，如 template: <component :is='HelloWold' />，is 指令在resolveComponentType中解析
       if (
-        name === 'is' ||
+        name === 'is' || // v-is
         (isBind && tag === 'component' && isBindKey(arg, 'is')) // 绑定静态is属性，如 <component :is='HelloWold' />
       ) {
         continue
@@ -515,6 +533,8 @@ export function buildProps(
       if (isOn && ssr) {
         continue
       }
+
+      // 跳过解析：slot、once、is、ssr下的on
 
       // 分析 v-on 与 v-bind 指令，v-on/v-bind 不带指令名表达式参数
       // 如 template: '<button v-bind="{name: 'btn-name', class: 'btn-class'}" v-on="{ mousedown: handleDown, mouseup: handleUp }"></button>'
@@ -569,9 +589,10 @@ export function buildProps(
         continue
       }
 
-      // 解析指令
+      // 解析指令：v-bind、v-on、v-model、v-html、v-text、v-show、v-cloak、用户自定义指令
 
-      // tronsfrom 处理指令插件
+      // tronsfrom 处理指令插件：directiveTransforms
+
       // 默认 compiler-core: directiveTransforms
       //     {
       //       on: transformOn, // 转换指令属性名、校验属性值、属性值节点为codegen节点，校验属性值js语法
@@ -669,7 +690,7 @@ export function buildProps(
       patchFlag |= PatchFlags.STYLE
     }
     if (dynamicPropNames.length) {
-      // 存在静态指令节点，且非 ref、style、class，且该指令没有被设置缓存
+      // 静态指令属性名列表，且非 ref、style、class，且该指令没有被设置缓存
       // 如：v-bind、 v-model、 v-on
       patchFlag |= PatchFlags.PROPS
     }
@@ -689,7 +710,7 @@ export function buildProps(
     props: propsExpression, // 属性列表节点， 已处理所有属性包括静态属性、静态/动态指令属性，并进行了合并去重处理
     directives: runtimeDirectives, // 运行时的指令
     patchFlag,
-    dynamicPropNames // 动态prop名列表：是静态指令节点，且非 ref、style、class，且该指令没有被设置缓存
+    dynamicPropNames // 静态指令属性名列表，且非 ref、style、class，且该指令没有被设置缓存
   }
 }
 
@@ -760,43 +781,57 @@ function mergeAsArray(existing: Property, incoming: Property) {
   }
 }
 
+// 进一步解析 buildProps() 中的 runtimeDirectives：v-show、v-model、用户自定义指令
+// 解析指令参数、指令值、指令修饰符
 function buildDirectiveArgs(
-  dir: DirectiveNode,
+  dir: DirectiveNode, // 解析后的指令节点：key/value
   context: TransformContext
 ): ArrayExpression {
   const dirArgs: ArrayExpression['elements'] = []
+
+  // 内置的运行时指令
   const runtime = directiveImportMap.get(dir)
+
   if (runtime) {
+    // 在 buildProps 中设置directiveImportMap：v-show、v-model 相关指令的运行函数
+    // 如 v-model，指令使用环境type，如文本input V_MODEL_TEXT = Symbol(__DEV__ ? `vModelText` : ``)
     // built-in directive with runtime
-    dirArgs.push(context.helperString(runtime))
+    dirArgs.push(context.helperString(runtime)) // 保存对应的运行时函数名，如 '_vModelText'
   } else {
+    // 用户自定义指令
     // user directive.
     // see if we have directives exposed via <script setup>
     const fromSetup = !__BROWSER__ && resolveSetupReference(dir.name, context)
     if (fromSetup) {
+      // TODO: analyze cfs
       dirArgs.push(fromSetup)
     } else {
       // inject statement for resolving directive
-      context.helper(RESOLVE_DIRECTIVE)
-      context.directives.add(dir.name)
-      dirArgs.push(toValidAssetId(dir.name, `directive`))
+      context.helper(RESOLVE_DIRECTIVE) // Symbol(__DEV__ ? `resolveDirective` : ``)
+      context.directives.add(dir.name) // 添加指令名
+      dirArgs.push(toValidAssetId(dir.name, `directive`)) // [^A-Za-z0-9_]， 如自定义： v-click-out，name='click-out' 转换为 '_directive_click_out'
     }
   }
   const { loc } = dir
-  if (dir.exp) dirArgs.push(dir.exp)
+  if (dir.exp) dirArgs.push(dir.exp) // 指令值节点表达式
   if (dir.arg) {
     if (!dir.exp) {
-      dirArgs.push(`void 0`)
+      dirArgs.push(`void 0`) // 没有值，如用户定义的指令
     }
-    dirArgs.push(dir.arg)
+    dirArgs.push(dir.arg) // 指令参数节点
   }
   if (Object.keys(dir.modifiers).length) {
+    // 修饰符节点
     if (!dir.arg) {
+      // 无参数节点
       if (!dir.exp) {
+        // 无属性值：'<span v-click-me></span>'
         dirArgs.push(`void 0`)
       }
+      // 如 '<span v-click-me="true"></span>'
       dirArgs.push(`void 0`)
     }
+    // 创建指令对应的修饰符列表节点
     const trueExpression = createSimpleExpression(`true`, false, loc)
     dirArgs.push(
       createObjectExpression(
@@ -807,6 +842,7 @@ function buildDirectiveArgs(
       )
     )
   }
+  // 返回指令参数节点
   return createArrayExpression(dirArgs, dir.loc)
 }
 
