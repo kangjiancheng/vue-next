@@ -251,11 +251,13 @@ export function processFor(
   }
 }
 
+// v-for 指令值内容匹配
 const forAliasRE = /([\s\S]*?)\s+(?:in|of)\s+([\s\S]*)/
+
 // This regex doesn't cover the case if key or index aliases have destructuring,
 // but those do not make sense in the first place, so this works in practice.
-const forIteratorRE = /,([^,\}\]]*)(?:,([^,\}\]]*))?$/
-const stripParensRE = /^\(|\)$/g
+const forIteratorRE = /,([^,\}\]]*)(?:,([^,\}\]]*))?$/ // in/of 左侧内容，如 v-for="item in items" 或 v-for="(value, key, index) in object" 匹配其中 ', key, index'
+const stripParensRE = /^\(|\)$/g // v-for= "(...) in/of ..." 左侧括号
 
 export interface ForParseResult {
   source: ExpressionNode
@@ -264,27 +266,48 @@ export interface ForParseResult {
   index: ExpressionNode | undefined
 }
 
+// 解析 v-for 表达式值，分析 in/of 左侧/右侧内容，并设置左侧的key、value、index节点信息，同时也进行了js语法校验
 export function parseForExpression(
-  input: SimpleExpressionNode,
+  input: SimpleExpressionNode, // v-for指令节点的表达式值
   context: TransformContext
 ): ForParseResult | undefined {
   const loc = input.loc
   const exp = input.content
+
+  // 匹配for规则： /([\s\S]*?)\s+(?:in|of)\s+([\s\S]*)/
+  //
+  // 其中 \s 匹配任何空白字符、 \S 匹配任何非空白字符，如：
+  //
+  //    <div v-for="item in items"></div>
+  //    <div v-for="(item, index) in items"></div>
+  //    <div v-for="(item, index) in [item1, item2...]"></div>
+  //    <div v-for="(value, key) in object"></div>
+  //    <div v-for="(value, key, index) in object"></div>
+
   const inMatch = exp.match(forAliasRE)
   if (!inMatch) return
 
+  // 如 <div v-for="(item, index) in items"></div>
+  // LHS: 表示 in/of 左边内容 （正则捕获组1） '(item, index)'
+  // RHS: 表示 in/of 右边内容 （正则捕获组2） 'items'
+  // 均不包括in/of相邻的空白
   const [, LHS, RHS] = inMatch
 
   const result: ForParseResult = {
+    // 右侧目标
     source: createAliasExpression(
+      // 创建一个表达式节点，且带单独针对in/of左侧内容的光标位置信息
       loc,
-      RHS.trim(),
-      exp.indexOf(RHS, LHS.length)
+      RHS.trim(), // 遍历目标
+      exp.indexOf(RHS, LHS.length) // 遍历目标的位置，跳过in/of左边内容
     ),
-    value: undefined,
-    key: undefined,
-    index: undefined
+    // 左侧目标
+    value: undefined, // createAliasExpression(loc, valueContent, trimmedOffset)
+    key: undefined, // createAliasExpression(loc, keyContent, keyOffset)
+    index: undefined // createAliasExpression
   }
+
+  // TODO: analyze - !__BROWSER__
   if (!__BROWSER__ && context.prefixIdentifiers) {
     result.source = processExpression(
       result.source as SimpleExpressionNode,
@@ -292,53 +315,74 @@ export function parseForExpression(
     )
   }
   if (__DEV__ && __BROWSER__) {
+    // 检查for in/of 右侧遍历目标的js语法是否规范
     validateBrowserExpression(result.source as SimpleExpressionNode, context)
   }
 
-  let valueContent = LHS.trim()
-    .replace(stripParensRE, '')
-    .trim()
-  const trimmedOffset = LHS.indexOf(valueContent)
+  // 解析 in/of 左边内容: value, key, index  以逗号 ',' 分隔
 
-  const iteratorMatch = valueContent.match(forIteratorRE)
+  // 如 <div v-for="(value, key, index) in object"></div> 其中的 'value, key, index'
+  // value
+  let valueContent = LHS.trim()
+    .replace(stripParensRE, '') // 去掉括号 /^\(|\)$/g
+    .trim()
+  const trimmedOffset = LHS.indexOf(valueContent) // 内容位置
+
+  const iteratorMatch = valueContent.match(forIteratorRE) // 匹配展示的值内容，如 <div v-for="(value, key, index) in object"></div> 其中的 'value, key, index'
   if (iteratorMatch) {
+    // 如 <div v-for="(value, key, index) in object"></div> 其中的 'value, key, index'
+    // match[0] 为 匹配到的内容 ', key, index'
+    // match[1] 为 key
+    // match[2] 为 index
+
+    // 解析 v-for value， 保留其中 'value' 内容部分
     valueContent = valueContent.replace(forIteratorRE, '').trim()
 
+    // 解析 v-for key
     const keyContent = iteratorMatch[1].trim()
     let keyOffset: number | undefined
     if (keyContent) {
-      keyOffset = exp.indexOf(keyContent, trimmedOffset + valueContent.length)
-      result.key = createAliasExpression(loc, keyContent, keyOffset)
+      keyOffset = exp.indexOf(keyContent, trimmedOffset + valueContent.length) // key 相对左侧偏移量
+      result.key = createAliasExpression(loc, keyContent, keyOffset) // 创建 key 节点
+
+      // TODO: analyze - !__BROWSER__
       if (!__BROWSER__ && context.prefixIdentifiers) {
         result.key = processExpression(result.key, context, true)
       }
       if (__DEV__ && __BROWSER__) {
+        // 校验 key js 语法
         validateBrowserExpression(
           result.key as SimpleExpressionNode,
           context,
-          true
+          true // js 语法验证 result.key.content 是否以参数，还是函数体
         )
       }
     }
 
+    // 解析 v-for index
     if (iteratorMatch[2]) {
       const indexContent = iteratorMatch[2].trim()
 
       if (indexContent) {
+        // 创建 index 节点
         result.index = createAliasExpression(
           loc,
           indexContent,
           exp.indexOf(
             indexContent,
             result.key
-              ? keyOffset! + keyContent.length
-              : trimmedOffset + valueContent.length
+              ? keyOffset! + keyContent.length // 存在 key，如 <div v-for="(value, key, index) in object"></div>
+              : trimmedOffset + valueContent.length // 不存在key，如 <div v-for="(value, , index) in object"></div>
           )
         )
+
+        // TODO: analyze - !__BROWSER__
         if (!__BROWSER__ && context.prefixIdentifiers) {
           result.index = processExpression(result.index, context, true)
         }
+
         if (__DEV__ && __BROWSER__) {
+          // 校验 index js 语法
           validateBrowserExpression(
             result.index as SimpleExpressionNode,
             context,
@@ -349,12 +393,18 @@ export function parseForExpression(
     }
   }
 
+  // 解析 value
+
   if (valueContent) {
     result.value = createAliasExpression(loc, valueContent, trimmedOffset)
+
+    // TODO: analyze - !__BROWSER__
     if (!__BROWSER__ && context.prefixIdentifiers) {
       result.value = processExpression(result.value, context, true)
     }
+
     if (__DEV__ && __BROWSER__) {
+      // 验证 value js 语法
       validateBrowserExpression(
         result.value as SimpleExpressionNode,
         context,
@@ -366,15 +416,16 @@ export function parseForExpression(
   return result
 }
 
+// 创建一个表达式节点，且带单独的光标位置信息
 function createAliasExpression(
-  range: SourceLocation,
-  content: string,
-  offset: number
+  range: SourceLocation, // 节点在模版中的位置信息
+  content: string, // 当前内容
+  offset: number // 偏移量
 ): SimpleExpressionNode {
   return createSimpleExpression(
     content,
     false,
-    getInnerRange(range, offset, content.length)
+    getInnerRange(range, offset, content.length) // 获取content在ast模版中的光标位置
   )
 }
 

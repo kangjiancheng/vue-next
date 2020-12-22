@@ -26,9 +26,9 @@ const stripStringRE = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*\$\{|
  * doesn't prefix expressions.
  */
 export function validateBrowserExpression(
-  node: SimpleExpressionNode, // 如 v-on 的指令属性值 节点
+  node: SimpleExpressionNode, // 如 v-on 的指令属性值 节点 或 v-for="item in [item1, item2]" v-for 中in/of的右侧遍历对象节点 '[item1, item2]'
   context: TransformContext,
-  asParams = false, // node.content 是否作为参数，还是函数体
+  asParams = false, // js 语法验证 node.content 是否以参数，还是函数体
   asRawStatements = false // 指令值 多行执行语句，存在 ';'，如 '<button @click="count++; total-"></button>'
 ) {
   const exp = node.content // 指令值内容
@@ -42,7 +42,7 @@ export function validateBrowserExpression(
   try {
     // 创建一个函数，最后一个参数为函数体，前边为函数参数
     new Function(
-      asRawStatements // 存在分隔符 ';' 或 多行执行语句
+      asRawStatements // 如 v-on中存在分隔符 ';' 或 多行执行语句
         ? ` ${exp} ` // 如  <button @click="if (count > 1) count++; "></button> ，则exp='if (count > 1) count++;'，结果为 (function anonymous ) { if (count > 1) count++; })
         : `return ${asParams ? `(${exp}) => {}` : `(${exp})`}` // 如 '<button @click="count++"></button>'， exp = node.content='count++' 转换后为 (function anonymous() { return (count++) })
     )

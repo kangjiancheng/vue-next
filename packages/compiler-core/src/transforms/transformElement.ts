@@ -180,6 +180,9 @@ export const transformElement: NodeTransform = (node, context) => {
         vnodeTag !== KEEP_ALIVE
 
       if (shouldBuildAsSlots) {
+        // 解析节点上的 slot属性，并分析子元素中带有v-slot的template节点、分析其中的v-for指令
+        // slots: slot模版节点信息，如：当前节点的v-slot; 当前节点下如果都没有slot模版，保存所有子元素为默认slot; 不存在默认slot模版时，保存非slot模版子元素为默认slot; 保存slotFlag相关信息； 动态的v-if/v-for的 dynamicSlots
+        // hasDynamicSlots 动态的slot: 是否存在嵌套的slot，根据 trackSlotScopes 插件; 或 slot指令是动态，v-slot:[xxx]；或template标签模版上带有v-slot 且 还带有 v-if或 v-for
         const { slots, hasDynamicSlots } = buildSlots(node, context)
         vnodeChildren = slots
         if (hasDynamicSlots) {

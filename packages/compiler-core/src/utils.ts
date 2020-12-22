@@ -76,10 +76,11 @@ export const isMemberExpression = (path: string): boolean => {
   return memberExpRE.test(path.trim())
 }
 
+// 获取节点中的内部某段内容的光标信息
 export function getInnerRange(
-  loc: SourceLocation,
-  offset: number,
-  length?: number
+  loc: SourceLocation, // 此节点在模版中的位置信息
+  offset: number, // 某段内容 的偏移量
+  length?: number // 某段内容 的长度
 ): SourceLocation {
   __TEST__ && assert(offset <= loc.source.length)
   const source = loc.source.substr(offset, length)

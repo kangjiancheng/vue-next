@@ -658,7 +658,7 @@ function parseTag(
 
     // 判断是组件元素
     if (options.isNativeTag && !hasVIs) {
-      if (!options.isNativeTag(tag)) tagType = ElementTypes.COMPONENT // 如果不是html 标签，则判定为组件
+      if (!options.isNativeTag(tag)) tagType = ElementTypes.COMPONENT // 如果不是html 标签，则判定为组件，注意 template标签属于html
     } else if (
       hasVIs ||
       isCoreComponent(tag) || // 内置组件：Teleport、Suspense、KeepAlive、BaseTransition  (可以大小写横线)
@@ -675,11 +675,11 @@ function parseTag(
       tag === 'template' &&
       props.some(p => {
         return (
-          p.type === NodeTypes.DIRECTIVE && isSpecialTemplateDirective(p.name) // 存在指定指令列表则 元素为template类型
+          p.type === NodeTypes.DIRECTIVE && isSpecialTemplateDirective(p.name) // 存在指定指令列表if、else、else-if、for、slot，则 元素为template类型
         )
       })
     ) {
-      tagType = ElementTypes.TEMPLATE // 元素类型为模版template，且必须带有指定指令列表
+      tagType = ElementTypes.TEMPLATE // 元素类型为模版template，且必须带有指定指令列表，注意: 不带指定指令的template标签是html标签 即 ElementTypes.ELEMENT
     }
   }
 

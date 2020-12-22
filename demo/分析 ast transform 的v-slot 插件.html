@@ -9,7 +9,9 @@
 <body>
 
   <div id="app">
-    <slot-demo v-slot:test>v-slot test</slot-demo>
+    <slot-demo>
+      <template v-for="(value, , index)  in ['default', 'header']" v-slot:[i]>{{ i }}</template>
+    </slot-demo>
   </div>
 
   <!-- 开发模式 -->
@@ -28,7 +30,12 @@
     // 定义局部组件
     const SlotDemo = {
       name: 'slot-demo',
-      template: '<div class="slot-demo"><slot name="test"></slot></div>',
+      template: `
+        <div class="slot-demo">
+          <div class="default-slot"><slot></slot></div>
+          <div class="header-slot"><slot name="header"></slot></div>
+        </div>
+      `,
       data () {
         return {
           title: '这是局部组件',
