@@ -62,7 +62,7 @@ import { BindingTypes } from '../options'
 const directiveImportMap = new WeakMap<DirectiveNode, symbol>()
 
 // generate a JavaScript AST for this element's codegen
-// 为当前节点的ast生成对应的codegen 编译结果
+// 解析元素节点的prop属性列表、slot指令信息、patchFlag信息、用户定义的指令等，为当前节点的ast生成对应的codegen vnode执行函数节点
 export const transformElement: NodeTransform = (node, context) => {
   if (
     !(
@@ -96,11 +96,20 @@ export const transformElement: NodeTransform = (node, context) => {
       isObject(vnodeTag) && vnodeTag.callee === RESOLVE_DYNAMIC_COMPONENT
 
     let vnodeProps: VNodeCall['props']
+
+    // 保存节点的子元素列表：
+    //    节点是非KeepAlive/TELEPORT的组件，转换为slot节点列表；
+    //    或 节点非组件或为keep-alive，且唯一子节点是动态文本或普通文本；
+    //    或 节点非组件或为keep-alive，且唯一子节点不是动态文本和普通文本；
+    //    或 节点非组件有多个子节点；
+    //    或 节点是TELEPORT组件
     let vnodeChildren: VNodeCall['children']
+
     let vnodePatchFlag: VNodeCall['patchFlag']
+
     let patchFlag: number = 0
     let vnodeDynamicProps: VNodeCall['dynamicProps']
-    let dynamicPropNames: string[] | undefined
+    let dynamicPropNames: string[] | undefined // 静态prop key的name列表
     let vnodeDirectives: VNodeCall['directives']
 
     let shouldUseBlock =
@@ -116,7 +125,7 @@ export const transformElement: NodeTransform = (node, context) => {
         (tag === 'svg' || // web规范的一些特殊标签
           tag === 'foreignObject' ||
           // #938: elements with dynamic keys should be forced into blocks
-          findProp(node, 'key', true))) //  绑定了key指令， ':key'，非静态属性
+          findProp(node, 'key', true))) //  绑定了key指令： ':key'，非静态属性
 
     // props 节点属性列表
 
@@ -129,7 +138,7 @@ export const transformElement: NodeTransform = (node, context) => {
 
       vnodeProps = propsBuildResult.props // 解析后的props列表
       patchFlag = propsBuildResult.patchFlag // 根据相关prop信息，进行二进制运算设置patchFlag
-      dynamicPropNames = propsBuildResult.dynamicPropNames // 静态prop key的name列表
+      dynamicPropNames = propsBuildResult.dynamicPropNames // 静态prop key的name列表，且非 ref、style、class，且该指令没有被设置缓存，如：v-bind、 v-model、 v-on
       const directives = propsBuildResult.directives // 需要在运行时，重新处理的：v-model、v-show、用户自定义指令
       vnodeDirectives =
         directives && directives.length
@@ -168,7 +177,7 @@ export const transformElement: NodeTransform = (node, context) => {
         }
       }
 
-      // 处理slot
+      // 处理 v-slot、设定 vnodeChildren
 
       // 组件，非 teleport、keep-alive组件（不是真实的组件）
       const shouldBuildAsSlots =
@@ -182,70 +191,92 @@ export const transformElement: NodeTransform = (node, context) => {
       if (shouldBuildAsSlots) {
         // 解析节点上的 v-slot，并分析子元素template中的v-slot指令、分析其中的v-if/v-for指令
         // slots: slot模版节点信息，如：当前节点的v-slot; 当前节点下不存在为slot模版子元素，保存所有子元素为默认slot; 不存在默认slot模版时，保存非slot模版子元素为默认slot; 保存slotFlag相关信息；动态的v-if/v-for的 dynamicSlots
-        // hasDynamicSlots 动态的slot: 是否存在嵌套的slot，根据 trackSlotScopes 插件; 或 slot指令是动态，v-slot:[xxx]；或template标签模版上带有v-slot 且 还带有 v-if或 v-for
+        // hasDynamicSlots 动态的slot: 是否存在嵌套的v-slot指令，根据transform trackSlotScopes 插件; 或 slot指令是动态，v-slot:[xxx]；或子元素template标签模版上带有v-slot 且 还带有 v-if或 v-for
         const { slots, hasDynamicSlots } = buildSlots(node, context)
 
         vnodeChildren = slots
         if (hasDynamicSlots) {
+          // 设置 vnode diff patchFlag
           patchFlag |= PatchFlags.DYNAMIC_SLOTS
         }
       } else if (node.children.length === 1 && vnodeTag !== TELEPORT) {
+        // 如果节点是非组件或是组件且为KEEP_ALIVE，且只有一个子节点
+        // 如 template: '<keep-alive><div>...</div></keep-alive>'
+
         const child = node.children[0]
         const type = child.type
         // check for dynamic text children
+        // 子节点是动态文本，即存在插值 {{ }}
         const hasDynamicTextChild =
           type === NodeTypes.INTERPOLATION ||
-          type === NodeTypes.COMPOUND_EXPRESSION
+          type === NodeTypes.COMPOUND_EXPRESSION // 既有普通文本，也有插值文本，由transformText生成
         if (
           hasDynamicTextChild &&
-          getConstantType(child, context) === ConstantTypes.NOT_CONSTANT
+          getConstantType(child, context) === ConstantTypes.NOT_CONSTANT // 判断子元素包括混合连续列表里的子文本元素，是否有文本节点为NOT_CONSTANT类型
         ) {
+          // 设置 patchflag
           patchFlag |= PatchFlags.TEXT
         }
         // pass directly if the only child is a text node
         // (plain / interpolation / expression)
         if (hasDynamicTextChild || type === NodeTypes.TEXT) {
+          // 节点非组件或为keep-alive，且唯一子节点是动态文本或普通文本
+          // 如 template: '<div>123 {{ someValue }}</div>'
           vnodeChildren = child as TemplateTextChildNode
         } else {
-          vnodeChildren = node.children
+          // 节点非组件或为keep-alive，且唯一子节点不是动态文本和普通文本
+          // 如 template: '<keep-alive><div>...</div></keep-alive>'
+          vnodeChildren = node.children // 保存当前子节点
         }
       } else {
+        // 如果节点是非组件且有多个子节点；或节点是TELEPORT组件
         vnodeChildren = node.children
       }
     }
 
+    // 添加patchFlag 开发帮助提示
+
     // patchFlag & dynamicPropNames
     if (patchFlag !== 0) {
+      // 存在需要针对性的patch vnode diff
       if (__DEV__) {
         if (patchFlag < 0) {
+          // HOISTED = -1
+          // BAIL = -2
           // special flags (negative and mutually exclusive)
           vnodePatchFlag = patchFlag + ` /* ${PatchFlagNames[patchFlag]} */`
         } else {
           // bitwise flags
           const flagNames = Object.keys(PatchFlagNames)
             .map(Number)
-            .filter(n => n > 0 && patchFlag & n)
-            .map(n => PatchFlagNames[n])
+            .filter(n => n > 0 && patchFlag & n) // 进行 按位与 操作， 取出对应的patchFlag值 （patchFlag 初始为0，通过 按位或 变更）
+            .map(n => PatchFlagNames[n]) // 对应的名字
             .join(`, `)
-          vnodePatchFlag = patchFlag + ` /* ${flagNames} */`
+          vnodePatchFlag = patchFlag + ` /* ${flagNames} */` // 记录需要进行vnode diff 的patchflag和其开发帮助的文本信息
         }
       } else {
+        // 非开发环境下，只需要数字提示
         vnodePatchFlag = String(patchFlag)
       }
       if (dynamicPropNames && dynamicPropNames.length) {
+        // 字符串拼接 静态prop(经解析过的指令节点)的属性名，不包括 ref、class、style
+        // 如，template: '<input ref="input" v-model="textInput" v-bind:class="'red'" :placeholder="'请输入'" />'
+        // 则，dynamicPropNames: ["onUpdate:modelValue", "placeholder"]
+        // 返回结果： '["onUpdate:modelValue", "placeholder"]'
         vnodeDynamicProps = stringifyDynamicPropNames(dynamicPropNames)
       }
     }
 
+    // 创建vnode的运行函数
     node.codegenNode = createVNodeCall(
       context,
-      vnodeTag,
-      vnodeProps,
-      vnodeChildren,
-      vnodePatchFlag,
-      vnodeDynamicProps,
-      vnodeDirectives,
-      !!shouldUseBlock,
+      vnodeTag, // 解析后的标签名：自定义 <hello-world> => _component_hello_world 、内置 transition => Symbol(__DEV__ ? `Transition` : ``)
+      vnodeProps, // 节点props属性列表， 已处理所有属性包括静态属性、静态/动态指令属性，并进行了合并去重处理；且均转换为相应节点格式
+      vnodeChildren, // 节点的子元素列表，如果是组件（非teleport/keep-alive） 则需要转换为slot节点列表，并替换原先子元素列表；或则直接保存对应的子元素列表
+      vnodePatchFlag, // patchFlag和及其描述文本信息: patchFlag + ` /* ${flagNames} */`
+      vnodeDynamicProps, // 静态指令prop的属性名(解析过的指令节点)，字符串拼接格式： 如: template: '<input v-model="textInput" :placeholder="'请输入'" />'  对应的结果为： '["onUpdate:modelValue", "placeholder"]'
+      vnodeDirectives, // 需要在运行时，重新处理的指令，如：v-model、v-show、用户自定义指令
+      !!shouldUseBlock, // 动态is组件或TELEPORT或SUSPENSE；或是非组件当是特殊标签如svg，普通元素绑定了动态 :key； 或是 keep-alive组件
       false /* disableTracking */,
       node.loc
     )
@@ -850,6 +881,10 @@ function buildDirectiveArgs(
   return createArrayExpression(dirArgs, dir.loc)
 }
 
+// 字符串拼接 静态prop(经解析过的指令节点)的属性名，不包括 ref、class、style
+// 如，template: '<input ref="input" v-model="textInput" v-bind:class="'red'" :placeholder="'请输入'" />'
+// 则，dynamicPropNames: ["onUpdate:modelValue", "placeholder"]
+// 返回结果： '["onUpdate:modelValue", "placeholder"]'
 function stringifyDynamicPropNames(props: string[]): string {
   let propsNamesString = `[`
   for (let i = 0, l = props.length; i < l; i++) {

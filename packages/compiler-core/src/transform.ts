@@ -288,7 +288,11 @@ export function createTransformContext(
  */
 export function transform(root: RootNode, options: TransformOptions) {
   const context = createTransformContext(root, options)
+
+  // 遍历解析ast上的每个节点，运用专门的nodeTransform解析插件和指令分析插件去解析所有ast节点;
+  // 如：文本节点合并、删减style/script节点等，解析节点的props属性列表、解析指令、调整节点格式，生成patchFlag等，为相关节点生成相应的codegen和转换js格式节点
   traverseNode(root, context)
+
   if (options.hoistStatic) {
     hoistStatic(root, context)
   }
@@ -403,8 +407,8 @@ export function traverseNode(
           ? [transformExpression]
           : []),
        transformSlotOutlet, // 处理slot元素组件
-       transformElement,  // 处理html元素节点或组件节点，codegenNode
-       trackSlotScopes, // 处理并跟踪节点的slot指令，通过计数来识别出是否内嵌了slot指令
+       transformElement,  // 处理html元素节点或组件节点，解析元素节点的prop属性列表（on/bind/model/text/html/show/is）、v-slot指令信息与默认/具名插槽转换、patchFlag信息、用户定义的指令等，为当前节点的ast生成对应的codegen vnode执行函数节点
+       trackSlotScopes, // 处理并跟踪节点的slot指令，通过计数来识别出是否内嵌了slot指令，为transformElement检测是否定义了动态slot，创建对应的patchflag信息
        transformText, // 处理 连续子文本节点/表达式节点 的合并；或 如果即包含文本又包含其它类型节点时，则需要设置该子节点文本/表达式的diff patch codegenNode 信息，同时也重新定义当前节点的子节点配置
        ignoreSideEffectTags, // 删减style/script元素节点
        ...[

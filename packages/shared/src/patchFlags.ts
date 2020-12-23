@@ -20,6 +20,8 @@
 // 可以在 packages/runtime-core/src/renderer.ts 查看这些标志是怎么在diff时被处理的
 export const enum PatchFlags {
   // 当检测到节点 文本内容 变更 (children fast path)
+  // 节点的子文本内容存在动态文本 即插值 {{}}
+  // 在 transformElement 中赋值
   TEXT = 1,
 
   // 当检测到节点 类名 变更
@@ -61,7 +63,8 @@ export const enum PatchFlags {
   // Indicates a component with dynamic slots (e.g. slot that references a v-for
   // iterated value, or dynamic slot names).
   // Components with this flag are always force updated.
-  // 具有动态插槽的组件，如 v-for渲染的插槽或动态的插槽names
+  // 动态的slot: keep-alive节点； 或 节点是否存在嵌套的slot，根据transform trackSlotScopes 插件; 或 slot指令是动态，v-slot:[xxx]；或子元素template标签模版上带有v-slot 且 还带有 v-if或 v-for
+  // 设定时机：在编译transform阶段的 transformElement中，解析v-slot指令 buildSlots()
   // 当在diff带有这个标记时，会被强制更新
   DYNAMIC_SLOTS = 1 << 10,
 

@@ -542,6 +542,7 @@ export function createRoot(
   }
 }
 
+// // 创建vnode的运行函数
 export function createVNodeCall(
   context: TransformContext | null,
   tag: VNodeCall['tag'],

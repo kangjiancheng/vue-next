@@ -9,9 +9,7 @@
 <body>
 
   <div id="app">
-    <slot-demo>
-      <template v-for="(value, , index)  in ['default', 'header']" v-slot:[i]>{{ i }}</template>
-    </slot-demo>
+    <input ref="input" v-model="textInput" v-bind:class="'red'" :placeholder="'请输入'" />
   </div>
 
   <!-- 开发模式 -->
