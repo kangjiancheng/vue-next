@@ -116,7 +116,7 @@ const cacheStringFunction = <T extends (str: string) => string>(fn: T): T => {
 
 const camelizeRE = /-(\w)/g
 /**
- * 小驼峰：camelCase
+ * 转换为小驼峰：camelCase
  * @private
  */
 export const camelize = cacheStringFunction(

@@ -4,14 +4,15 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Vue 3 调试 - 分析 ast transform 的 v-slot 插件</title>
+  <title>Vue 3 调试 - 分析 ast transform 的标签slot 插件</title>
 </head>
 <body>
 
   <div id="app">
-    <slot-demo>
-      <template v-for="(value, , index)  in ['default', 'header']" v-slot:[i]>{{ i }}</template>
-    </slot-demo>
+    <div class="hello-world">
+      <slot :text="'this is default'"></slot>
+      <slot name="header"></slot>
+    </div>
   </div>
 
   <!-- 开发模式 -->

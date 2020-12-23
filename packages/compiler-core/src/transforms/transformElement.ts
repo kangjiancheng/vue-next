@@ -396,9 +396,9 @@ export type PropsExpression = ObjectExpression | CallExpression | ExpressionNode
  * prop节点经createObjectProperty(key, value) 转换、并设置元素node节点的patchFlag
  */
 export function buildProps(
-  node: ElementNode, // dom元素节点 或组件节点
+  node: ElementNode, // dom元素节点 或组件节点 或 slot标签节点（在transformSlot中）
   context: TransformContext,
-  props: ElementNode['props'] = node.props, // 属性列表
+  props: ElementNode['props'] = node.props, // 节点上的属性列表
   ssr = false
 ): {
   props: PropsExpression | undefined
@@ -541,7 +541,7 @@ export function buildProps(
       const isOn = name === 'on'
 
       // skip v-slot - it is handled by its dedicated transform.
-      // slot 有专门的transform插件处理
+      // v-slot 有专门的transform插件处理：在transformElement中解析 buildSlots()，由directivesSlot插件解析
       if (name === 'slot') {
         if (!isComponent) {
           context.onError(

@@ -381,7 +381,7 @@ export function traverseChildren(
 }
 
 /**
- * 遍历每个ast语法树节点，同时运用nodeTransforms中的每个插件就行调整当前节点信息
+ * 遍历解析每个ast语法树节点，同时运用nodeTransforms/directiveTransform中的每个插件就解析与转换节点信息格式，得到对应的codegen
  * @param node
  * @param context
  */
@@ -400,13 +400,13 @@ export function traverseNode(
        ...(!__BROWSER__ && prefixIdentifiers
         ? [
         // order is important
-          trackVForSlotScopes,
-          transformExpression
+          trackVForSlotScopes, // 注意 非浏览器
+          transformExpression // 注意 非浏览器
         ]
         : __BROWSER__ && __DEV__
           ? [transformExpression]
           : []),
-       transformSlotOutlet, // 处理slot元素组件
+       transformSlotOutlet, // 处理slot元素组件：name属性、其它属性prop节点列表（处理方式buildProps，同transformElements）
        transformElement,  // 处理html元素节点或组件节点，解析元素节点的prop属性列表（on/bind/model/text/html/show/is）、v-slot指令信息与默认/具名插槽转换、patchFlag信息、用户定义的指令等，为当前节点的ast生成对应的codegen vnode执行函数节点
        trackSlotScopes, // 处理并跟踪节点的slot指令，通过计数来识别出是否内嵌了slot指令，为transformElement检测是否定义了动态slot，创建对应的patchflag信息
        transformText, // 处理 连续子文本节点/表达式节点 的合并；或 如果即包含文本又包含其它类型节点时，则需要设置该子节点文本/表达式的diff patch codegenNode 信息，同时也重新定义当前节点的子节点配置
