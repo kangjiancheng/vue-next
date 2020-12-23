@@ -482,17 +482,17 @@ export function traverseNode(
 }
 
 /**
- * 插件指令的transform转换插件
+ * 统一格式创建指令的的transform插件，如 v-for、v-if
  * @param name 指令名
  * @param fn 指令回调
  */
 export function createStructuralDirectiveTransform(
-  name: string | RegExp,
+  name: string | RegExp, // 指令名，如 'for'、/^(if|else|else-if)$/
   fn: StructuralDirectiveTransform // 指令回调
 ): NodeTransform {
   const matches = isString(name)
-    ? (n: string) => n === name
-    : (n: string) => name.test(n)
+    ? (n: string) => n === name // 如 v-for 的 'for'
+    : (n: string) => name.test(n) // 如 v-if 的 /^(if|else|else-if)$/
 
   return (node, context) => {
     if (node.type === NodeTypes.ELEMENT) {
@@ -511,10 +511,13 @@ export function createStructuralDirectiveTransform(
           // traverse itself in case it moves the node around
           props.splice(i, 1)
           i--
+
           const onExit = fn(node, prop, context)
           if (onExit) exitFns.push(onExit)
         }
       }
+
+      // 返回transform插件
       return exitFns
     }
   }
