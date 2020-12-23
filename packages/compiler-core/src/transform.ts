@@ -400,11 +400,11 @@ export function traverseNode(
        ...(!__BROWSER__ && prefixIdentifiers
         ? [
         // order is important
-          trackVForSlotScopes, // 注意 非浏览器
+          trackVForSlotScopes, // 注意 非浏览器，如node下cfs
           transformExpression // 注意 非浏览器
         ]
         : __BROWSER__ && __DEV__
-          ? [transformExpression] // 解析插值表达式/NodeTypes.ELEMENT节点表达式
+          ? [transformExpression] // 处理插值表达式内容，指令属性节点值表达式，排除v-for和v-on:arg属性节点，在浏览器中只需要节点验证表达式值的js语法规则：validateBrowserExpression
           : []),
        transformSlotOutlet, // 处理slot元素组件：name属性、其它属性prop节点列表（处理方式buildProps，同transformElements）
        transformElement,  // 处理html元素节点或组件节点，解析元素节点的prop属性列表（on/bind/model/text/html/show/is）、v-slot指令信息与默认/具名插槽转换、patchFlag信息、用户定义的指令等，为当前节点的ast生成对应的codegen vnode执行函数节点

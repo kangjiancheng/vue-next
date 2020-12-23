@@ -42,7 +42,9 @@ import { BindingTypes } from '../options'
 
 const isLiteralWhitelisted = /*#__PURE__*/ makeMap('true,false,null,this')
 
-// 处理插值表达式内容，指令属性节点值表达式
+// 处理插值表达式内容，指令属性节点值表达式，排除v-for和v-on:arg属性节点
+// 在浏览器中只需要节点验证表达式的语法规则：validateBrowserExpression
+
 export const transformExpression: NodeTransform = (node, context) => {
   if (node.type === NodeTypes.INTERPOLATION) {
     node.content = processExpression(
@@ -50,27 +52,36 @@ export const transformExpression: NodeTransform = (node, context) => {
       context
     )
   } else if (node.type === NodeTypes.ELEMENT) {
+    // 解析在element元素上的指令
     // handle directives on element
     for (let i = 0; i < node.props.length; i++) {
       const dir = node.props[i]
+
       // do not process for v-on & v-for since they are special handled
+      // v-for 表达式值有专门处理: parseForExpression
       if (dir.type === NodeTypes.DIRECTIVE && dir.name !== 'for') {
         const exp = dir.exp
         const arg = dir.arg
+
+        // 处理指令值节点
+
         // do not process exp if this is v-on:arg - we need special handling
         // for wrapping inline statements.
         if (
           exp &&
-          exp.type === NodeTypes.SIMPLE_EXPRESSION &&
-          !(dir.name === 'on' && arg)
+          exp.type === NodeTypes.SIMPLE_EXPRESSION && // 基本表达式值
+          !(dir.name === 'on' && arg) // 不处理 v-on:arg 对应的表达式值，有专门插件处理
         ) {
           dir.exp = processExpression(
-            exp,
+            exp, // 表达式值
             context,
             // slot args must be processed as function params
-            dir.name === 'slot'
+            dir.name === 'slot' // slot指令的参数内容 作为一个函数的参数来校验格式
           )
         }
+
+        // 处理参数节点（动态指令）
+
         if (arg && arg.type === NodeTypes.SIMPLE_EXPRESSION && !arg.isStatic) {
           dir.arg = processExpression(arg, context)
         }
@@ -106,6 +117,8 @@ export function processExpression(
     }
     return node
   }
+
+  // TODO: analyze - !__BROWSER__ (cfs)
 
   if (!context.prefixIdentifiers || !node.content.trim()) {
     return node

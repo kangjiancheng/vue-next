@@ -21,6 +21,8 @@ const prohibitedKeywordRE = new RegExp(
 const stripStringRE = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*\$\{|\}(?:[^`\\]|\\.)*`|`(?:[^`\\]|\\.)*`/g
 
 /**
+ * 校验在浏览器环境下，表达式值的js语法是否规范：指令值表达式、动态指令参数表达式、插值表达式等
+ *
  * Validate a non-prefixed expression.
  * This is only called when using the in-browser runtime compiler since it
  * doesn't prefix expressions.
@@ -28,8 +30,8 @@ const stripStringRE = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*\$\{|
 export function validateBrowserExpression(
   node: SimpleExpressionNode, // 如 v-on 的指令属性值 节点 或 v-for="item in [item1, item2]" v-for 中in/of的右侧遍历对象节点 '[item1, item2]'
   context: TransformContext,
-  asParams = false, // js 语法验证 node.content 是否以参数，还是函数体
-  asRawStatements = false // 指令值 多行执行语句，存在 ';'，如 '<button @click="count++; total-"></button>'
+  asParams = false, // 校验表达式语法方式：作为函数参数或函数体，将表达式放在函数参数位置还是函数体位置
+  asRawStatements = false // 是否作为原始的js语句，即不用return，如 '<button @click="count++; total-"></button>'
 ) {
   const exp = node.content // 指令值内容
 
