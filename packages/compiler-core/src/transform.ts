@@ -404,7 +404,7 @@ export function traverseNode(
           transformExpression // 注意 非浏览器
         ]
         : __BROWSER__ && __DEV__
-          ? [transformExpression]
+          ? [transformExpression] // 解析插值表达式/NodeTypes.ELEMENT节点表达式
           : []),
        transformSlotOutlet, // 处理slot元素组件：name属性、其它属性prop节点列表（处理方式buildProps，同transformElements）
        transformElement,  // 处理html元素节点或组件节点，解析元素节点的prop属性列表（on/bind/model/text/html/show/is）、v-slot指令信息与默认/具名插槽转换、patchFlag信息、用户定义的指令等，为当前节点的ast生成对应的codegen vnode执行函数节点
@@ -421,6 +421,8 @@ export function traverseNode(
   const exitFns = [] // 存储 nodeTransforms 的回调函数
   // 获取当前节点所对应的插件列表
   for (let i = 0; i < nodeTransforms.length; i++) {
+    // ast根节点 type: NodeTypes.ROOT，初次会运行transformText
+
     const onExit = nodeTransforms[i](node, context)
     if (onExit) {
       // 当前节点是否添加对应的转换插件，注意添加插件后，先执行最新添加的插件，即由后向前执行
@@ -470,8 +472,8 @@ export function traverseNode(
       break
   }
 
-  // 结束 transforms，处理节点的transform之后的回调函数 列表，依次从后往前执行
-  // exit transforms
+  // 先处理子节点的transform
+  // 节点的 transforms 插件列表，依次从后往前执行，即后添加先执行
   context.currentNode = node
   let i = exitFns.length
   while (i--) {

@@ -9,10 +9,7 @@
 <body>
 
   <div id="app">
-    <div class="hello-world">
-      <slot :text="'this is default'"></slot>
-      <slot name="header"></slot>
-    </div>
+    <div  :class="'red'"> hello {{ userName }} ! </div>
   </div>
 
   <!-- 开发模式 -->
