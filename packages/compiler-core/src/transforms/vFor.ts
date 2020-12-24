@@ -44,16 +44,28 @@ import { processExpression } from './transformExpression'
 import { validateBrowserExpression } from '../validateExpression'
 import { PatchFlags, PatchFlagNames } from '@vue/shared'
 
+// 先通过结构化创建插件
 export const transformFor = createStructuralDirectiveTransform(
   'for',
   (node, dir, context) => {
+    // dir： v-for 指令属性节点
     const { helper } = context
+
+    // 开始解析v-for指令属性节点
     return processFor(node, dir, context, forNode => {
+      // 回调继续解析forNode指令节点
+
       // create the loop render function expression now, and add the
       // iterator on exit after all children have been traversed
+
+      // 创建执行渲染表达式
       const renderExp = createCallExpression(helper(RENDER_LIST), [
-        forNode.source
+        // RENDER_LIST = Symbol(__DEV__ ? `renderList` : ``)
+        forNode.source // 遍历目标信息
       ]) as ForRenderListExpression
+
+      // 设置 key 属性
+      // 如 <div v-for="(item, index) in items" :key="index"></div>
       const keyProp = findProp(node, `key`)
       const keyProperty = keyProp
         ? createObjectProperty(
@@ -62,7 +74,7 @@ export const transformFor = createStructuralDirectiveTransform(
               ? createSimpleExpression(keyProp.value!.content, true)
               : keyProp.exp!
           )
-        : null
+        : null // 如果不存在， 就不设置
 
       if (!__BROWSER__ && context.prefixIdentifiers && keyProperty) {
         // #2085 process :key expression needs to be processed in order for it
@@ -98,6 +110,7 @@ export const transformFor = createStructuralDirectiveTransform(
         node.loc
       ) as ForCodegenNode
 
+      // 最终解析v-for指令
       return () => {
         // finish the codegen now that all children have been traversed
         let childBlock: BlockCodegenNode
@@ -192,15 +205,17 @@ export function processFor(
   processCodegen?: (forNode: ForNode) => (() => void) | undefined
 ) {
   if (!dir.exp) {
+    // v-for 需要表达式值
     context.onError(
-      createCompilerError(ErrorCodes.X_V_FOR_NO_EXPRESSION, dir.loc)
+      createCompilerError(ErrorCodes.X_V_FOR_NO_EXPRESSION, dir.loc) // v-for is missing expression.
     )
     return
   }
 
+  // 解析v-for 表达式值
   const parseResult = parseForExpression(
     // can only be simple expression because vFor transform is applied
-    // before expression transform.
+    // before expression transform. 即 插件transformExpression 之前
     dir.exp as SimpleExpressionNode,
     context
   )
@@ -215,21 +230,24 @@ export function processFor(
   const { addIdentifiers, removeIdentifiers, scopes } = context
   const { source, value, key, index } = parseResult
 
+  // 创建for指令节点
   const forNode: ForNode = {
-    type: NodeTypes.FOR,
+    type: NodeTypes.FOR, // 节点类型
     loc: dir.loc,
-    source,
-    valueAlias: value,
-    keyAlias: key,
-    objectIndexAlias: index,
-    parseResult,
-    children: isTemplateNode(node) ? node.children : [node]
+    source, // v-for in/of 右侧遍历目标节点
+    valueAlias: value, // value节点
+    keyAlias: key, // key 节点
+    objectIndexAlias: index, // index 节点
+    parseResult, // v-for 表达式解析结果
+    children: isTemplateNode(node) ? node.children : [node] // <template v-for="xxx"></template>
   }
 
   context.replaceNode(forNode)
 
   // bookkeeping
-  scopes.vFor++
+  scopes.vFor++ // 记录是否存在嵌套v-for
+
+  // TODO: analyze - !__BROWSER__
   if (!__BROWSER__ && context.prefixIdentifiers) {
     // scope management
     // inject identifiers to context
@@ -240,6 +258,7 @@ export function processFor(
 
   const onExit = processCodegen && processCodegen(forNode)
 
+  // 遍历节点阶段得到v-for的transform
   return () => {
     scopes.vFor--
     if (!__BROWSER__ && context.prefixIdentifiers) {

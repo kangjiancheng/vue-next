@@ -482,33 +482,38 @@ export function traverseNode(
 }
 
 /**
- * 统一格式创建指令的的transform插件，如 v-for、v-if
+ * 统一格式创建指令的的transform插件，如 v-if、v-for
  * @param name 指令名
  * @param fn 指令回调
  */
 export function createStructuralDirectiveTransform(
-  name: string | RegExp, // 指令名，如 'for'、/^(if|else|else-if)$/
+  name: string | RegExp, // 指令名 如 ，/^(if|else|else-if)$/、'for'
   fn: StructuralDirectiveTransform // 指令回调
 ): NodeTransform {
   const matches = isString(name)
     ? (n: string) => n === name // 如 v-for 的 'for'
     : (n: string) => name.test(n) // 如 v-if 的 /^(if|else|else-if)$/
 
+  // v-if、v-for的 transform插件
   return (node, context) => {
     if (node.type === NodeTypes.ELEMENT) {
       const { props } = node
       // structural directive transforms are not concerned with slots
       // as they are handled separately in vSlot.ts
       if (node.tagType === ElementTypes.TEMPLATE && props.some(isVSlot)) {
+        // 跳过节点 <template v-slot></template>，在vSlot transform插件中解析
         return
       }
       const exitFns = []
       for (let i = 0; i < props.length; i++) {
         const prop = props[i]
+
+        // 匹配v-if、 v-for （先创建v-if transform插件）
         if (prop.type === NodeTypes.DIRECTIVE && matches(prop.name)) {
           // structural directives are removed to avoid infinite recursion
           // also we remove them *before* applying so that it can further
           // traverse itself in case it moves the node around
+          // 移除该指令节点
           props.splice(i, 1)
           i--
 
