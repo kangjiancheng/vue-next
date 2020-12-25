@@ -9,7 +9,7 @@
 <body>
 
   <div id="app">
-    <div class="red" v-for="(value, key, index) in item" :style="{color: 'blue'}" :key="index"></div>
+    <template v-for="(item, index) in items" :key="index"><slot name="header" ><span></span></slot></template>
   </div>
 
   <!-- 开发模式 -->

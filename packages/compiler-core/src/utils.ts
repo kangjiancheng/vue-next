@@ -239,39 +239,87 @@ export function isSlotOutlet(
   return node.type === NodeTypes.ELEMENT && node.tagType === ElementTypes.SLOT
 }
 
+// 将template元素上的key 属性注入到slot属性列表中去
+// 如 在解析v-for指令中，<template v-for="..." key="..."><slot></slot></template>
+// node: slotOutlet.codegenNode， 其中slot在transformSlotOutlet解析所得
 export function injectProp(
-  node: VNodeCall | RenderSlotCall,
-  prop: Property,
+  node: VNodeCall | RenderSlotCall, // 如 slotOutlet.codegenNode as RenderSlotCall，一个 NodeTypes.JS_CALL_EXPRESSION类型节点
+  prop: Property, // 如 <span v-for="..." key="..."></span> 中 key属性对应的js节点
   context: TransformContext
 ) {
   let propsWithInjection: ObjectExpression | CallExpression | undefined
+
+  // slot 的属性列表 transformElement buildProps()，或 子节点列表 props = createFunctionExpression([], slot.children, false, false, loc)
   const props =
-    node.type === NodeTypes.VNODE_CALL ? node.props : node.arguments[2]
+    node.type === NodeTypes.VNODE_CALL ? node.props : node.arguments[2] // node.arguments： slotArgs, [2] 保存slot元素的子节点列表
+
+  // 如 <template v-for="(item, index) in items" :key="index"><slot name="header"></slot></template>
+  // slot 存在name以外的属性，此时 props = slotProps；
+  // 在 transformSlotOutlet.ts 处理 slot元素
+
   if (props == null || isString(props)) {
-    propsWithInjection = createObjectExpression([prop])
+    // 不存在多余属性
+
+    // 如果不存在属性列表，不存在子节点列表： <template v-for="(item, index) in items" :key="index"><slot name="header"></slot></template>
+    // 此时 props = undefined
+
+    // 如果不存在属性列表，但存在子节点列表，如 <template v-for="(item, index) in items" :key="index"><slot name="header"><span></span></slot></template>
+    // 此时 props = '{}'
+
+    propsWithInjection = createObjectExpression([prop]) // v-for key 属性节点
   } else if (props.type === NodeTypes.JS_CALL_EXPRESSION) {
+    // 处理slot有 v-bind/v-on(无此时)属性时：
+    // 将key 属性加到合并处理后的slot prop属性列表中
+
+    // 处理合并属性，针对 v-on/v-bind(无参数)
+    // 如 <template v-for="(item, index) in items" :key="index"><slot name="header" class="red" :class="['blue', { green: true}]" v-bind="{ class: 'yellow'}"></slot></template>
+    // 此时 props: createCallExpression(
+    //         context.helper(MERGE_PROPS),
+    //         mergeArgs, // 即 arguments 合并的属性列表，[class, "{ class: 'yellow'}"]
+    //         elementLoc
+    //       )
+    //  props.arguments 已经处理合并过的slot属性列表，[class合并节点, "{ class: 'yellow'}"]
+
     // merged props... add ours
     // only inject key to object literal if it's the first argument so that
     // if doesn't override user provided keys
     const first = props.arguments[0] as string | JSChildNode
+
     if (!isString(first) && first.type === NodeTypes.JS_OBJECT_EXPRESSION) {
+      // 针对 v-bind/v-on 在属性列表之后
+
+      // 如 <template v-for="(item, index) in items" :key="index"><slot name="header" class="red" :class="['blue', { green: true}]" v-bind="{ class: 'yellow'}"></slot></template>
+      // 在 transformElement 中buildProps会处理属性的合并，在分析 v-bind/v-on（无参数）阶段
+      // 此时 first 表示合并后的class属性节点
+
+      // 将 v-for key 属性加到前边
       first.properties.unshift(prop)
     } else {
       if (props.callee === TO_HANDLERS) {
+        // mergeArgs 第一个是 v-on 指令
+        // 如 <template v-for="(item, index) in items" :key="index"><slot name="header" v-on="{click: 'handleClick'}" class="red"></slot></template>
+
         // #2366
         propsWithInjection = createCallExpression(context.helper(MERGE_PROPS), [
           createObjectExpression([prop]),
           props
         ])
       } else {
+        // mergeArgs 第一个是 v-bind 指令表达式节点，后面需要其它属性，如class
+        // 此时 first 是 v-bind 指令值表达式属性节点
+        // 如 <template v-for="(item, index) in items" :key="index"><slot name="header" v-bind="[{class: 'blue'}]" class="red"></slot></template>
+        // first.content = "[{class: 'blue'}]"
         props.arguments.unshift(createObjectExpression([prop]))
       }
     }
     !propsWithInjection && (propsWithInjection = props)
   } else if (props.type === NodeTypes.JS_OBJECT_EXPRESSION) {
+    // 没有v-bind/v-on(无参数)指令，如：<template v-for="(item, index) in items" :key="index"><slot name="header" data-txt="hello world"></slot></template>
+    // 普通属性节点
     let alreadyExists = false
     // check existing key to avoid overriding user provided keys
     if (prop.key.type === NodeTypes.SIMPLE_EXPRESSION) {
+      //  !__BROWSER__ && context.prefixIdentifiers && keyProperty
       const propKeyName = prop.key.content
       alreadyExists = props.properties.some(
         p =>
@@ -279,20 +327,24 @@ export function injectProp(
           p.key.content === propKeyName
       )
     }
+    // 添加到props列表
     if (!alreadyExists) {
       props.properties.unshift(prop)
     }
     propsWithInjection = props
   } else {
+    // 只有一个 v-bind 属性：<template v-for="(item, index) in items" :key="index"><slot name="header" v-bind="[{class: 'blue'}]"></slot></template>
     // single v-bind with expression, return a merged replacement
     propsWithInjection = createCallExpression(context.helper(MERGE_PROPS), [
       createObjectExpression([prop]),
       props
     ])
   }
+
   if (node.type === NodeTypes.VNODE_CALL) {
     node.props = propsWithInjection
   } else {
+    // 如处理 v-for template slot 元素，将template上的key属性加到 slot元素的属性列表中
     node.arguments[2] = propsWithInjection
   }
 }

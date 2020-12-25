@@ -676,6 +676,7 @@ export function buildProps(
   // has v-bind="object" or v-on="object", wrap with mergeProps
   if (mergeArgs.length) {
     // mergeArgs 由 v-bind/v-on （无指令参数）过程创建
+
     if (properties.length) {
       // 如：<span class="red" :class="['blue', { green: true}]" v-bind="{ class: 'yellow'}" style="color: blue" :style="{color: 'red'}"></span>
       // 在处理完v-bind/v-on属性之后，需要继续处理之后可能存在的重复属性
@@ -699,7 +700,7 @@ export function buildProps(
       // 元素节点属性 只有v-on或v-bind(无参数)一个属性，则不需要创建合并函数
       // 如 <span v-bind="{class: 'red'}"></span>
       // single v-bind with nothing else - no need for a mergeProps call
-      propsExpression = mergeArgs[0] // 返回v-bind属性值节点、v-on createCallExpression节点
+      propsExpression = mergeArgs[0] // 返回v-bind属性值节点、  v-on createCallExpression
     }
   } else if (properties.length) {
     // 不存在v-on/v-bind(无参数)属性，同样需要合并去重属性

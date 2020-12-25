@@ -76,6 +76,7 @@ export const transformFor = createStructuralDirectiveTransform(
           )
         : null // 如果不存在， 就不设置
 
+      // TODO: analyze - cfs
       if (!__BROWSER__ && context.prefixIdentifiers && keyProperty) {
         // #2085 process :key expression needs to be processed in order for it
         // to behave consistently for <template v-for> and <div v-for>.
@@ -88,19 +89,23 @@ export const transformFor = createStructuralDirectiveTransform(
         )
       }
 
+      // 默认false
       const isStableFragment =
         forNode.source.type === NodeTypes.SIMPLE_EXPRESSION &&
-        forNode.source.constType > 0
-      const fragmentFlag = isStableFragment
-        ? PatchFlags.STABLE_FRAGMENT
-        : keyProp
-          ? PatchFlags.KEYED_FRAGMENT
-          : PatchFlags.UNKEYED_FRAGMENT
+        forNode.source.constType > 0 // 默认 为 0
+
+      const fragmentFlag = isStableFragment // 默认false
+        ? PatchFlags.STABLE_FRAGMENT // 稳定片段
+        : keyProp // 带key属性节点
+          ? PatchFlags.KEYED_FRAGMENT // 带key的片段 <div v-for="(item, index) in items" :key="index"></div>
+          : PatchFlags.UNKEYED_FRAGMENT //  <div v-for="(item, index) in items"></div>
+
+      // 创建for指令的codegenNode
       forNode.codegenNode = createVNodeCall(
         context,
-        helper(FRAGMENT),
+        helper(FRAGMENT), // FRAGMENT = Symbol(__DEV__ ? `Fragment` : ``)
         undefined,
-        renderExp,
+        renderExp, //  forNode.source 渲染表达式值节点
         fragmentFlag +
           (__DEV__ ? ` /* ${PatchFlagNames[fragmentFlag]} */` : ``),
         undefined,
@@ -114,7 +119,7 @@ export const transformFor = createStructuralDirectiveTransform(
       return () => {
         // finish the codegen now that all children have been traversed
         let childBlock: BlockCodegenNode
-        const isTemplate = isTemplateNode(node)
+        const isTemplate = isTemplateNode(node) // <template v-for="(item, index) in items" :key="index"></template>
         const { children } = forNode
 
         // check <template v-for> key placement
@@ -123,9 +128,10 @@ export const transformFor = createStructuralDirectiveTransform(
             if (c.type === NodeTypes.ELEMENT) {
               const key = findProp(c, 'key')
               if (key) {
+                // 如 <template v-for>，在其子元素列表中 不该存在key属性
                 context.onError(
                   createCompilerError(
-                    ErrorCodes.X_V_FOR_TEMPLATE_KEY_PLACEMENT,
+                    ErrorCodes.X_V_FOR_TEMPLATE_KEY_PLACEMENT, // <template v-for> key should be placed on the <template> tag.
                     key.loc
                   )
                 )
@@ -138,30 +144,38 @@ export const transformFor = createStructuralDirectiveTransform(
         const needFragmentWrapper =
           children.length !== 1 || children[0].type !== NodeTypes.ELEMENT
         const slotOutlet = isSlotOutlet(node)
-          ? node
+          ? node // <slot v-for="...">
           : isTemplate &&
             node.children.length === 1 &&
             isSlotOutlet(node.children[0])
-            ? (node.children[0] as SlotOutletNode) // api-extractor somehow fails to infer this
-            : null
+            ? (node.children[0] as SlotOutletNode) // 只有一个slot子节点 <template v-for="..."><slot/></template>， api-extractor somehow fails to infer this
+            : null // null
 
         if (slotOutlet) {
           // <slot v-for="..."> or <template v-for="..."><slot/></template>
+          // slot解析：transformSlotOutlet
           childBlock = slotOutlet.codegenNode as RenderSlotCall
+
           if (isTemplate && keyProperty) {
-            // <template v-for="..." :key="..."><slot/></template>
+            // template节点仅有一个slot子节点 如：<template v-for="..." :key="..."><slot/></template>
+
             // we need to inject the key to the renderSlot() call.
             // the props for renderSlot is passed as the 3rd argument.
+            // 将template元素上的key 属性注入到slot属性列表中去
             injectProp(childBlock, keyProperty, context)
           }
         } else if (needFragmentWrapper) {
-          // <template v-for="..."> with text or multi-elements
+          // 当前节点（非slot标签）下，存在多个子节点，如：<template v-for="..."><div>...</div><div>...</div></template>
+          // 或者当前节点（非slot标签）只有一个子节点，如：<div v-for="...">文本内容 或插值文本 或 注释节点，即非element/组件节点</div>
+          // 注意：当template标签仅有一个slot子节点，如：<template v-for="..."><slot/></template>，则不符合
+
+          // 为子节点列表生成一个代码块，方便之后的循环处理
           // should generate a fragment block for each loop
           childBlock = createVNodeCall(
             context,
             helper(FRAGMENT),
-            keyProperty ? createObjectExpression([keyProperty]) : undefined,
-            node.children,
+            keyProperty ? createObjectExpression([keyProperty]) : undefined, // 创建 key属性节点
+            node.children, // 子节点列表
             PatchFlags.STABLE_FRAGMENT +
               (__DEV__
                 ? ` /* ${PatchFlagNames[PatchFlags.STABLE_FRAGMENT]} */`
@@ -260,7 +274,7 @@ export function processFor(
 
   // 遍历节点阶段得到v-for的transform
   return () => {
-    scopes.vFor--
+    scopes.vFor-- // 当前解析的v-for指令
     if (!__BROWSER__ && context.prefixIdentifiers) {
       value && removeIdentifiers(value)
       key && removeIdentifiers(key)

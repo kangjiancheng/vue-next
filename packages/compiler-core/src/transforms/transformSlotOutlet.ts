@@ -29,6 +29,7 @@ export const transformSlotOutlet: NodeTransform = (node, context) => {
       slotName
     ]
 
+    // 处理属性列表
     if (slotProps) {
       slotArgs.push(slotProps)
     }
@@ -36,7 +37,7 @@ export const transformSlotOutlet: NodeTransform = (node, context) => {
     // 处理子节点列表
     if (children.length) {
       if (!slotProps) {
-        slotArgs.push(`{}`)
+        slotArgs.push(`{}`) // 默认子节点
       }
       slotArgs.push(createFunctionExpression([], children, false, false, loc))
     }
