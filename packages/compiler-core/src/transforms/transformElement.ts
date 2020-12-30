@@ -66,11 +66,12 @@ const directiveImportMap = new WeakMap<DirectiveNode, symbol>()
 export const transformElement: NodeTransform = (node, context) => {
   if (
     !(
-      node.type === NodeTypes.ELEMENT &&
-      (node.tagType === ElementTypes.ELEMENT || // 转换处理 html元素节点、 组件节点
+      node.type === NodeTypes.ELEMENT && // 是一个标签元素节点
+      (node.tagType === ElementTypes.ELEMENT || // html元素
         node.tagType === ElementTypes.COMPONENT)
-    )
+    ) // 组件元素
   ) {
+    // 排除 SLOT、 TEMPLATE
     return
   }
 
@@ -276,7 +277,7 @@ export const transformElement: NodeTransform = (node, context) => {
       vnodePatchFlag, // patchFlag和及其描述文本信息: patchFlag + ` /* ${flagNames} */`
       vnodeDynamicProps, // 静态指令prop的属性名(解析过的指令节点)，字符串拼接格式： 如: template: '<input v-model="textInput" :placeholder="'请输入'" />'  对应的结果为： '["onUpdate:modelValue", "placeholder"]'
       vnodeDirectives, // 需要在运行时，重新处理的指令，如：v-model、v-show、用户自定义指令
-      !!shouldUseBlock, // 动态is组件或TELEPORT或SUSPENSE；或是非组件当是特殊标签如svg，普通元素绑定了动态 :key； 或是 keep-alive组件
+      !!shouldUseBlock, // 是否使用block，如：动态is组件或TELEPORT或SUSPENSE；或是非组件当是特殊标签如svg，普通元素绑定了动态 :key； 或是 keep-alive组件
       false /* disableTracking */,
       node.loc
     )

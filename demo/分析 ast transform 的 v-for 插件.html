@@ -9,7 +9,9 @@
 <body>
 
   <div id="app">
-    <template v-for="(item, index) in items" :key="index"><slot name="header" ><span></span></slot></template>
+    <template v-for="(item, index) in items" :key="index">
+      <div data-txt="hello world">{{ index }}</div>
+    </template>
   </div>
 
   <!-- 开发模式 -->
@@ -63,6 +65,7 @@
         return {
           count,
           handleClick,
+          items: [1, 2]
         }
       }
     }

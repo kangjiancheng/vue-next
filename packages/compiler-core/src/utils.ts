@@ -239,9 +239,16 @@ export function isSlotOutlet(
   return node.type === NodeTypes.ELEMENT && node.tagType === ElementTypes.SLOT
 }
 
-// 将template元素上的key 属性注入到slot属性列表中去
-// 如 在解析v-for指令中，<template v-for="..." key="..."><slot></slot></template>
+// 将template元素上的key 属性注入到子节点属性列表中去
+
+// 场景一：注入到slot元素属性列表中去，如：
+// 在解析v-for指令中，<template v-for="..." key="..."><slot></slot></template>
 // node: slotOutlet.codegenNode， 其中slot在transformSlotOutlet解析所得
+
+// 场景二：注入到普通元素节点，此时template v-for 只有一个子元素，则需要将key属性注入到，如：
+// <template v-for="..." :key="..."><div>...</div></template>
+// 则其node，即子节点： <div>...</div> 的codegenNode 在 transformElement节点生成 createVNodeCall
+
 export function injectProp(
   node: VNodeCall | RenderSlotCall, // 如 slotOutlet.codegenNode as RenderSlotCall，一个 NodeTypes.JS_CALL_EXPRESSION类型节点
   prop: Property, // 如 <span v-for="..." key="..."></span> 中 key属性对应的js节点
@@ -258,7 +265,7 @@ export function injectProp(
   // 在 transformSlotOutlet.ts 处理 slot元素
 
   if (props == null || isString(props)) {
-    // 不存在多余属性
+    // slot标签元素除name属性外，不存在其它属性
 
     // 如果不存在属性列表，不存在子节点列表： <template v-for="(item, index) in items" :key="index"><slot name="header"></slot></template>
     // 此时 props = undefined
@@ -268,7 +275,7 @@ export function injectProp(
 
     propsWithInjection = createObjectExpression([prop]) // v-for key 属性节点
   } else if (props.type === NodeTypes.JS_CALL_EXPRESSION) {
-    // 处理slot有 v-bind/v-on(无此时)属性时：
+    // 有 v-bind/v-on(无参数)属性时：
     // 将key 属性加到合并处理后的slot prop属性列表中
 
     // 处理合并属性，针对 v-on/v-bind(无参数)

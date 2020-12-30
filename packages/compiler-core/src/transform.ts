@@ -396,7 +396,7 @@ export function traverseNode(
    * nodeTransforms = [
        transformOnce, // 处理 v-once 指令属性节点
        transformIf,  // 处理 v-if 指令属性节点
-       transformFor, // 处理 v-for 指令属性节点
+       transformFor, // 处理 v-for 指令属性节点， 在添加插件时，会先创建一个新的for node 类型节点，并替换当前for类型的节点，之后会处理slot场景下的v-for，和template场景下的v-for，包括对key属性的处理，并生成for节点的codegenNode
        ...(!__BROWSER__ && prefixIdentifiers
         ? [
         // order is important
@@ -439,6 +439,7 @@ export function traverseNode(
     } else {
       // node may have been replaced
       // 保持当前循环的节点不变，继续处理当前节点中的内容
+      // 如将v-for对应的节点，重新生成一个for类型的节点，并替换当前节点，如 node type: NodeTypes.FOR
       node = context.currentNode
     }
   }

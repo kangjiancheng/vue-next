@@ -47,10 +47,10 @@ export const enum PatchFlags {
   // 检测到节点在服务段绑定的event listeners
   HYDRATE_EVENTS = 1 << 5,
 
-  // 检测到节点子元素顺序未改变时，在compiler-core 解析v-for指令时：
+  // 检测到节点子元素顺序未改变时，在compiler-core 解析v-for指令时：（为了包裹子内容）
   // 当前节点（非slot标签）下，存在多个子节点，如：<template v-for="..."><div>...</div><div>...</div></template>
-  // 或者当前节点（非slot标签）只有一个子节点(非ELEMENT)，如：<div v-for="...">文本内容 或插值文本 或 注释节点 即非element/组件节点</div>
-  // 注意：当template标签仅有一个slot子节点，如：<template v-for="..."><slot/></template>，则不符合
+  // 或者当前节点（非slot标签）只有一个子节点，如：<div v-for="...">文本内容 或插值文本 或 注释节点，即非element/组件节点</div>
+  // 注意：当template标签仅有一个slot子节点，如：<template v-for="..."><slot/></template>，则不处理
   STABLE_FRAGMENT = 1 << 6,
 
   // 检测到代码片段具有key 或 其子元素带有key，如：带key的片段 <div v-for="(item, index) in items" :key="index"></div>

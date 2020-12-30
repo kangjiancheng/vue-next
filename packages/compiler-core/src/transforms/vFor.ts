@@ -100,7 +100,7 @@ export const transformFor = createStructuralDirectiveTransform(
           ? PatchFlags.KEYED_FRAGMENT // 带key的片段 <div v-for="(item, index) in items" :key="index"></div>
           : PatchFlags.UNKEYED_FRAGMENT //  <div v-for="(item, index) in items"></div>
 
-      // 创建for指令的codegenNode
+      // 生成for节点的codegenNode
       forNode.codegenNode = createVNodeCall(
         context,
         helper(FRAGMENT), // FRAGMENT = Symbol(__DEV__ ? `Fragment` : ``)
@@ -141,8 +141,10 @@ export const transformFor = createStructuralDirectiveTransform(
           })
         }
 
+        // 多个节点 或 首个子节点是非标签节点（即文本、注释等）
         const needFragmentWrapper =
           children.length !== 1 || children[0].type !== NodeTypes.ELEMENT
+
         const slotOutlet = isSlotOutlet(node)
           ? node // <slot v-for="...">
           : isTemplate &&
@@ -161,13 +163,13 @@ export const transformFor = createStructuralDirectiveTransform(
 
             // we need to inject the key to the renderSlot() call.
             // the props for renderSlot is passed as the 3rd argument.
-            // 将template元素上的key 属性注入到slot属性列表中去
+            // 将template元素上的key 属性注入到slot元素的prop属性列表中去
             injectProp(childBlock, keyProperty, context)
           }
         } else if (needFragmentWrapper) {
           // 当前节点（非slot标签）下，存在多个子节点，如：<template v-for="..."><div>...</div><div>...</div></template>
           // 或者当前节点（非slot标签）只有一个子节点，如：<div v-for="...">文本内容 或插值文本 或 注释节点，即非element/组件节点</div>
-          // 注意：当template标签仅有一个slot子节点，如：<template v-for="..."><slot/></template>，则不符合
+          // 注意：当template标签仅有一个slot子节点，如：<template v-for="..."><slot/></template>，则不处理
 
           // 为子节点列表生成一个代码块，方便之后的循环处理
           // should generate a fragment block for each loop
@@ -182,28 +184,34 @@ export const transformFor = createStructuralDirectiveTransform(
                 : ``),
             undefined,
             undefined,
-            true
+            true // 创建块
           )
         } else {
+          // 只有一个子节点，且是标签元素
           // Normal element v-for. Directly use the child's codegenNode
           // but mark it as a block.
-          childBlock = (children[0] as PlainElementNode)
+
+          childBlock = (children[0] as PlainElementNode) // children[0]，即for 元素节点， codegenNode 在 transformElement节点生成 createVNodeCall
             .codegenNode as VNodeCall
           if (isTemplate && keyProperty) {
+            // 如果是一个template v-for，且存在key，且只有一个子元素，则需要将key属性注入到
+            // 如 <template v-for="..." :key="ddd"><div>...</div></template>
+            // childBlock，即子节点： <div>...</div> 的codegenNode 在 transformElement节点生成 createVNodeCall
             injectProp(childBlock, keyProperty, context)
           }
-          childBlock.isBlock = !isStableFragment
+          childBlock.isBlock = !isStableFragment // v-for 元素 默认使用 block
           if (childBlock.isBlock) {
-            helper(OPEN_BLOCK)
-            helper(CREATE_BLOCK)
+            // true
+            helper(OPEN_BLOCK) // Symbol(__DEV__ ? `openBlock` : ``)
+            helper(CREATE_BLOCK) // Symbol(__DEV__ ? `createBlock` : ``)
           } else {
-            helper(CREATE_VNODE)
+            helper(CREATE_VNODE) // Symbol(__DEV__ ? `createVNode` : ``)
           }
         }
 
         renderExp.arguments.push(createFunctionExpression(
-          createForLoopParams(forNode.parseResult),
-          childBlock,
+          createForLoopParams(forNode.parseResult), // for 表达式解析结果
+          childBlock, // 子节点列表
           true /* force newline */
         ) as ForIteratorExpression)
       }
@@ -244,7 +252,7 @@ export function processFor(
   const { addIdentifiers, removeIdentifiers, scopes } = context
   const { source, value, key, index } = parseResult
 
-  // 创建for指令节点
+  // 创建一个新的for 节点元素 为了替换旧节点
   const forNode: ForNode = {
     type: NodeTypes.FOR, // 节点类型
     loc: dir.loc,
@@ -253,9 +261,10 @@ export function processFor(
     keyAlias: key, // key 节点
     objectIndexAlias: index, // index 节点
     parseResult, // v-for 表达式解析结果
-    children: isTemplateNode(node) ? node.children : [node] // <template v-for="xxx"></template>
+    children: isTemplateNode(node) ? node.children : [node] // <template v-for="xxx"><div>...</div></template>
   }
 
+  // 替换当前的for node 节点
   context.replaceNode(forNode)
 
   // bookkeeping
