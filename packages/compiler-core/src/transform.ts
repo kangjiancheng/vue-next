@@ -215,9 +215,11 @@ export function createTransformContext(
       }
       if (!node || node === context.currentNode) {
         // current node removed
+        // 移除当前节点，如v-if transform
         context.currentNode = null
         context.onNodeRemoved()
       } else {
+        // 移除指定节点，如v-if transform
         // sibling node removed
         if (context.childIndex > removalIndex) {
           context.childIndex--
@@ -386,7 +388,7 @@ export function traverseChildren(
  * @param context
  */
 export function traverseNode(
-  node: RootNode | TemplateChildNode, // ast 语法树的根节点
+  node: RootNode | TemplateChildNode, // ast 语法树的根节点，或 如 v-if的子节点列表（在解析v-if指令时，会遍历解析其子节点）
   context: TransformContext
 ) {
   context.currentNode = node // 当前在处理的节点
@@ -407,7 +409,7 @@ export function traverseNode(
           ? [transformExpression] // 处理插值表达式内容，指令属性节点值表达式，排除v-for和v-on:arg属性节点，在浏览器中只需要节点验证表达式值的js语法规则：validateBrowserExpression
           : []),
        transformSlotOutlet, // 处理slot元素组件：name属性、其它属性prop节点列表（处理方式buildProps，同transformElements）
-       transformElement,  // 处理html元素节点或组件节点，解析元素节点的prop属性列表（on/bind/model/text/html/show/is）、v-slot指令信息与默认/具名插槽转换、patchFlag信息、用户定义的指令等，为当前节点的ast生成对应的codegen vnode执行函数节点
+       transformElement,  // 处理html元素节点或组件节点，解析元素节点的prop属性列表（on/bind/model/text/html/show/is）、v-slot指令与默认/具名插槽转换、patchFlag信息、用户定义的指令等，为当前节点的ast生成对应的codegen vnode执行函数节点
        trackSlotScopes, // 处理并跟踪节点的slot指令，通过计数来识别出是否内嵌了slot指令，为transformElement检测是否定义了动态slot，创建对应的patchflag信息
        transformText, // 处理 连续子文本节点/表达式节点 的合并；或 如果即包含文本又包含其它类型节点时，则需要设置该子节点文本/表达式的diff patch codegenNode 信息，同时也重新定义当前节点的子节点配置
        ignoreSideEffectTags, // 删减style/script元素节点
@@ -440,6 +442,7 @@ export function traverseNode(
       // node may have been replaced
       // 保持当前循环的节点不变，继续处理当前节点中的内容
       // 如将v-for对应的节点，重新生成一个for类型的节点，并替换当前节点，如 node type: NodeTypes.FOR
+      // 如 v-if  type: NodeTypes.IF
       node = context.currentNode
     }
   }
@@ -486,6 +489,8 @@ export function traverseNode(
  * 统一格式创建指令的的transform插件，如 v-if、v-for
  * @param name 指令名
  * @param fn 指令回调
+ *
+ * 注意： template元素中具有v-slot时，会单独处理v-if、v-for
  */
 export function createStructuralDirectiveTransform(
   name: string | RegExp, // 指令名 如 ，/^(if|else|else-if)$/、'for'
@@ -515,7 +520,7 @@ export function createStructuralDirectiveTransform(
           // also we remove them *before* applying so that it can further
           // traverse itself in case it moves the node around
           // 移除该指令节点
-          props.splice(i, 1)
+          props.splice(i, 1) // 已在父节点中v-if 处理子节点列表中的 v-if
           i--
 
           const onExit = fn(node, prop, context)

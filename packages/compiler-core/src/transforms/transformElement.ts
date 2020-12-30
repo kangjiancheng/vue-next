@@ -62,7 +62,7 @@ import { BindingTypes } from '../options'
 const directiveImportMap = new WeakMap<DirectiveNode, symbol>()
 
 // generate a JavaScript AST for this element's codegen
-// 解析元素节点的prop属性列表、slot指令信息、patchFlag信息、用户定义的指令等，为当前节点的ast生成对应的codegen vnode执行函数节点
+// 解析元素节点的prop属性列表、v-slot指令、patchFlag信息、用户定义的指令等，为当前节点的ast生成对应的codegen vnode执行函数节点
 export const transformElement: NodeTransform = (node, context) => {
   if (
     !(
