@@ -435,7 +435,8 @@ export function traverseNode(
       }
     }
     if (!context.currentNode) {
-      // 如果在运用插件调整过程中，节点可能会被删除，如style/script元素节点
+      // 如 在运用插件调整过程中，节点可能会被删除，如style/script元素节点
+      // 如 在解析if分支流节点中，会将else-if/else移动到if分支节点下，而在if transform中，会继续遍历traverseNode解析else-if/else下的子节点列表内容。
       // node was removed
       return
     } else {

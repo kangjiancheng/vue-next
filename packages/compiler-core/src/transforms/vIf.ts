@@ -202,11 +202,12 @@ export function processIf(
         const onExit = processCodegen && processCodegen(sibling, branch, false)
         // since the branch was removed, it will not be traversed.
         // make sure to traverse here.
-        traverseNode(branch, context) // 遍历解析当前节点及其子节点列表
+        traverseNode(branch, context) // 遍历解析当前节点及其子节点列表（因为之后节点会被移到if分支节点中，之后不再在主transform中继续解析其子内容）
         // call on exit
         if (onExit) onExit()
         // make sure to reset currentNode after traversal to indicate this
         // node has been removed.
+        // 移除当前节点，因为已经移到了if分支节点中
         context.currentNode = null
       } else {
         // 前边未匹配到 if
