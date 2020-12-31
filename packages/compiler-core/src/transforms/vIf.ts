@@ -36,22 +36,32 @@ import {
 import { injectProp, findDir, findProp } from '../utils'
 import { PatchFlags, PatchFlagNames } from '@vue/shared'
 
+/**
+ * 创建v-if解析插件时，原理是基于 if分支流节点 来解析的，如一个分支流中可能是：if节点、else节点、else-if节点，构成的一个逻辑判断流程。
+ * 合并一个if分支流里的if、else-if、else节点到 if分支流节点 中，同时替换ast中的位置。
+ * 解析时：创建if codegenNode，并将else-if、else的codegenNode链式绑定到if分支流节点
+ */
 export const transformIf = createStructuralDirectiveTransform(
   /^(if|else|else-if)$/,
   (node, dir, context) => {
     // 添加解析v-if插件
-    // isRoot 表示当前if branches开始的if节点
+    // ifNode 为当前 if 分支节点 （包含了branch节点）
+    // branch if分支流中的一个节点：else-if/else，该节点已经从ast中位置移动到ast中的ifNode节点下。
+    // isRoot 表示是否是if branches开始的if节点
     return processIf(node, dir, context, (ifNode, branch, isRoot) => {
       // #1587: We need to dynamically increment the key based on the current
       // node's sibling nodes, since chained v-if/else branches are
       // rendered at the same depth
+
+      // 注意前边的if分支流节点都已经替换原先ast位置上的节点了
       const siblings = context.parent!.children
       let i = siblings.indexOf(ifNode) // 相邻的if节点的位置
-      let key = 0 // 统计前边所有的if，else，else-if数量
+      let key = 0 // 记录 branch 在所有if分支流节点中的位置，即记录该节点（if/else-if/else）在所有兄弟元素if、else-if、else列表中的位置
       while (i-- >= 0) {
-        const sibling = siblings[i] // 上一个兄弟节点
+        const sibling = siblings[i] // 前边的兄弟节点
         if (sibling && sibling.type === NodeTypes.IF) {
-          key += sibling.branches.length // 前边的每个if系列节点
+          // 前边兄弟的每个if分支节点
+          key += sibling.branches.length
         }
       }
 
@@ -60,19 +70,19 @@ export const transformIf = createStructuralDirectiveTransform(
       // transformed.
       return () => {
         if (isRoot) {
-          // 正在解析 if节点对应的codegenNode
+          // 创建if节点对应的codegenNode
           ifNode.codegenNode = createCodegenNodeForBranch(
             branch, // if 节点的 对应branch节点
-            key, // 从前边的if系列开始计数
+            key, // 记录 branch 在所有if分支流节点中的位置
             context
           ) as IfConditionalExpression
         } else {
-          // 正在解析 else节点或 else-if节点
+          // 解析 else节点或 else-if节点，并将codegenNode链式绑定到if codegenNode的alternate属性上
           // attach this branch's codegen node to the v-if root.
-          const parentCondition = getParentCondition(ifNode.codegenNode!)
+          const parentCondition = getParentCondition(ifNode.codegenNode!) // 递归式获取上一级的alternate codegenNode
           parentCondition.alternate = createCodegenNodeForBranch(
-            branch,
-            key + ifNode.branches.length - 1,
+            branch, // else-f/else
+            key + ifNode.branches.length - 1, // 记录 branch 在所有if分支流节点中的位置
             context
           )
         }
@@ -81,7 +91,7 @@ export const transformIf = createStructuralDirectiveTransform(
   }
 )
 
-// 添加v-if解析插件，移除兄弟节点中的 注释节点、空文本节点
+// 添加v-if解析插件
 // target-agnostic transform used for both Client and SSR
 export function processIf(
   node: ElementNode,
@@ -158,24 +168,22 @@ export function processIf(
       }
 
       if (sibling && sibling.type === NodeTypes.IF) {
-        // 匹配到相邻到 if 节点
-
-        // 创建新的当前节点，如else节点 移到 if节点系列中
+        // 匹配前边的if节点
+        // 然后将当前的else/else-if节点归并到前边if节点对应的branches里
         // move the node to the if node's branches
         context.removeNode()
         const branch = createIfBranch(node, dir) // 创建一个 v-if分支系列
 
+        // 将else/else-if节点到if节点之间的注释节点列表规划到 当前else/else-if节点分支下
         if (__DEV__ && comments.length) {
-          // 添加前边注释节点列表到当前else节点列表中（并列）
           branch.children = [...comments, ...branch.children]
         }
 
-        // 如 else 中的key 不可以和if一样
+        // 该if分支流下，if/else/else-if节点上的key属性不能重复
         // check if user is forcing same key on different branches
         if (__DEV__ || !__BROWSER__) {
-          const key = branch.userKey // 如 else 节点
+          const key = branch.userKey
           if (key) {
-            // if 节点
             sibling.branches.forEach(({ userKey }) => {
               if (isSameKey(userKey, key)) {
                 context.onError(
@@ -226,32 +234,34 @@ function createIfBranch(node: ElementNode, dir: DirectiveNode): IfBranchNode {
   }
 }
 
-// 创建v-if 节点的codegen
+// 创建 if分支流节点的codegenNode
 function createCodegenNodeForBranch(
   branch: IfBranchNode, // 当前节点（if/else/else-if）对应的branch节点
   keyIndex: number, // // 从前边的if系列开始计数
   context: TransformContext
 ): IfConditionalExpression | BlockCodegenNode {
   if (branch.condition) {
+    // 创建 if/else-if 条件表达式 codegenNode: NodeTypes.JS_CONDITIONAL_EXPRESSION,
     return createConditionalExpression(
       branch.condition,
       createChildrenCodegenNode(branch, keyIndex, context),
-      // make sure to pass in asBlock: true so that the comment node call
-      // closes the current block.
+      // alternate: NodeTypes.JS_CALL_EXPRESSION
       createCallExpression(context.helper(CREATE_COMMENT), [
+        // CREATE_COMMENT = Symbol(__DEV__ ? `createCommentVNode` : ``)
         __DEV__ ? '"v-if"' : '""',
-        'true'
+        'true' // make sure to pass in asBlock: true so that the comment node call closes the current block.
       ])
     ) as IfConditionalExpression
   } else {
+    // else节点 直接创建codegen
     return createChildrenCodegenNode(branch, keyIndex, context)
   }
 }
 
-// 创建v-if 节点的codegen
+// 创建 if分支流节点 中的if、else-if、else节点的codegen
 function createChildrenCodegenNode(
-  branch: IfBranchNode, // 当前节点（if/else/else-if）对应的branch节点
-  keyIndex: number, // // 从前边的if系列开始计数
+  branch: IfBranchNode, // 节点（if/else/else-if）对应的branch节点
+  keyIndex: number, // // 当前节点branch，在所有if/else/else-if 节点中的位置
   context: TransformContext
 ): BlockCodegenNode {
   const { helper } = context
@@ -264,20 +274,28 @@ function createChildrenCodegenNode(
       ConstantTypes.CAN_HOIST
     )
   )
-  const { children } = branch
-  const firstChild = children[0] // 即当前节点（if/else/else-if）
-  const needFragmentWrapper =
-    children.length !== 1 || firstChild.type !== NodeTypes.ELEMENT // 如前边存在注释节点
+  const { children } = branch // 保存 注释/if/else/else-if节点
+  const firstChild = children[0] // 即当前节点（if/else/else-if）/或注释节点
 
+  // 使用fragment代码片段包裹：
+  //    存在注释节点 （else-if/else节点前边到if节点）
+  //    存在v-for指令
+  const needFragmentWrapper =
+    children.length !== 1 || firstChild.type !== NodeTypes.ELEMENT
   if (needFragmentWrapper) {
     if (children.length === 1 && firstChild.type === NodeTypes.FOR) {
-      // 因为 tranformFor 插件在 if插件之前，所以会被先解析为NodeTypes.FOR
+      // 存在v-for指令，tranformFor 插件在 if插件之前，所以会被先解析为NodeTypes.FOR
+      // 如： template: '<div v-if="true" v-for="item in items"></div>'
       // optimize away nested fragments when child is a ForNode
-      // 如：<div v-if="true" v-for="item in items"></div>
       const vnodeCall = firstChild.codegenNode!
+      // 将key注入到if节点中
       injectProp(vnodeCall, keyProperty, context)
       return vnodeCall
     } else {
+      // 存在注释节点，如，template:
+      //  <div v-if="true" key="a"></div>
+      //  <!-- 123 -->
+      //  <div v-else key="b"></div>
       return createVNodeCall(
         context,
         helper(FRAGMENT),
@@ -295,14 +313,17 @@ function createChildrenCodegenNode(
       )
     }
   } else {
+    // 纯的节点，if/else/else-if节点，直接
     const vnodeCall = (firstChild as ElementNode)
       .codegenNode as BlockCodegenNode
     // Change createVNode to createBlock.
     if (vnodeCall.type === NodeTypes.VNODE_CALL) {
+      // VNODE_CALL 在transformElement阶段创建
       vnodeCall.isBlock = true
       helper(OPEN_BLOCK)
       helper(CREATE_BLOCK)
     }
+    // 注入if分支流的key到branch的prop属性列表中
     // inject branch key
     injectProp(vnodeCall, keyProperty, context)
     return vnodeCall
@@ -338,14 +359,27 @@ function isSameKey(
   return true
 }
 
+// 返回前边条件节点的codegenNode，即递归查找ifNode链上的最后一个codegenNode（即alternate）
 function getParentCondition(
-  node: IfConditionalExpression | CacheExpression
+  node: IfConditionalExpression | CacheExpression // ifNode.codegenNode
 ): IfConditionalExpression {
   while (true) {
     if (node.type === NodeTypes.JS_CONDITIONAL_EXPRESSION) {
+      // if节点
+
+      // node.alternate 上一级（else-if）的codegenNode
       if (node.alternate.type === NodeTypes.JS_CONDITIONAL_EXPRESSION) {
+        // 递归找到上一个节点的codegenNode
+        // <div v-if="xxx" key="1"></div>
+        // <div v-else-if="xxx" key="2"></div>
+        // <div v-else-if="xxx" key="3"></div> // 如：在解析key=3 else-if节点时，取得key=2的else-if节点的alternate（即codegenNode），为了之后将key=3的codegenNode链式绑定到key=2的即codegenNode.alternate属性
+        // <div v-else key="4"></div>
         node = node.alternate
       } else {
+        // 在解析else节点时：template
+        //    <div v-if="xxx"></div>
+        //    <div v-else></div>
+        // 不需要获取上一级
         return node
       }
     } else if (node.type === NodeTypes.JS_CACHE_EXPRESSION) {

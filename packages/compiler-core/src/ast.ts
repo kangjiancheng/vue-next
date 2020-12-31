@@ -694,6 +694,7 @@ export function createFunctionExpression(
   }
 }
 
+// 创建if节点的codegen
 export function createConditionalExpression(
   test: ConditionalExpression['test'],
   consequent: ConditionalExpression['consequent'],

@@ -397,7 +397,7 @@ export function traverseNode(
    *
    * nodeTransforms = [
        transformOnce, // 处理 v-once 指令属性节点
-       transformIf,  // 处理 v-if 指令属性节点
+       transformIf,  // 处理 v-if 指令属性节点，在添加插件时，会先插件一个新的if branch node分支流节点，将之后的else-f、else节点移进来，创建if codegenNode，并将else-if、else的codegenNode链式绑定到if分支流节点
        transformFor, // 处理 v-for 指令属性节点， 在添加插件时，会先创建一个新的for node 类型节点，并替换当前for类型的节点，之后会处理slot场景下的v-for，和template场景下的v-for，包括对key属性的处理，并生成for节点的codegenNode
        ...(!__BROWSER__ && prefixIdentifiers
         ? [

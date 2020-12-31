@@ -249,7 +249,7 @@ export function isSlotOutlet(
 // <template v-for="..." :key="..."><div>...</div></template>
 // 则其node，即子节点： <div>...</div> 的codegenNode 在 transformElement节点生成 createVNodeCall
 
-// 场景三：在解析v-if指令时，将if在节点中的序号 key，注入到 如：<div v-if="true" v-for="item in items"></div>
+// 场景三：在解析v-if指令时，将if在兄弟节点中的位置key（系统），注入到 如：<div v-if="true" v-for="item in items"></div>
 export function injectProp(
   node: VNodeCall | RenderSlotCall, // 如 slotOutlet.codegenNode as RenderSlotCall，一个 NodeTypes.JS_CALL_EXPRESSION类型节点
   prop: Property, // 如 <span v-for="..." key="..."></span> 中 key属性对应的js节点
