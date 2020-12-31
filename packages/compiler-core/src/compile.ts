@@ -30,11 +30,11 @@ export function getBaseTransformPreset(
   prefixIdentifiers?: boolean
 ): TransformPreset {
   return [
-    // 默认 nodeTransforms
+    // 默认 nodeTransforms compiler-core
     [
-      transformOnce,
-      transformIf,
-      transformFor,
+      transformOnce, // 处理 v-once 指令属性节点，编译一次节点，不进行再次编译，缓存codegenNode
+      transformIf, // 处理 v-if 指令属性节点，在添加插件时，会先插件一个新的if branch node分支流节点，将之后的else-f、else节点移进来，创建if codegenNode，并将else-if、else的codegenNode链式绑定到if分支流节点
+      transformFor, // 处理 v-for 指令属性节点， 在添加插件时，会先创建一个新的for node 类型节点，并替换当前for类型的节点，之后会处理slot场景下的v-for，和template场景下的v-for，包括对key属性的处理，并生成for节点的codegenNode
       ...(!__BROWSER__ && prefixIdentifiers
         ? [
             // order is important
@@ -42,12 +42,16 @@ export function getBaseTransformPreset(
             transformExpression
           ]
         : __BROWSER__ && __DEV__
-          ? [transformExpression]
+          ? [transformExpression] // 处理插值表达式内容，指令属性节点值表达式，排除v-for和v-on:arg属性节点，在浏览器中只需要节点验证表达式值的js语法规则：validateBrowserExpression
           : []),
-      transformSlotOutlet,
-      transformElement,
-      trackSlotScopes,
-      transformText
+      transformSlotOutlet, // 处理插值表达式内容，指令属性节点值表达式，排除v-for和v-on:arg属性节点，在浏览器中只需要节点验证表达式值的js语法规则：validateBrowserExpression
+      transformElement, // 处理html元素节点或组件节点，解析元素节点的prop属性列表（on/bind/model/text/html/show/is）、v-slot指令与默认/具名插槽转换、patchFlag信息、用户定义的指令等，为当前节点的ast生成对应的codegen vnode执行函数节点
+      trackSlotScopes, // 处理并跟踪节点的slot指令，通过计数来识别出是否内嵌了slot指令，为transformElement检测是否定义了动态slot，创建对应的patchflag信息
+      transformText // 处理 连续子文本节点/表达式节点 的合并；或 如果即包含文本又包含其它类型节点时，则需要设置该子节点文本/表达式的diff patch codegenNode 信息，同时也重新定义当前节点的子节点配置
+
+      // compiler-dom:
+      // transformStyle,                      // 不返回回调转换插件， html元素全部转换静态style属性为对应的动态style指令属性节点
+      // warnTransitionChildren               // transition组件只接收一个子元素/子组件
     ],
     // 默认 directiveTransforms
     // transformElement阶段
@@ -96,7 +100,7 @@ export function baseCompile(
   const [nodeTransforms, directiveTransforms] = getBaseTransformPreset(
     prefixIdentifiers
   )
-  // 进一步调整、转换 ast语法树 中的节点，如删减style/script标签节点、将元素节点的静态style属性转换为指令属性
+  // 进一步转换ast语法树中的节点，如：解析节点上的指令、解析组件、解析子元素文本、解析元素并获取对应的codegenNode。
   transform(
     ast,
     extend({}, options, {
