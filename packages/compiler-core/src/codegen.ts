@@ -139,9 +139,11 @@ function createCodegenContext(
         }
       }
     },
+    // 添加缩进
     indent() {
       newline(++context.indentLevel)
     },
+    // 减少缩进
     deindent(withoutNewLine = false) {
       if (withoutNewLine) {
         --context.indentLevel
@@ -149,11 +151,13 @@ function createCodegenContext(
         newline(--context.indentLevel)
       }
     },
+    // 添加新行
     newline() {
       newline(context.indentLevel)
     }
   }
 
+  // 换行，并指定缩进
   function newline(n: number) {
     context.push('\n' + `  `.repeat(n))
   }
@@ -188,6 +192,7 @@ export function generate(
     onContextCreated?: (context: CodegenContext) => void
   } = {}
 ): CodegenResult {
+  // 初始化codegen上下文
   const context = createCodegenContext(ast, options)
   if (options.onContextCreated) options.onContextCreated(context)
   const {
