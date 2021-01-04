@@ -18,30 +18,32 @@ import { CREATE_VNODE } from '../runtimeHelpers'
 
 export function hoistStatic(root: RootNode, context: TransformContext) {
   walk(
-    root,
+    root, // ast 根节点
     context,
     // Root node is unfortunately non-hoistable due to potential parent
     // fallthrough attributes.
-    isSingleElementRoot(root, root.children[0])
+    isSingleElementRoot(root, root.children[0]) // ast 根节点下只有一个节点，即template内容只有一个元素
   )
 }
 
+// ast 根节点下只有一个节点，即template内容只有一个元素
+// 只有一个元素， template: '<div>...</div>'
 export function isSingleElementRoot(
-  root: RootNode,
-  child: TemplateChildNode
+  root: RootNode, // ast 根节点
+  child: TemplateChildNode // ast 根节点 的第一个节点
 ): child is PlainElementNode | ComponentNode | TemplateNode {
   const { children } = root
   return (
     children.length === 1 &&
-    child.type === NodeTypes.ELEMENT &&
-    !isSlotOutlet(child)
+    child.type === NodeTypes.ELEMENT && // 标签元素
+    !isSlotOutlet(child) // 不是 <slot></slot>
   )
 }
 
 function walk(
   node: ParentNode,
   context: TransformContext,
-  doNotHoistNode: boolean = false
+  doNotHoistNode: boolean = false // 是否单节点
 ) {
   let hasHoistedNode = false
   // Some transforms, e.g. transformAssetUrls from @vue/compiler-sfc, replaces
@@ -54,7 +56,7 @@ function walk(
   // stringficiation threshold is met.
   let canStringify = true
 
-  const { children } = node
+  const { children } = node // ast子节点列表
   for (let i = 0; i < children.length; i++) {
     const child = children[i]
     // only plain elements & text calls are eligible for hoisting.
@@ -62,14 +64,24 @@ function walk(
       child.type === NodeTypes.ELEMENT &&
       child.tagType === ElementTypes.ELEMENT
     ) {
-      const constantType = doNotHoistNode
-        ? ConstantTypes.NOT_CONSTANT
+      const constantType = doNotHoistNode // 默认false
+        ? ConstantTypes.NOT_CONSTANT // 单根节点
         : getConstantType(child, context)
+
+      // ConstantTypes {
+      //   NOT_CONSTANT = 0,
+      //   CAN_SKIP_PATCH,
+      //   CAN_HOIST,
+      //   CAN_STRINGIFY
+      // }
       if (constantType > ConstantTypes.NOT_CONSTANT) {
         if (constantType < ConstantTypes.CAN_STRINGIFY) {
+          // ConstantTypes = CAN_SKIP_PATCH、CAN_HOIST
           canStringify = false
         }
         if (constantType >= ConstantTypes.CAN_HOIST) {
+          // ConstantTypes = CAN_HOIST、CAN_STRINGIFY
+
           ;(child.codegenNode as VNodeCall).patchFlag =
             PatchFlags.HOISTED + (__DEV__ ? ` /* HOISTED */` : ``)
           child.codegenNode = context.hoist(child.codegenNode!)
@@ -100,33 +112,45 @@ function walk(
       const contentType = getConstantType(child.content, context)
       if (contentType > 0) {
         if (contentType < ConstantTypes.CAN_STRINGIFY) {
+          // ConstantTypes = CAN_SKIP_PATCH、CAN_HOIST
+
           canStringify = false
         }
         if (contentType >= ConstantTypes.CAN_HOIST) {
+          // ConstantTypes = CAN_HOIST、CAN_STRINGIFY
+
           child.codegenNode = context.hoist(child.codegenNode)
           hasHoistedNode = true
         }
       }
     }
 
+    // 递归设置
     // walk further
     if (child.type === NodeTypes.ELEMENT) {
+      // 标签元素
       walk(child, context)
     } else if (child.type === NodeTypes.FOR) {
+      // for节点，对于只有一个for子节点，不需要hoist
       // Do not hoist v-for single child because it has to be a block
       walk(child, context, child.children.length === 1)
     } else if (child.type === NodeTypes.IF) {
+      // if分支流节点
       for (let i = 0; i < child.branches.length; i++) {
+        // 分析其中的if、else-if、else节点
+
         // Do not hoist v-if single child because it has to be a block
         walk(
-          child.branches[i],
+          child.branches[i], // if、else-if、else节点
           context,
-          child.branches[i].children.length === 1
+          child.branches[i].children.length === 1 // 当前分支节点下的子元素数量
         )
       }
     }
   }
 
+  // ConstantTypes = CAN_STRINGIFY
+  // 如，template: '<div>123</div><div>abc</div>'
   if (canStringify && hasHoistedNode && context.transformHoist) {
     context.transformHoist(children, context, node)
   }

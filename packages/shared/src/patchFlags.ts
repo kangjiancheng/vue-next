@@ -75,7 +75,8 @@ export const enum PatchFlags {
    * comments at the root level of a template. This is a dev-only flag since
    * comments are stripped in production.
    */
-  // 模版根部创建了注释
+  // 模版template，根节点有多个，其中只有一个是非注释节点，即只有一个有效根节点
+  // template: '<!-- 123 --><div>...</div><!-- 123 -->'
   DEV_ROOT_FRAGMENT = 1 << 11,
 
   /*------------------------ 特殊标记：'负整数' -------------------------- */

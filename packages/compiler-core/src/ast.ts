@@ -198,7 +198,7 @@ export const enum ConstantTypes {
   NOT_CONSTANT = 0,
   CAN_SKIP_PATCH,
   CAN_HOIST,
-  CAN_STRINGIFY
+  CAN_STRINGIFY // 高级别包含低级别
 }
 
 export interface SimpleExpressionNode extends Node {

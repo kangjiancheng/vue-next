@@ -28,7 +28,7 @@ export const transformText: NodeTransform = (node, context) => {
   if (
     node.type === NodeTypes.ROOT || // ast跟节点下，存在text文本/插值表达式节点
     node.type === NodeTypes.ELEMENT ||
-    node.type === NodeTypes.FOR ||
+    node.type === NodeTypes.FOR || // 在添加for transform插件时，会新生成for节点
     node.type === NodeTypes.IF_BRANCH
   ) {
     // 在节点退出时 执行transform，因为此时所以表达式都已经被处理了

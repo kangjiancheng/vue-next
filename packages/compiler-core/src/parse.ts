@@ -936,7 +936,7 @@ function parseAttribute(
         isStatic: false,
         // Treat as non-constant by default. This can be potentially set to
         // other values by `transformExpression` to make it eligible for hoisting.
-        constType: ConstantTypes.NOT_CONSTANT,
+        constType: ConstantTypes.NOT_CONSTANT, // 默认为NOT_CONSTANT，在transformExpression中可能调整成相应的值，为了之后的hoisting设置。
         loc: value.loc
       },
       arg, // 指令表达式名内容信息，注意必须是个变量 @['click'] 不符合语法，指令名不能包含 ' " <

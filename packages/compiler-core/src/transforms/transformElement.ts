@@ -428,7 +428,8 @@ export function buildProps(
   // prop属性节点 createObjectProperty(key, value)
   const analyzePatchFlag = ({ key, value }: Property) => {
     if (isStaticExp(key)) {
-      // 静态js节点
+      // 静态属性指令
+
       const name = key.content // （属性名/属性值/修饰符）节点名内容
       const isEventHandler = isOn(name) // /^on[^a-z]/  on 事件
       if (

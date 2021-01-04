@@ -160,7 +160,7 @@ export function createTransformContext(
     // state
     root,
     helpers: new Set(),
-    components: new Set(),
+    components: new Set(), // 保存用户自定义的组件标签名
     directives: new Set(),
     hoists: [],
     imports: new Set(),
@@ -295,28 +295,37 @@ export function transform(root: RootNode, options: TransformOptions) {
   // 如：文本节点合并、删减style/script节点等，解析节点的props属性列表、解析指令、调整节点格式，生成patchFlag等，为相关节点生成相应的codegen和转换js格式节点
   traverseNode(root, context)
 
+  // 静态提升
   if (options.hoistStatic) {
     hoistStatic(root, context)
   }
+
+  // 非ssr环境下，创建ast root根节点的codegenNode
   if (!options.ssr) {
     createRootCodegen(root, context)
   }
-  // 设置属性最终信息
+
+  // 补充设置root的相关信息
   // finalize meta information
-  root.helpers = [...context.helpers]
-  root.components = [...context.components]
-  root.directives = [...context.directives]
+  root.helpers = [...context.helpers] // 此root的helper 列表
+  root.components = [...context.components] // 保存用户自定义的组件标签名，transformElement
+  root.directives = [...context.directives] // 用户自定义的指令名，transformElement
   root.imports = [...context.imports]
-  root.hoists = context.hoists
+  root.hoists = context.hoists // 需要静态提升的 codegenNode列表
   root.temps = context.temps
-  root.cached = context.cached
+  root.cached = context.cached // 缓存编译结果，如 v-once
 }
 
+// 非ssr环境下，创建ast root根节点的codegenNode
 function createRootCodegen(root: RootNode, context: TransformContext) {
   const { helper } = context
   const { children } = root
   if (children.length === 1) {
+    // ast根节点就一个子节点，即编译模版只有一个根元素
+
     const child = children[0]
+    // root ast根节点就一个元素，但不是 slot元素，设置为block
+    // template: '<div>...</div>'
     // if the single child is an element, turn it into a block.
     if (isSingleElementRoot(root, child) && child.codegenNode) {
       // single element root is never hoisted so codegenNode will never be
@@ -335,21 +344,28 @@ function createRootCodegen(root: RootNode, context: TransformContext) {
       root.codegenNode = child
     }
   } else if (children.length > 1) {
+    // 模版存在多个根节点，转换为fragment block
+    // template: '<div>...</div><div>...</div>'
     // root has multiple nodes - return a fragment block.
+
     let patchFlag = PatchFlags.STABLE_FRAGMENT
-    let patchFlagText = PatchFlagNames[PatchFlags.STABLE_FRAGMENT]
+    let patchFlagText = PatchFlagNames[PatchFlags.STABLE_FRAGMENT] // 'STABLE_FRAGMENT'
+
+    // 模版template，根节点有多个，其中只有一个是非注释节点
+    // template: '<!-- 123 --><div>...</div><!-- 123 -->'
     // check if the fragment actually contains a single valid child with
     // the rest being comments
     if (
       __DEV__ &&
-      children.filter(c => c.type !== NodeTypes.COMMENT).length === 1
+      children.filter(c => c.type !== NodeTypes.COMMENT).length === 1 // 如果其它节点都是注释节点
     ) {
+      // 模版 只有一个是有效的根节点，其它根节点都是注释
       patchFlag |= PatchFlags.DEV_ROOT_FRAGMENT
-      patchFlagText += `, ${PatchFlagNames[PatchFlags.DEV_ROOT_FRAGMENT]}`
+      patchFlagText += `, ${PatchFlagNames[PatchFlags.DEV_ROOT_FRAGMENT]}` // DEV_ROOT_FRAGMENT
     }
     root.codegenNode = createVNodeCall(
       context,
-      helper(FRAGMENT),
+      helper(FRAGMENT), // FRAGMENT = Symbol(__DEV__ ? `Fragment` : ``)
       undefined,
       root.children,
       patchFlag + (__DEV__ ? ` /* ${patchFlagText} */` : ``),
@@ -359,6 +375,7 @@ function createRootCodegen(root: RootNode, context: TransformContext) {
     )
   } else {
     // no children = noop. codegen will return null.
+    // ast 就一个根节点
   }
 }
 
