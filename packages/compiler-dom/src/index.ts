@@ -65,6 +65,7 @@ export function compile(
         DOMDirectiveTransforms,
         options.directiveTransforms || {}
       ),
+      // hoistStatic 静态提升
       transformHoist: __BROWSER__ ? null : stringifyStatic
     })
   )

@@ -89,7 +89,7 @@ function createCodegenContext(
   ast: RootNode,
   {
     mode = 'function',
-    prefixIdentifiers = mode === 'module',
+    prefixIdentifiers = mode === 'module', // false
     sourceMap = false,
     filename = `template.vue.html`,
     scopeId = null,
@@ -109,7 +109,7 @@ function createCodegenContext(
     runtimeGlobalName,
     runtimeModuleName,
     ssr,
-    source: ast.loc.source,
+    source: ast.loc.source, // 模版源码
     code: ``,
     column: 1,
     line: 1,
@@ -210,7 +210,7 @@ export function generate(
   const genScopeId = !__BROWSER__ && scopeId != null && mode === 'module'
   const isSetupInlined = !__BROWSER__ && !!options.inline
 
-  // preambles
+  // preambles 前言
   // in setup() inline mode, the preamble is generated in a sub context
   // and returned separately.
   const preambleContext = isSetupInlined

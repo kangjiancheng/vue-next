@@ -152,6 +152,7 @@ function walk(
   // ConstantTypes = CAN_STRINGIFY
   // 如，template: '<div>123</div><div>abc</div>'
   if (canStringify && hasHoistedNode && context.transformHoist) {
+    // transformHoist: __BROWSER__ ? null : stringifyStatic
     context.transformHoist(children, context, node)
   }
 }

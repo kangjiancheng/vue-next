@@ -100,7 +100,7 @@ export function baseCompile(
   const [nodeTransforms, directiveTransforms] = getBaseTransformPreset(
     prefixIdentifiers
   )
-  // 进一步转换ast语法树中的节点，如：解析节点上的指令、属性、解析组件、解析子元素文本、解析元素等等并获取对应的codegenNode。
+  // 进一步转换处理ast语法树中的节点，如：解析节点上的指令、属性、解析组件、解析子元素文本、解析元素等等并获取对应的codegenNode。
   transform(
     ast,
     extend({}, options, {
