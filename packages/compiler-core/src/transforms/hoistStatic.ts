@@ -84,6 +84,7 @@ function walk(
 
           ;(child.codegenNode as VNodeCall).patchFlag =
             PatchFlags.HOISTED + (__DEV__ ? ` /* HOISTED */` : ``)
+          // 重新转换 生成
           child.codegenNode = context.hoist(child.codegenNode!)
           hasHoistedNode = true
           continue
@@ -119,6 +120,7 @@ function walk(
         if (contentType >= ConstantTypes.CAN_HOIST) {
           // ConstantTypes = CAN_HOIST、CAN_STRINGIFY
 
+          // 如 <div><i :class="red">1</i>abc</div>，静态提升其中文本节点 'abc'
           child.codegenNode = context.hoist(child.codegenNode)
           hasHoistedNode = true
         }

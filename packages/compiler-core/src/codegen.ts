@@ -100,16 +100,16 @@ function createCodegenContext(
   }: CodegenOptions
 ): CodegenContext {
   const context: CodegenContext = {
-    mode,
-    prefixIdentifiers,
-    sourceMap,
-    filename,
-    scopeId,
-    optimizeImports,
-    runtimeGlobalName,
-    runtimeModuleName,
-    ssr,
-    source: ast.loc.source, // 模版源码
+    mode, // function
+    prefixIdentifiers, // false
+    sourceMap, // false
+    filename, // template.vue.html
+    scopeId, // null
+    optimizeImports, // false
+    runtimeGlobalName, // Vue
+    runtimeModuleName, // Vue
+    ssr, // false
+    source: ast.loc.source, // 模版template源码
     code: ``,
     column: 1,
     line: 1,
@@ -151,7 +151,7 @@ function createCodegenContext(
         newline(--context.indentLevel)
       }
     },
-    // 添加新行
+    // 添加新行并缩进
     newline() {
       newline(context.indentLevel)
     }
@@ -195,58 +195,79 @@ export function generate(
   // 初始化codegen上下文
   const context = createCodegenContext(ast, options)
   if (options.onContextCreated) options.onContextCreated(context)
+
   const {
-    mode,
-    push,
-    prefixIdentifiers,
+    mode, // 'function'
+    push, // context.code += code
+    prefixIdentifiers, // false
     indent,
     deindent,
     newline,
-    scopeId,
+    scopeId, // null
     ssr
   } = context
+
   const hasHelpers = ast.helpers.length > 0
-  const useWithBlock = !prefixIdentifiers && mode !== 'module'
+  const useWithBlock = !prefixIdentifiers && mode !== 'module' // true
   const genScopeId = !__BROWSER__ && scopeId != null && mode === 'module'
   const isSetupInlined = !__BROWSER__ && !!options.inline
 
-  // preambles 前言
+  // 前置变量 设置，静态节点提升
+
+  // preambles 前置变量
   // in setup() inline mode, the preamble is generated in a sub context
   // and returned separately.
   const preambleContext = isSetupInlined
     ? createCodegenContext(ast, options)
     : context
   if (!__BROWSER__ && mode === 'module') {
+    // TODO: cfs - analyze
     genModulePreamble(ast, preambleContext, genScopeId, isSetupInlined)
   } else {
+    // 针对存在静态提升节点，如：<div><i :class="red">1</i>abc</div>
+    // 解析其中静态提升文本节点abc，结果为：context.code +=
+    // 'const _Vue = Vue'
+    // 'const { createTextVNode: _createTextVNode } = _Vue'
+    // ''
+    // 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")'
+    // ''
+    // 'return '
     genFunctionPreamble(ast, preambleContext)
   }
 
+  // 开始生成渲染函数代码
+
   // enter render function
-  const functionName = ssr ? `ssrRender` : `render`
+  const functionName = ssr ? `ssrRender` : `render` // render
   const args = ssr ? ['_ctx', '_push', '_parent', '_attrs'] : ['_ctx', '_cache']
+  // TODO: cfs - analyze
   if (!__BROWSER__ && options.bindingMetadata && !options.inline) {
     // binding optimization args
     args.push('$props', '$setup', '$data', '$options')
   }
+  // TODO: cfs - analyze
   const signature =
     !__BROWSER__ && options.isTS
       ? args.map(arg => `${arg}: any`).join(',')
-      : args.join(', ')
+      : args.join(', ') // '_ctx, _cache'
 
   if (genScopeId) {
+    // TODO: cfs - analyze
     if (isSetupInlined) {
       push(`${PURE_ANNOTATION}_withId(`)
     } else {
       push(`const ${functionName} = ${PURE_ANNOTATION}_withId(`)
     }
   }
+
   if (isSetupInlined || genScopeId) {
+    // TODO: cfs - analyze
     push(`(${signature}) => {`)
   } else {
+    // 'function render(_ctx, _cache) {'
     push(`function ${functionName}(${signature}) {`)
   }
-  indent()
+  indent() // 换行并缩进
 
   if (useWithBlock) {
     push(`with (_ctx) {`)
@@ -254,45 +275,87 @@ export function generate(
     // function mode const declarations should be inside with block
     // also they should be renamed to avoid collision with user properties
     if (hasHelpers) {
+      // 'const { createVNode: _createVNode, createTextVNode: _createTextVNode } = _Vue\n\n'
       push(
         `const { ${ast.helpers
           .map(s => `${helperNameMap[s]}: _${helperNameMap[s]}`)
           .join(', ')} } = _Vue`
       )
       push(`\n`)
-      newline()
+      newline() // 添加新行并缩进
     }
+
+    // 针对存在静态提升节点，如：<div><i :class="red">1</i>abc</div>
+    // 解析结果为：
+    // 'const _Vue = Vue'
+    // 'const { createTextVNode: _createTextVNode } = _Vue'
+    // ''
+    // 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")'
+    // ''
+    // 'return function render(_ctx, _cache) {'
+    // '  with (_ctx) {'
+    // '    const { createVNode: _createVNode, createTextVNode: _createTextVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue\n\n'
   }
+
+  // 解析自定义组件
 
   // generate asset resolution statements
   if (ast.components.length) {
+    // 自定义组件列表，在transformElement中初始化
+    // 如 template: '<div><hello-world></hello-world><good-bye></good-bye></div>'
+    // code:
+    // 'const _component_hello__world = _resolveComponent("hello-world")'
+    // 'const _component_good_bye = _resolveComponent("good-bye")'
     genAssets(ast.components, 'component', context)
+
+    // 换行
     if (ast.directives.length || ast.temps > 0) {
-      newline()
+      newline() // 添加新行并缩进
     }
   }
+
+  // 解析自定义指令
+
   if (ast.directives.length) {
+    // 自定义指令，如 '<div v-click-out-layer></div>
+    // 'const _directive_click_out_layer = _resolveDirective("click-out-layer")'
     genAssets(ast.directives, 'directive', context)
     if (ast.temps > 0) {
-      newline()
+      newline() // 添加新行并缩进
     }
   }
+  // 临时变量
   if (ast.temps > 0) {
+    // code: 'let _temp1, _temp2, _temp3...'
     push(`let `)
     for (let i = 0; i < ast.temps; i++) {
       push(`${i > 0 ? `, ` : ``}_temp${i}`)
     }
   }
   if (ast.components.length || ast.directives.length || ast.temps) {
-    push(`\n`)
-    newline()
+    push(`\n`) // 不用缩进
+    newline() // 添加新行并缩进
   }
 
   // generate the VNode tree expression
   if (!ssr) {
     push(`return `)
+    // 解析结束
+    // 'const _Vue = Vue'
+    // ... // 静态节点提升
+    // 'return function render(_ctx, _cache) {'
+    // '  with (_ctx) {'
+    // '    // 节点生成函数
+    // '    const { createVNode: _createVNode, createTextVNode: _createTextVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue'
+    // ''
+    // '    const _component_hello__world = _resolveComponent("hello-world")'
+    // '    const _directive_click_out_layer = _resolveDirective("click-out-layer")'
+    // '    let _temp1, _temp2, _temp3...'
+    // ''
+    // '    return '
   }
   if (ast.codegenNode) {
+    // ast树的codegenNode: 由transform最后阶段的createRootCodegen
     genNode(ast.codegenNode, context)
   } else {
     push(`null`)
@@ -319,37 +382,63 @@ export function generate(
   }
 }
 
+// 生成codegen前置变量，主要针对静态节点的提升
 function genFunctionPreamble(ast: RootNode, context: CodegenContext) {
   const {
-    ssr,
-    prefixIdentifiers,
-    push,
-    newline,
-    runtimeModuleName,
-    runtimeGlobalName
+    ssr, // false
+    prefixIdentifiers, // false
+    push, // function (code) { context.code += code }
+    newline, // function
+    runtimeModuleName, // 'Vue'
+    runtimeGlobalName // 'Vue'
   } = context
   const VueBinding =
     !__BROWSER__ && ssr
-      ? `require(${JSON.stringify(runtimeModuleName)})`
-      : runtimeGlobalName
+      ? `require(${JSON.stringify(runtimeModuleName)})` // TODO: cfs - !BROWSER
+      : runtimeGlobalName // 'Vue'
+
+  // 转换ast helpers的名字，e.g: CREATE_TEXT 对应的 Symbol('createTextVNode') 转换为 'createTextVNode: _createTextVNode'
   const aliasHelper = (s: symbol) => `${helperNameMap[s]}: _${helperNameMap[s]}`
+
   // Generate const declaration for helpers
   // In prefix mode, we place the const declaration at top so it's done
   // only once; But if we not prefixing, we place the declaration inside the
   // with block so it doesn't incur the `in` check cost for every helper access.
   if (ast.helpers.length > 0) {
     if (!__BROWSER__ && prefixIdentifiers) {
+      // TODO: cfs - !__BROWSER__
       push(
         `const { ${ast.helpers.map(aliasHelper).join(', ')} } = ${VueBinding}\n`
       )
     } else {
       // "with" mode.
+
       // save Vue in a separate variable to avoid collision
-      push(`const _Vue = ${VueBinding}\n`)
+      // context.code = 'const _Vue = Vue\n'
+      push(`const _Vue = ${VueBinding}\n`) // context.code += code
+
       // in "with" mode, helpers are declared inside the with block to avoid
       // has check cost, but hoists are lifted out of the function - we need
       // to provide the helper here.
       if (ast.hoists.length) {
+        // 存在 ast 静态提升节点列表
+        // 先执行静态节点生成 变量函数
+        // e.g:
+        // template:
+        //    <div class="btn-click" @click="handleClick">
+        //      <i class="loading"></i> 点击 {{ count }}
+        //      <div :class="hello">
+        //        <div>123 {{ count }}</div>
+        //        abc
+        //      </div>
+        //    </div>
+        // 此时提升静态节点：标签i节点 '<i class="loading"></i>' 和 文本节点 'abc'
+        //
+        // ast helpers: runtimeHelpers.ts
+        //    [CREATE_VNODE, CTO_DISPLAY_STRING, CREATE_TEXT, OPEN_BLOCK, CREATE_BLOCK]
+        //
+        // 即: [Symbol('createVNode'), Symbol('toDisplayString'), Symbol('createTextVNode'), Symbol('openBlock'), Symbol('createBlock')]
+
         const staticHelpers = [
           CREATE_VNODE,
           CREATE_COMMENT,
@@ -358,11 +447,17 @@ function genFunctionPreamble(ast: RootNode, context: CodegenContext) {
         ]
           .filter(helper => ast.helpers.includes(helper))
           .map(aliasHelper)
-          .join(', ')
+          .join(', ') // 如：'createVNode: _createVNode, createTextVNode: _createTextVNode'
+
+        // ast code:
+        // 'const _Vue = Vue\n' +
+        // 'const { createVNode: _createVNode, createTextVNode: _createTextVNode } = _Vue\n'
         push(`const { ${staticHelpers} } = _Vue\n`)
       }
     }
   }
+
+  // TODO: analyze cfs - !__BROWSER__
   // generate variables for ssr helpers
   if (!__BROWSER__ && ast.ssrHelpers && ast.ssrHelpers.length) {
     // ssr guarantees prefixIdentifier: true
@@ -372,9 +467,19 @@ function genFunctionPreamble(ast: RootNode, context: CodegenContext) {
         .join(', ')} } = require("@vue/server-renderer")\n`
     )
   }
+
   genHoists(ast.hoists, context)
   newline()
   push(`return `)
+
+  // 针对存在静态提升节点，如：<div><i :class="red">1</i>abc</div>
+  // 解析结果为：
+  // 'const _Vue = Vue'
+  // 'const { createTextVNode: _createTextVNode } = _Vue'
+  // ''
+  // 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")'
+  // ''
+  // 'return '
 }
 
 function genModulePreamble(
@@ -454,8 +559,9 @@ function genModulePreamble(
   }
 }
 
+// 生成指自定义组件与自定义指令的code
 function genAssets(
-  assets: string[],
+  assets: string[], // 自定义组件标签名
   type: 'component' | 'directive',
   { helper, push, newline }: CodegenContext
 ) {
@@ -465,23 +571,42 @@ function genAssets(
   for (let i = 0; i < assets.length; i++) {
     const id = assets[i]
     push(
+      // 如 template: '<hello-world></hello-world>'
+      // code: 'const _component_hello__world = _resolveComponent("hello-world")'
       `const ${toValidAssetId(id, type)} = ${resolver}(${JSON.stringify(id)})`
     )
+    // 换行
     if (i < assets.length - 1) {
       newline()
     }
   }
 }
 
+// 静态提升节点 codegenNode
+// 如：<div><i :class="red">1</i>abc</div>
+// 解析其中静态提升文本节点abc: 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")\n'
 function genHoists(hoists: (JSChildNode | null)[], context: CodegenContext) {
   if (!hoists.length) {
     return
   }
+  // e.g:
+  // template:
+  //    <div class="btn-click" @click="handleClick">
+  //      <i class="loading"></i> 点击 {{ count }}
+  //      <div :class="hello">
+  //        <div>123 {{ count }}</div>
+  //        abc
+  //      </div>
+  //    </div>
+  // 此时提升静态节点：标签i节点 '<i class="loading"></i>' 和 文本节点 'abc'
+
   context.pure = true
   const { push, newline, helper, scopeId, mode } = context
+  // TODO: analyze cfs - !__BROWSER__
   const genScopeId = !__BROWSER__ && scopeId != null && mode !== 'function'
-  newline()
+  newline() // 换行 context.code + '\n'
 
+  // TODO: analyze cfs - !__BROWSER__
   // push scope Id before initializing hoisted vnodes so that these vnodes
   // get the proper scopeId as well.
   if (genScopeId) {
@@ -489,14 +614,18 @@ function genHoists(hoists: (JSChildNode | null)[], context: CodegenContext) {
     newline()
   }
 
+  // 如：<div><i :class="red">1</i>abc</div>
+  // 解析其中静态提升文本节点abc: 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")\n'
   hoists.forEach((exp, i) => {
     if (exp) {
-      push(`const _hoisted_${i + 1} = `)
-      genNode(exp, context)
+      // exp 为节点的codegenNode，注意此codegenNode为静态提升前的codegenNode，不是静态提升后的ast节点的codegenNode
+      push(`const _hoisted_${i + 1} = `) // 'const _hoisted_1 = '
+      genNode(exp, context) // '/*#__PURE__*/_createTextVNode("abc")'
       newline()
     }
   })
 
+  // TODO: analyze cfs - !__BROWSER__
   if (genScopeId) {
     push(`${helper(POP_SCOPE_ID)}()`)
     newline()
@@ -567,6 +696,7 @@ function genNodeList(
   }
 }
 
+// 生成ast节点对应的code代码
 function genNode(node: CodegenNode | symbol | string, context: CodegenContext) {
   if (isString(node)) {
     context.push(node)
@@ -607,10 +737,12 @@ function genNode(node: CodegenNode | symbol | string, context: CodegenContext) {
       genComment(node, context)
       break
     case NodeTypes.VNODE_CALL:
+      // 如，静态提升dom标签节点，'<span class="abc">123</span>'
       genVNodeCall(node, context)
       break
 
     case NodeTypes.JS_CALL_EXPRESSION:
+      // 如：静态提升文本节点: 'abc'，节点类型在
       genCallExpression(node, context)
       break
     case NodeTypes.JS_OBJECT_EXPRESSION:
@@ -727,6 +859,7 @@ function genComment(node: CommentNode, context: CodegenContext) {
   }
 }
 
+// 生成标签元素节点的code
 function genVNodeCall(node: VNodeCall, context: CodegenContext) {
   const { push, helper, pure } = context
   const {
@@ -773,15 +906,27 @@ function genNullableArgs(args: any[]): CallExpression['arguments'] {
 }
 
 // JavaScript
+// 静态dom标签节点
+// 如生成静态提升节点对应的code代码，template: <div><i :class="red">1</i>abc</div>，其中的静态文本节点 'abc'，得到 '/*#__PURE__*/_createTextVNode(["abc"])'
 function genCallExpression(node: CallExpression, context: CodegenContext) {
   const { push, helper, pure } = context
+  // 如提升静态文本节点，template: <div><i :class="red">1</i>abc</div>
+  // 此时解析静态提升节点：'abc'
+  // 则 node.callee为 CREATE_TEXT = Symbol('createTextVNode')
   const callee = isString(node.callee) ? node.callee : helper(node.callee)
   if (pure) {
+    // 静态提升
+    // context.code += `/*#__PURE__*/`
     push(PURE_ANNOTATION)
   }
   push(callee + `(`, node)
+  // 转换参数个数，如静态节点 'abc'
+  // context.code += 'abc'
   genNodeList(node.arguments, context)
   push(`)`)
+
+  // 最终
+  // context.code += '/*#__PURE__*/_createTextVNode("abc")'
 }
 
 function genObjectExpression(node: ObjectExpression, context: CodegenContext) {

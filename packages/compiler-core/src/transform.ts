@@ -255,12 +255,14 @@ export function createTransformContext(
     hoist(exp) {
       context.hoists.push(exp)
       const identifier = createSimpleExpression(
+        // codegen时，对应的变量名字，如 <div><i :class="red">1</i>abc</div>，
+        // 其中静态abc节点： 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")'
         `_hoisted_${context.hoists.length}`,
         false,
         exp.loc,
         ConstantTypes.CAN_HOIST
       )
-      identifier.hoisted = exp
+      identifier.hoisted = exp // 静态提升节点内容
       return identifier
     },
     cache(exp, isVNode = false) {
@@ -296,6 +298,15 @@ export function transform(root: RootNode, options: TransformOptions) {
   traverseNode(root, context)
 
   // 静态提升
+  // 提升静态ast节点，如 template:
+  // <div class="btn-click" @click="handleClick">
+  //   <i class="loading"></i> 点击 {{ count }}
+  //   <div :class="hello">
+  //     <div>123 {{ count }}</div>
+  //     abc
+  //   </div>
+  // </div>
+  // 此时提升静态节点：标签i节点 '<i class="loading"></i>' 和 文本节点 'abc'
   if (options.hoistStatic) {
     hoistStatic(root, context)
   }
@@ -312,7 +323,7 @@ export function transform(root: RootNode, options: TransformOptions) {
   root.directives = [...context.directives] // 用户自定义的指令名，transformElement
   root.imports = [...context.imports]
   root.hoists = context.hoists // 需要静态提升的 codegenNode列表
-  root.temps = context.temps
+  root.temps = context.temps // 临时变量个数
   root.cached = context.cached // 缓存编译结果，如 v-once
 }
 

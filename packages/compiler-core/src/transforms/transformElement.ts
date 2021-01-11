@@ -75,6 +75,8 @@ export const transformElement: NodeTransform = (node, context) => {
     return
   }
 
+  // 分析标签元素：html标签元素、组件标签元素
+
   // perform the work on exit, after all child expressions have been
   // processed and merged.
   // 由于当前节点的transform插件列表是先添加后执行，所以会在当前节点的子节点经过 transformText即文本内容合并后，再执行这个插件

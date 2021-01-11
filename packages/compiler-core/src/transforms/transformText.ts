@@ -72,25 +72,24 @@ export const transformText: NodeTransform = (node, context) => {
       }
 
       if (
-        !hasText || // 如果子元素列表中没有文本节点
+        !hasText ||
         // if this is a plain element with a single text child, leave it
         // as-is since the runtime has dedicated fast path for this by directly
         // setting textContent of the element.
         // for component root it's always normalized anyway.
-        // 或者：
-        //    当前节点为ast根节点（即组件根节点）或html元素节点，且经过前边的合并文本处理后，此刻只有一个子节点而且还是文本/插值节点或连续文本节点
-        // 如，template: '{{ foo }}   {{ bar }}'，此时 当前节点即ast根节点只有一个子元素，但是该子元素有5个子元素 存储着：[{foo...}, ' + ', {' '...}, ' + ', {bar...}]
-        (children.length === 1 && // 子节点为1
-          (node.type === NodeTypes.ROOT || // 根节点
-            (node.type === NodeTypes.ELEMENT && // 或 html dom元素节点
+        (children.length === 1 &&
+          (node.type === NodeTypes.ROOT || // template模版节点为 文本节点，如 template: '文本或js表达式{{ xxx }}，没有其它标签节点'
+            (node.type === NodeTypes.ELEMENT && // 或 当前节点为 html dom元素节点，且只有文本子节点
               node.tagType === ElementTypes.ELEMENT)))
       ) {
+        // 不含有文本
+        // 或 只有文本子节点（当前节点：根节点/dom标签元素节点）
         return
       }
 
-      // 当前节点内容有文本子节点也有其它类型子节点，或者当前节点是组件类型节点
-      // 继续调整文本节点内容：创建对应文本的patch表达式
-      // 如 template: '{{ foo }}   {{ bar }} <span>123</span>'，合并文本并创建对应的patch createTextVNode(text)方法
+      // 不纯的子节点：
+      // 1、即有文本又有其它， 如 template: '{{ foo }} - {{ bar }} <span>123</span>'
+      // 2、当前为组件节点，且存在子文本节点，如 template: '<component-demo>123</component-demo>
 
       // pre-convert text nodes into createTextVNode(text) calls to avoid
       // runtime normalization.
@@ -131,6 +130,7 @@ export const transformText: NodeTransform = (node, context) => {
             content: child, // 文本、插值子节点、连续文本/插值子节点
             loc: child.loc, // 子节点位置信息
             codegenNode: createCallExpression(
+              // 之后的静态提升与codegen生成节点对应的渲染源码时，会用到
               // 创建patch时相应的回调表达式，对应文本代码生成的配置节点
               context.helper(CREATE_TEXT), // patch 时的方法与描述信息：'Symbol(createTextVNode)'
               callArgs // 对应参数列表， 元素1：INTERPOLATION 插值、 COMPOUND_EXPRESSION 合并后的连续子节点、 TEXT 纯文本子节点且不是空白； 元素2：插值表达式对于的patch flag 注释
