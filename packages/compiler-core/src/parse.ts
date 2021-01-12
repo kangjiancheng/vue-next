@@ -1067,7 +1067,7 @@ function parseInterpolation(
     content: {
       // 插值内容节点
       type: NodeTypes.SIMPLE_EXPRESSION, // 一个简单的表达式类型节点（此表达式基础 由 ./ast.ts/createSimpleExpression创建，在后续会常见）
-      isStatic: false,
+      isStatic: false, // codegen
       // Set `isConstant` to false by default and will decide in transformExpression
       constType: ConstantTypes.NOT_CONSTANT, // transformText 会用到
       content,

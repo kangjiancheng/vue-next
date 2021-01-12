@@ -297,7 +297,7 @@ export function transform(root: RootNode, options: TransformOptions) {
   // 如：文本节点合并、删减style/script节点等，解析节点的props属性列表、解析指令、调整节点格式，生成patchFlag等，为相关节点生成相应的codegen和转换js格式节点
   traverseNode(root, context)
 
-  // 静态提升
+  // 静态提升： 元素节点、文本节点、属性节点
   // 提升静态ast节点，如 template:
   // <div class="btn-click" @click="handleClick">
   //   <i class="loading"></i> 点击 {{ count }}
@@ -306,7 +306,8 @@ export function transform(root: RootNode, options: TransformOptions) {
   //     abc
   //   </div>
   // </div>
-  // 此时提升静态节点：标签i节点 '<i class="loading"></i>' 和 文本节点 'abc'
+  // 提升静态节点：标签i节点 '<i class="loading"></i>' 和 文本节点 'abc'
+  // 标记静态属性节点：<div class="red" style="color:blue;"></div>，即没有动态属性，会重新转换标签节点codegenNode props属性列表
   if (options.hoistStatic) {
     hoistStatic(root, context)
   }
@@ -339,19 +340,21 @@ function createRootCodegen(root: RootNode, context: TransformContext) {
     // template: '<div>...</div>'
     // if the single child is an element, turn it into a block.
     if (isSingleElementRoot(root, child) && child.codegenNode) {
+      // 只有一个根标签元素（不包括slot标签元素）
       // single element root is never hoisted so codegenNode will never be
       // SimpleExpressionNode
       const codegenNode = child.codegenNode
       if (codegenNode.type === NodeTypes.VNODE_CALL) {
+        // 如 template: '<div>hello {{ "world" }} !</div>'
         codegenNode.isBlock = true
         helper(OPEN_BLOCK)
         helper(CREATE_BLOCK)
       }
       root.codegenNode = codegenNode
     } else {
-      // - single <slot/>, IfNode, ForNode: already blocks.
+      // - single <slot/>, IfNode, ForNode: already blocks. slot、if、for节点已经被转换处理为相应类型
       // - single text node: always patched.
-      // root codegen falls through via genNode()
+      // root codegen falls through via genNode() 在codegen阶段通过genNode处理生成渲染代码
       root.codegenNode = child
     }
   } else if (children.length > 1) {
@@ -386,7 +389,7 @@ function createRootCodegen(root: RootNode, context: TransformContext) {
     )
   } else {
     // no children = noop. codegen will return null.
-    // ast 就一个根节点
+    // 即 ast 根节点没有 codegenNode
   }
 }
 

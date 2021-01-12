@@ -54,7 +54,7 @@ import {
 } from './runtimeHelpers'
 import { ImportItem } from './transform'
 
-const PURE_ANNOTATION = `/*#__PURE__*/`
+const PURE_ANNOTATION = `/*#__PURE__*/` // treeShake 代码优化
 
 type CodegenNode = TemplateChildNode | JSChildNode | SSRCodegenNode
 
@@ -356,6 +356,7 @@ export function generate(
   }
   if (ast.codegenNode) {
     // ast树的codegenNode: 由transform最后阶段的createRootCodegen
+    // 混合文本节点，如 template: 'hello {{ who }} !'，则code += '"hello " + _toDisplayString(who) + " !'
     genNode(ast.codegenNode, context)
   } else {
     push(`null`)
@@ -669,8 +670,16 @@ function genNodeListAsArray(
   context.push(`]`)
 }
 
+// 生成 标签节点、属性节点、子节点、patchFlag、dynamicProps节点的 渲染代码片段
+// 如 template: <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
+// 则nodes：tag: 'div',                                                   // code += 'div'
+//    props: style、class、onClick                                        // code += ''
+//    children: ast文本节点COMPOUND_EXPRESSION 'hello {{ someone }} !'    // code += '"hello " + _toDisplayString(someone) + " !'
+//    patchFlag: '11 /* TEXT, CLASS, PROPS */'                          // code += '11 /* TEXT, CLASS, PROPS */'
+//    dynamicProps: '["onClick"]' 动态属性                                    // code += '["onClick"]'
+// 其中 props类型可能为  ObjectExpression | CallExpression | ExpressionNode，不存在v-on/v-bind (无参数) 属性为ObjectExpression
 function genNodeList(
-  nodes: (string | symbol | CodegenNode | TemplateChildNode[])[],
+  nodes: (string | symbol | CodegenNode | TemplateChildNode[])[], // genVNodeCall中 [tag, props, children, patchFlag, dynamicProps]
   context: CodegenContext,
   multilines: boolean = false,
   comma: boolean = true
@@ -696,7 +705,8 @@ function genNodeList(
   }
 }
 
-// 生成ast节点对应的code代码
+// 生成ast节点对应的渲染代码片段（由这些源码片段构成渲染函数）
+// node：ast节点的codegenNode
 function genNode(node: CodegenNode | symbol | string, context: CodegenContext) {
   if (isString(node)) {
     context.push(node)
@@ -719,25 +729,39 @@ function genNode(node: CodegenNode | symbol | string, context: CodegenContext) {
       genNode(node.codegenNode!, context)
       break
     case NodeTypes.TEXT:
+      // JSON.stringify(node.content)
       genText(node, context)
       break
     case NodeTypes.SIMPLE_EXPRESSION:
+      // 如ast插值节点的node.content
+      // 如v-on动态指令的指令参数节点
       genExpression(node, context)
       break
     case NodeTypes.INTERPOLATION:
+      // 插值节点
       genInterpolation(node, context)
       break
     case NodeTypes.TEXT_CALL:
+      // 不纯的文本节点，既有文本又有其它类型：template: 'hello <span>world</span>'
       genNode(node.codegenNode, context)
       break
     case NodeTypes.COMPOUND_EXPRESSION:
+      // 如：混合文本节点，此时node即为 transformText转换后的节点：
+      // {
+      //    type: NodeTypes.COMPOUND_EXPRESSION, // 合成表达式节点
+      //    loc: child.loc, // 第一个信息
+      //    children: [child1, ` + `, ....] // 混合文本节点列表
+      // }
+      // e.g: template: 'hello {{ foo }} !'
       genCompoundExpression(node, context)
       break
     case NodeTypes.COMMENT:
       genComment(node, context)
       break
     case NodeTypes.VNODE_CALL:
-      // 如，静态提升dom标签节点，'<span class="abc">123</span>'
+      // 标签节点 transformElements、forNode.codegenNode、ifNode.codegenNode
+      // 如 标签节点，template: '<div>123 {{ "abc" }}</div>'
+      // 如 静态提升dom标签节点，template: '<span class="abc">123</span>'
       genVNodeCall(node, context)
       break
 
@@ -795,6 +819,7 @@ function genNode(node: CodegenNode | symbol | string, context: CodegenContext) {
   }
 }
 
+// 生成文本节点的渲染代码片段
 function genText(
   node: TextNode | SimpleExpressionNode,
   context: CodegenContext
@@ -804,17 +829,31 @@ function genText(
 
 function genExpression(node: SimpleExpressionNode, context: CodegenContext) {
   const { content, isStatic } = node
+  // 如插值文本节点，isStatic = false
   context.push(isStatic ? JSON.stringify(content) : content, node)
 }
 
+// 生成文本插值的渲染代码
+// 如：template = 'hello {{ who }} !'，生成其中 '{{ who }}' 节点的渲染代码片段
+// 则：context.code += '_toDisplayString(who)'
 function genInterpolation(node: InterpolationNode, context: CodegenContext) {
   const { push, helper, pure } = context
-  if (pure) push(PURE_ANNOTATION)
-  push(`${helper(TO_DISPLAY_STRING)}(`)
-  genNode(node.content, context)
-  push(`)`)
+  if (pure) push(PURE_ANNOTATION) // `/*#__PURE__*/`
+  push(`${helper(TO_DISPLAY_STRING)}(`) // '_toDisplayString('
+  // 此node.content ast的 type: NodeTypes.SIMPLE_EXPRESSION
+  genNode(node.content, context) // 插值文本内容（不需要字符串stringify）
+  push(`)`) // ')'
 }
 
+// 生成混合文本节点的渲染代码、生成v-on动态指令的动态参数名节点的渲染代码
+// 此时node即为 transformText转换后的节点：
+// {
+//    type: NodeTypes.COMPOUND_EXPRESSION, // 合成表达式节点
+//    loc: child.loc, // 第一个信息
+//    children: [child1, ` + `, ....] // 混合文本节点列表， NodeTypes.INTERPOLATION 、 NodeTypes.TEXT
+// }
+// e.g: template = 'hello {{ foo }} !'
+// 则： context.code += '"hello " + _toDisplayString(who) + " !'
 function genCompoundExpression(
   node: CompoundExpressionNode,
   context: CodegenContext
@@ -822,29 +861,44 @@ function genCompoundExpression(
   for (let i = 0; i < node.children!.length; i++) {
     const child = node.children![i]
     if (isString(child)) {
+      // 如 ' + '
       context.push(child)
     } else {
+      // TEXT: push(JSON.stringify(node.content))
+      // INTERPOLATION: push('_toDisplayString(who)')
+      // SIMPLE_EXPRESSION: 动态v-on参数名ast节点 arg
       genNode(child, context)
     }
   }
 }
 
+// 生成节点属性列表的 属性名节点 的渲染片段：混合静态属性/静态指令节点、动态v-on参数节点、动态v-bind参数节点
+// 如果标签元素只有静态属性节点，则会被静态标记，不走该流程
 function genExpressionAsPropertyKey(
   node: ExpressionNode,
   context: CodegenContext
 ) {
   const { push } = context
   if (node.type === NodeTypes.COMPOUND_EXPRESSION) {
+    // 如在生成动态v-on指令参数节点 - 属性值节点 渲染片段，如 template: <div @[someEvent]="handleEvent">hello {{ someone }} !</div>
+    // 其中 属性值@[someEvent] 所对应的节点为 createCompoundExpression，在v-on transform 中解析
+    // node.children: ['_toHandlerKey(', arg, ')'] // 指令名参数ast节点
+    // 则 code += '[_toHandlerKey(someEvent)]'
     push(`[`)
-    genCompoundExpression(node, context)
+    genCompoundExpression(node, context) // 则 code += '_toHandlerKey(someEvent)'
     push(`]`)
   } else if (node.isStatic) {
     // only quote keys if necessary
-    const text = isSimpleIdentifier(node.content)
-      ? node.content
+    // 如 静态属性/静态指令节点 template: '<div class="red" :style="'color:blue;'">hello {{ someone }} !</div>'
+    // 其中的静态class属性名节点，注意 如果没有动态属性的话，都是静态属性，则在transform阶段会发生props静态提升转换，则不会走该流程，props被标记为静态类型 SIMPLE_EXPRESSION，content: "_hoisted_X"
+    const text = isSimpleIdentifier(node.content) // 非数字开头，且都是'[\$A-Za-z0-9_]'，如：'$foo_123'
+      ? node.content // 'class'、'style'
       : JSON.stringify(node.content)
     push(text, node)
   } else {
+    // 如：<div class="red" :[attrObjs]="someAttrs">hello {{ someone }} !</div>
+    // 则：node.content = 'attrObjs || ""'
+    // 则 code += '['attrObjs || ""']'
     push(`[${node.content}]`, node)
   }
 }
@@ -859,7 +913,8 @@ function genComment(node: CommentNode, context: CodegenContext) {
   }
 }
 
-// 生成标签元素节点的code
+// 生成标签元素节点的code，如 标签元素、if节点、for节点
+// 如标签div节点的codegenNode，template: '<div>hello {{ item }}!</div>'
 function genVNodeCall(node: VNodeCall, context: CodegenContext) {
   const { push, helper, pure } = context
   const {
@@ -867,22 +922,39 @@ function genVNodeCall(node: VNodeCall, context: CodegenContext) {
     props,
     children,
     patchFlag,
-    dynamicProps,
+    dynamicProps, // 动态属性，不包括 ref、class、style，如 '<input :class="red" style="..." :placeholder="xxx" @click="handleClick" />' 其中的 placeholder、onClick属性
     directives,
     isBlock,
     disableTracking
   } = node
   if (directives) {
-    push(helper(WITH_DIRECTIVES) + `(`)
+    // 需要在运行时，重新处理的指令，如：v-model、v-show、用户自定义指令
+    // e.g template: '<div v-user-directive>hello {{ who }} !</div>', 则 '_withDirectives('
+    push(helper(WITH_DIRECTIVES) + `(`) //
   }
   if (isBlock) {
-    push(`(${helper(OPEN_BLOCK)}(${disableTracking ? `true` : ``}), `)
+    // e.g template: '<div v-user-directive>hello {{ who }} !</div>', 则 '_openBlock(), '
+    // e.g template: '<div v-for="item in items">hello {{ item }} !</div>', 则 '_openBlock(true), '
+    push(`(${helper(OPEN_BLOCK)}(${disableTracking ? `true` : ``}), `) // '_openBlock(
   }
   if (pure) {
+    // 默认false
     push(PURE_ANNOTATION)
   }
+  // 如 template: '<div>hello {{ item }}</div>', 则 '_createBlock('
   push(helper(isBlock ? CREATE_BLOCK : CREATE_VNODE) + `(`, node)
+
+  // 生成 标签节点、属性节点、子节点、patchFlag、dynamicProps节点的 渲染代码
+  // 如 template: <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
+  // 则：tag: '"div"',
+  //    props: style、class、onClick
+  //    children: ast文本节点 'hello {{ someone }} !'
+  //    patchFlag: '11 /* TEXT, CLASS, PROPS */'
+  //    dynamicProps: 'onClick' 动态属性
   genNodeList(
+    // 生成 null值参数 的渲染代码
+    // genNullableArgs(arg1, arg2, arg3, null), 则 [arg1, arg2, arg3] // 最后的直接截断
+    // genNullableArgs(arg1, arg2, null, arg3), 则 [arg1, arg2, 'null', arg3]
     genNullableArgs([tag, props, children, patchFlag, dynamicProps]),
     context
   )
@@ -897,11 +969,14 @@ function genVNodeCall(node: VNodeCall, context: CodegenContext) {
   }
 }
 
+// 生成参数null值的渲染代码
 function genNullableArgs(args: any[]): CallExpression['arguments'] {
   let i = args.length
   while (i--) {
     if (args[i] != null) break
   }
+  // genNullableArgs(arg1, arg2, arg3, null), 则 [arg1, arg2, arg3]
+  // genNullableArgs(arg1, arg2, null, arg3), 则 [arg1, arg2, 'null', arg3]
   return args.slice(0, i + 1).map(arg => arg || `null`)
 }
 
@@ -915,7 +990,7 @@ function genCallExpression(node: CallExpression, context: CodegenContext) {
   // 则 node.callee为 CREATE_TEXT = Symbol('createTextVNode')
   const callee = isString(node.callee) ? node.callee : helper(node.callee)
   if (pure) {
-    // 静态提升
+    // 静态提升、单独使用函数时
     // context.code += `/*#__PURE__*/`
     push(PURE_ANNOTATION)
   }
@@ -929,9 +1004,18 @@ function genCallExpression(node: CallExpression, context: CodegenContext) {
   // context.code += '/*#__PURE__*/_createTextVNode("abc")'
 }
 
+// 生成节点的属性props节点列表的渲染片段，在genVNodeCall中先处理节点
+// 注意：如果都是静态属性，则会被静态标记，不会走该流程
+// 如 template: <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
+// 则 props 包含: style、class、onClick
+// 其中node props类型可能为  ObjectExpression | CallExpression | ExpressionNode，不存在v-on/v-bind (无参数) 属性为ObjectExpression
 function genObjectExpression(node: ObjectExpression, context: CodegenContext) {
   const { push, indent, deindent, newline } = context
-  const { properties } = node
+
+  // 如 template: <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
+  // 则 properties 包含: style、class、onClick
+
+  const { properties } = node // node 为 props节点
   if (!properties.length) {
     push(`{}`, node)
     return
@@ -941,13 +1025,18 @@ function genObjectExpression(node: ObjectExpression, context: CodegenContext) {
     ((!__BROWSER__ || __DEV__) &&
       properties.some(p => p.value.type !== NodeTypes.SIMPLE_EXPRESSION))
   push(multilines ? `{` : `{ `)
-  multilines && indent()
+  multilines && indent() // 换行并缩进
+
   for (let i = 0; i < properties.length; i++) {
     const { key, value } = properties[i]
-    // key
+
+    // key 生成属性值 节点渲染片段
     genExpressionAsPropertyKey(key, context)
     push(`: `)
+
     // value
+    // 1、静态属性节点：SIMPLE_EXPRESSION
+    // 2、指令: on、bind、model、html、text、show、cloak，注意其它指令v-if/v-for/slot等 transform会注入特有属性injectProps，比如key
     genNode(value, context)
     if (i < properties.length - 1) {
       // will only reach this if it's multilines

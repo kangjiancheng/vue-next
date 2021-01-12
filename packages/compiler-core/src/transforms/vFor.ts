@@ -91,8 +91,8 @@ export const transformFor = createStructuralDirectiveTransform(
 
       // 默认false
       const isStableFragment =
-        forNode.source.type === NodeTypes.SIMPLE_EXPRESSION &&
-        forNode.source.constType > 0 // 默认 为 0
+        forNode.source.type === NodeTypes.SIMPLE_EXPRESSION && // true
+        forNode.source.constType > 0 // 默认为ConstantTypes.NOT_CONSTANT 0 则 false , (注意 cfs环境)
 
       const fragmentFlag = isStableFragment // 默认false
         ? PatchFlags.STABLE_FRAGMENT // 稳定片段
@@ -336,7 +336,7 @@ export function parseForExpression(
   const [, LHS, RHS] = inMatch
 
   const result: ForParseResult = {
-    // 右侧目标
+    // 右侧目标 createSimpleExpression
     source: createAliasExpression(
       // 创建一个表达式节点，且带单独针对in/of左侧内容的光标位置信息
       loc,

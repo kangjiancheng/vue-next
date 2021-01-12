@@ -55,7 +55,7 @@ export const transformText: NodeTransform = (node, context) => {
                 currentContainer = children[i] = {
                   type: NodeTypes.COMPOUND_EXPRESSION, // 合成表达式节点
                   loc: child.loc, // 第一个信息
-                  children: [child]
+                  children: [child] // NodeTypes.INTERPOLATION 、 NodeTypes.TEXT
                 }
               }
               // merge adjacent text node into current
@@ -87,7 +87,7 @@ export const transformText: NodeTransform = (node, context) => {
         return
       }
 
-      // 不纯的子节点：
+      // 不纯的子节点：（处理其中的文本合并）
       // 1、即有文本又有其它， 如 template: '{{ foo }} - {{ bar }} <span>123</span>'
       // 2、当前为组件节点，且存在子文本节点，如 template: '<component-demo>123</component-demo>
 

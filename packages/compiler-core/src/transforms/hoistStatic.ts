@@ -104,6 +104,7 @@ function walk(
           ) {
             const props = getNodeProps(child)
             if (props) {
+              // 设置 提升静态节点属性
               codegenNode.props = context.hoist(props)
             }
           }

@@ -262,7 +262,7 @@ export const transformElement: NodeTransform = (node, context) => {
         vnodePatchFlag = String(patchFlag)
       }
       if (dynamicPropNames && dynamicPropNames.length) {
-        // 字符串拼接 静态prop(经解析过的指令节点)的属性名，不包括 ref、class、style
+        // 字符串拼接 动态prop(经解析过的指令节点)的属性名，不包括 ref、class、style
         // 如，template: '<input ref="input" v-model="textInput" v-bind:class="'red'" :placeholder="'请输入'" />'
         // 则，dynamicPropNames: ["onUpdate:modelValue", "placeholder"]
         // 返回结果： '["onUpdate:modelValue", "placeholder"]'
@@ -279,7 +279,7 @@ export const transformElement: NodeTransform = (node, context) => {
       vnodePatchFlag, // patchFlag和及其描述文本信息: patchFlag + ` /* ${flagNames} */`
       vnodeDynamicProps, // 静态指令prop的属性名(解析过的指令节点)，字符串拼接格式： 如: template: '<input v-model="textInput" :placeholder="'请输入'" />'  对应的结果为： '["onUpdate:modelValue", "placeholder"]'
       vnodeDirectives, // 需要在运行时，重新处理的指令，如：v-model、v-show、用户自定义指令
-      !!shouldUseBlock, // 是否使用block，如：动态is组件或TELEPORT或SUSPENSE；或是非组件当是特殊标签如svg，普通元素绑定了动态 :key； 或是 keep-alive组件
+      !!shouldUseBlock, // 是否使用block，如：动态is组件或TELEPORT或SUSPENSE；或是非组件当是特殊标签如svg，普通元素绑定了动态 :key； 或是 keep-alive组件，注意for节点/if节点(transform vIf)、root节点（transform createRootCodegen）
       false /* disableTracking */,
       node.loc
     )
@@ -648,7 +648,8 @@ export function buildProps(
       //      on: transformOn, // override compiler-core ，先执行compiler-core on 再处理指令修饰符modifiers，进一步转换属性值节点、属性名节点格式
       //      show: transformShow // 解析v-show，必须设置属性值，返回空属性列表[]，设置needRuntime
       //    }
-      const directiveTransform = context.directiveTransforms[name] // 指令属性名，如 if、show、或 bind、on、slot等指令名
+      // 解析指令: on、bind、model、html、text、show、cloak，注意其它指令v-if/v-for/slot等 transform会注入特有属性injectProps，比如key
+      const directiveTransform = context.directiveTransforms[name]
       if (directiveTransform) {
         // has built-in directive transform.
         // 处理vue内置指令， 转换属性节点格式
@@ -704,7 +705,7 @@ export function buildProps(
       // 元素节点属性 只有v-on或v-bind(无参数)一个属性，则不需要创建合并函数
       // 如 <span v-bind="{class: 'red'}"></span>
       // single v-bind with nothing else - no need for a mergeProps call
-      propsExpression = mergeArgs[0] // 返回v-bind属性值节点、  v-on createCallExpression
+      propsExpression = mergeArgs[0] // v-bind属性值 节点 SIMPLE_EXPRESSION、 v-on createCallExpression
     }
   } else if (properties.length) {
     // 不存在v-on/v-bind(无参数)属性，同样需要合并去重属性
