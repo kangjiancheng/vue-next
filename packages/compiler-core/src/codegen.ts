@@ -54,6 +54,8 @@ import {
 } from './runtimeHelpers'
 import { ImportItem } from './transform'
 
+// 注意注意！最好别在源码注释中添加字符串：/*#__PURE__*/
+// 否则！可能会导致源码不能正常调试，浏览器无法执行该注释之后的代码，无法进行断点设置
 const PURE_ANNOTATION = `/*#__PURE__*/` // treeShake 代码优化
 
 type CodegenNode = TemplateChildNode | JSChildNode | SSRCodegenNode
@@ -186,6 +188,45 @@ function createCodegenContext(
   return context
 }
 
+// 如 标签节点template，且只有文本节点: <div style="color: blue;" class="green" :class="red" @click="handleClick">hello {{ someone }} !</div>
+// code =
+// 'const _Vue = Vue
+//
+// return function render(_ctx, _cache) {
+//   with (_ctx) {
+//     const { toDisplayString: _toDisplayString, createVNode: _createVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
+//
+//     return (_openBlock(), _createBlock("div", {
+//       style: {"color":"blue"},
+//       class: red,                    // 注意：合并属性，如 class="blue" :class="red" 转换为 ["blue", red]
+//       onClick: handleClick
+//     }, "hello " + _toDisplayString(someone) + " !", 11 /* TEXT, CLASS, PROPS */, ["onClick"]))  // 如果只有文本节点，即使都是静态的，则不需要提升
+//   }
+// }'
+// 如果有自定义指令，则 'return _withDirectives((_openBlock(), _createBlock(...)), 自定义指令属性节点code... )'
+
+/****** 静态提升、多个子元素、合并属性 ***********/
+// 如 template: '<div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} ! <i>123</i></div>'
+// 则 code =
+// "const _Vue = Vue
+// const { createVNode: _createVNode, createTextVNode: _createTextVNode } = _Vue
+//
+// const _hoisted_1 = /*#__PURE__*/_createVNode("i", null, "123", -1 /* HOISTED */)
+//
+// return function render(_ctx, _cache) {
+//   with (_ctx) {
+//     const { toDisplayString: _toDisplayString, createVNode: _createVNode, createTextVNode: _createTextVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
+//
+//     return (_openBlock(), _createBlock("div", {
+//       style: {"color":"blue"},
+//       class: ["green", red],
+//       onClick: handleClick
+//     }, [
+//       _createTextVNode("hello " + _toDisplayString(someone) + " ! ", 1 /* TEXT */),
+//       _hoisted_1
+//     ], 10 /* CLASS, PROPS */, ["onClick"]))
+//   }
+// }"
 export function generate(
   ast: RootNode,
   options: CodegenOptions & {
@@ -225,6 +266,9 @@ export function generate(
     genModulePreamble(ast, preambleContext, genScopeId, isSetupInlined)
   } else {
     // 针对存在静态提升节点，如：<div><i :class="red">1</i>abc</div>
+
+    genFunctionPreamble(ast, preambleContext)
+
     // 解析其中静态提升文本节点abc，结果为：context.code +=
     // 'const _Vue = Vue'
     // 'const { createTextVNode: _createTextVNode } = _Vue'
@@ -232,7 +276,6 @@ export function generate(
     // 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")'
     // ''
     // 'return '
-    genFunctionPreamble(ast, preambleContext)
   }
 
   // 开始生成渲染函数代码
@@ -357,6 +400,24 @@ export function generate(
   if (ast.codegenNode) {
     // ast树的codegenNode: 由transform最后阶段的createRootCodegen
     // 混合文本节点，如 template: 'hello {{ who }} !'，则code += '"hello " + _toDisplayString(who) + " !'
+
+    // 如 标签节点template: <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
+    // 则 code += '(_openBlock(), _createBlock("div", {\n   style: "color: blue;",\n   class: "red",\n   onClick: "handleClick"}, "hello " + _toDisplayString(someone) + " !, 11 /* TEXT, CLASS, PROPS */, ["onClick"]))'
+    // 如果有自定义指令， '_withDirectives((_openBlock(), _createBlock(...)), 自定义指令属性节点code... )'
+    // 最终：code =
+    // 'const _Vue = Vue
+    //
+    // return function render(_ctx, _cache) {
+    //   with (_ctx) {
+    //     const { toDisplayString: _toDisplayString, createVNode: _createVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
+    //
+    //     return (_openBlock(), _createBlock("div", {
+    //       style: {"color":"blue"},
+    //       class: red,
+    //       onClick: handleClick
+    //     }, "hello " + _toDisplayString(someone) + " !", 11 /* TEXT, CLASS, PROPS */, ["onClick"]))
+    //   }
+    // }'
     genNode(ast.codegenNode, context)
   } else {
     push(`null`)
@@ -377,9 +438,9 @@ export function generate(
   return {
     ast,
     code: context.code,
-    preamble: isSetupInlined ? preambleContext.code : ``,
+    preamble: isSetupInlined ? preambleContext.code : ``, // TODO: cfs
     // SourceMapGenerator does have toJSON() method but it's not in the types
-    map: context.map ? (context.map as any).toJSON() : undefined
+    map: context.map ? (context.map as any).toJSON() : undefined // TODO: cfs
   }
 }
 
@@ -585,7 +646,8 @@ function genAssets(
 
 // 静态提升节点 codegenNode
 // 如：<div><i :class="red">1</i>abc</div>
-// 解析其中静态提升文本节点abc: 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")\n'
+// 解析其中静态提升文本节点abc，即得到了vnode节点: 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")\n'
+// 在之后ast生成该节点的渲染片段时，可以直接用这个变量替换对应位置的渲染片段，同时生成渲染函数时，可以先执行这个静态节点，得到对应vnode，在执行渲染函数时，不必花时间去执行生成这个vnode
 function genHoists(hoists: (JSChildNode | null)[], context: CodegenContext) {
   if (!hoists.length) {
     return
@@ -616,14 +678,15 @@ function genHoists(hoists: (JSChildNode | null)[], context: CodegenContext) {
   }
 
   // 如：<div><i :class="red">1</i>abc</div>
-  // 解析其中静态提升文本节点abc: 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")\n'
   hoists.forEach((exp, i) => {
     if (exp) {
       // exp 为节点的codegenNode，注意此codegenNode为静态提升前的codegenNode，不是静态提升后的ast节点的codegenNode
       push(`const _hoisted_${i + 1} = `) // 'const _hoisted_1 = '
-      genNode(exp, context) // '/*#__PURE__*/_createTextVNode("abc")'
+      genNode(exp, context)
       newline()
     }
+    // 解析其中静态提升文本节点abc，即得到了vnode节点: 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")\n'
+    // 在之后ast生成该节点的渲染片段时，可以直接用这个变量替换对应位置的渲染片段，同时生成渲染函数时，可以先执行这个静态节点，得到对应vnode，在执行渲染函数时，不必花时间去执行生成这个vnode
   })
 
   // TODO: analyze cfs - !__BROWSER__
@@ -656,6 +719,7 @@ function isText(n: string | CodegenNode) {
   )
 }
 
+// 通过数组包裹起来 '[red]'
 function genNodeListAsArray(
   nodes: (string | CodegenNode | TemplateChildNode[])[],
   context: CodegenContext
@@ -672,12 +736,19 @@ function genNodeListAsArray(
 
 // 生成 标签节点、属性节点、子节点、patchFlag、dynamicProps节点的 渲染代码片段
 // 如 template: <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
-// 则nodes：tag: 'div',                                                   // code += 'div'
-//    props: style、class、onClick                                        // code += ''
-//    children: ast文本节点COMPOUND_EXPRESSION 'hello {{ someone }} !'    // code += '"hello " + _toDisplayString(someone) + " !'
+// 则 nodes：
+//    tag: '"div"',                                                     // code += '"div"'
+//    props: style、class、onClick                                       // code += '{\n   style: {"color": "blue"},\n   class: red,\n   onClick: "handleClick"}'
+//    children: 该children类型为 COMPOUND_EXPRESSION 'hello {{ someone }} !'  // code += '"hello " + _toDisplayString(someone) + " !'
 //    patchFlag: '11 /* TEXT, CLASS, PROPS */'                          // code += '11 /* TEXT, CLASS, PROPS */'
-//    dynamicProps: '["onClick"]' 动态属性                                    // code += '["onClick"]'
-// 其中 props类型可能为  ObjectExpression | CallExpression | ExpressionNode，不存在v-on/v-bind (无参数) 属性为ObjectExpression
+//    dynamicProps: '["onClick"]' 动态属性                                // code += '["onClick"]'
+// 其中 children：多个时，会经过 genNodeListAsArray 处理，如果children存在静态提升标记时，会直接使用对应静态提升变量
+// 其中 props 类型可能为：
+//    JS_OBJECT_EXPRESSION：不存在v-on/v-bind 无参数属性， 默认
+//    JS_CALL_EXPRESSION： 只有v-on无参数 或 元素节点属性存在多个属性，且含有v-on/v-bind （无参数）指令属性，如 <div style="color: blue;" :class="red" v-on="{...}"></div>
+//    SIMPLE_EXPRESSION：只有v-bind无参数属性值节点 或则 props 都是静态时，被静态标记，如 <div style="color: blue;" class="red">hello {{ someone }} !</div>
+// 结果为 code +=
+// '"div", {\n   style: {"color": "blue"},\n   class: red,\n   onClick: handleClick}, "hello " + _toDisplayString(someone) + " !, 11 /* TEXT, CLASS, PROPS */, ["onClick"]'
 function genNodeList(
   nodes: (string | symbol | CodegenNode | TemplateChildNode[])[], // genVNodeCall中 [tag, props, children, patchFlag, dynamicProps]
   context: CodegenContext,
@@ -690,6 +761,12 @@ function genNodeList(
     if (isString(node)) {
       push(node)
     } else if (isArray(node)) {
+      // 如果 标签有多个children, 如 <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} ! <i>123</i></div>
+      // children对应的code 则为 code +=
+      //          '[
+      //             _createTextVNode("hello " + _toDisplayString(someone) + " ! ", 1 /* TEXT */),
+      //             _hoisted_1    // 此为对应的静态提升变量
+      //           ]'
       genNodeListAsArray(node, context)
     } else {
       genNode(node, context)
@@ -726,6 +803,9 @@ function genNode(node: CodegenNode | symbol | string, context: CodegenContext) {
           `Codegen node is missing for element/if/for node. ` +
             `Apply appropriate transforms first.`
         )
+      // <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} ! <i>123</i></div>
+      // 如genNodeList 解析其中子元素时，解析其 i 标签元素
+      // 注意 这个i标签元素已经静态提升 node.codegenNode.content = '_hoisted_1'，则code += '_hoisted_1'
       genNode(node.codegenNode!, context)
       break
     case NodeTypes.TEXT:
@@ -735,6 +815,7 @@ function genNode(node: CodegenNode | symbol | string, context: CodegenContext) {
     case NodeTypes.SIMPLE_EXPRESSION:
       // 如ast插值节点的node.content
       // 如v-on动态指令的指令参数节点
+      // 如静态属性 <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>，其中的style属性值解析
       genExpression(node, context)
       break
     case NodeTypes.INTERPOLATION:
@@ -761,7 +842,6 @@ function genNode(node: CodegenNode | symbol | string, context: CodegenContext) {
     case NodeTypes.VNODE_CALL:
       // 标签节点 transformElements、forNode.codegenNode、ifNode.codegenNode
       // 如 标签节点，template: '<div>123 {{ "abc" }}</div>'
-      // 如 静态提升dom标签节点，template: '<span class="abc">123</span>'
       genVNodeCall(node, context)
       break
 
@@ -770,9 +850,13 @@ function genNode(node: CodegenNode | symbol | string, context: CodegenContext) {
       genCallExpression(node, context)
       break
     case NodeTypes.JS_OBJECT_EXPRESSION:
+      // 生成节点的属性props节点列表的渲染片段， 对象格式
+      // <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
+      // 则 '{\n   style: "color: blue;",\n   class: "red",\n   onClick: "handleClick"} '
       genObjectExpression(node, context)
       break
     case NodeTypes.JS_ARRAY_EXPRESSION:
+      // 处理合并属性节点 <div class="blue" :class="red">hello</div>
       genArrayExpression(node, context)
       break
     case NodeTypes.JS_FUNCTION_EXPRESSION:
@@ -889,13 +973,14 @@ function genExpressionAsPropertyKey(
     push(`]`)
   } else if (node.isStatic) {
     // only quote keys if necessary
-    // 如 静态属性/静态指令节点 template: '<div class="red" :style="'color:blue;'">hello {{ someone }} !</div>'
+    // 如 静态属性/静态指令节点 template: '<div class="red" :style="\'color:blue;\'" @click="handleClick">hello {{ someone }} !</div>'
     // 其中的静态class属性名节点，注意 如果没有动态属性的话，都是静态属性，则在transform阶段会发生props静态提升转换，则不会走该流程，props被标记为静态类型 SIMPLE_EXPRESSION，content: "_hoisted_X"
     const text = isSimpleIdentifier(node.content) // 非数字开头，且都是'[\$A-Za-z0-9_]'，如：'$foo_123'
-      ? node.content // 'class'、'style'
+      ? node.content // 'class'、'style'、onClick
       : JSON.stringify(node.content)
     push(text, node)
   } else {
+    // 处理动态指令参数
     // 如：<div class="red" :[attrObjs]="someAttrs">hello {{ someone }} !</div>
     // 则：node.content = 'attrObjs || ""'
     // 则 code += '['attrObjs || ""']'
@@ -914,7 +999,23 @@ function genComment(node: CommentNode, context: CodegenContext) {
 }
 
 // 生成标签元素节点的code，如 标签元素、if节点、for节点
-// 如标签div节点的codegenNode，template: '<div>hello {{ item }}!</div>'
+// 如 template: <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
+// 则 code += '(_openBlock(), _createBlock("div", {\n   style: "color: blue;",\n   class: "red",\n   onClick: "handleClick"}, "hello " + _toDisplayString(someone) + " !, 11 /* TEXT, CLASS, PROPS */, ["onClick"]))'
+// 最终：code =
+// 'const _Vue = Vue
+//
+// return function render(_ctx, _cache) {
+//   with (_ctx) {
+//     const { toDisplayString: _toDisplayString, createVNode: _createVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
+//
+//     return (_openBlock(), _createBlock("div", {
+//       style: {"color":"blue"},
+//       class: red,
+//       onClick: handleClick
+//     }, "hello " + _toDisplayString(someone) + " !", 11 /* TEXT, CLASS, PROPS */, ["onClick"]))
+//   }
+// }'
+// 如果 存在自定义指令则 'return _withDirectives((_openBlock(), _createBlock(...)), 自定义指令code... )'
 function genVNodeCall(node: VNodeCall, context: CodegenContext) {
   const { push, helper, pure } = context
   const {
@@ -933,6 +1034,7 @@ function genVNodeCall(node: VNodeCall, context: CodegenContext) {
     push(helper(WITH_DIRECTIVES) + `(`) //
   }
   if (isBlock) {
+    // disableTracking 默认false
     // e.g template: '<div v-user-directive>hello {{ who }} !</div>', 则 '_openBlock(), '
     // e.g template: '<div v-for="item in items">hello {{ item }} !</div>', 则 '_openBlock(true), '
     push(`(${helper(OPEN_BLOCK)}(${disableTracking ? `true` : ``}), `) // '_openBlock(
@@ -947,10 +1049,17 @@ function genVNodeCall(node: VNodeCall, context: CodegenContext) {
   // 生成 标签节点、属性节点、子节点、patchFlag、dynamicProps节点的 渲染代码
   // 如 template: <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
   // 则：tag: '"div"',
-  //    props: style、class、onClick
-  //    children: ast文本节点 'hello {{ someone }} !'
-  //    patchFlag: '11 /* TEXT, CLASS, PROPS */'
-  //    dynamicProps: 'onClick' 动态属性
+  //    props:
+  //        '{
+  //            style: {"color": "blue"},
+  //            class: red,
+  //            onClick: handleClick
+  //         }'
+  //    children: '"hello " + _toDisplayString(someone) + " !'
+  //    patchFlag: 11 /* TEXT, CLASS, PROPS */'
+  //    dynamicProps: '["onClick"]'  // 动态属性
+  // 则结果为： code +=
+  // '"div", {\n   style: "color: blue;",\n   class: red,\n   onClick: "handleClick"}, "hello " + _toDisplayString(someone) + " !, 11 /* TEXT, CLASS, PROPS */, ["onClick"]'
   genNodeList(
     // 生成 null值参数 的渲染代码
     // genNullableArgs(arg1, arg2, arg3, null), 则 [arg1, arg2, arg3] // 最后的直接截断
@@ -962,6 +1071,8 @@ function genVNodeCall(node: VNodeCall, context: CodegenContext) {
   if (isBlock) {
     push(`)`)
   }
+
+  // '_withDirectives((..., ...) ...)'
   if (directives) {
     push(`, `)
     genNode(directives, context)
@@ -991,8 +1102,7 @@ function genCallExpression(node: CallExpression, context: CodegenContext) {
   const callee = isString(node.callee) ? node.callee : helper(node.callee)
   if (pure) {
     // 静态提升、单独使用函数时
-    // context.code += `/*#__PURE__*/`
-    push(PURE_ANNOTATION)
+    push(PURE_ANNOTATION) // context.code += `/*#_PURE__*/`   // 注意 此注释 __PURE__ 故意写错，否则导致源码不能调试，即之后的一行push(...) 没有执行
   }
   push(callee + `(`, node)
   // 转换参数个数，如静态节点 'abc'
@@ -1004,18 +1114,20 @@ function genCallExpression(node: CallExpression, context: CodegenContext) {
   // context.code += '/*#__PURE__*/_createTextVNode("abc")'
 }
 
-// 生成节点的属性props节点列表的渲染片段，在genVNodeCall中先处理节点
+// 生成节点的属性props节点列表的渲染片段， 对象表达式格式
+// 该情况当node props类型 不包含v-on/v-bind无参数属性时才为ObjectExpression
 // 注意：如果都是静态属性，则会被静态标记，不会走该流程
 // 如 template: <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
-// 则 props 包含: style、class、onClick
-// 其中node props类型可能为  ObjectExpression | CallExpression | ExpressionNode，不存在v-on/v-bind (无参数) 属性为ObjectExpression
+// 则 props 包含: style、class、onClick，解析过程在transformElements中的buildProps
+// 结果： '{\n   style: "color: blue;",\n   class: "red",\n   onClick: "handleClick"}'
 function genObjectExpression(node: ObjectExpression, context: CodegenContext) {
   const { push, indent, deindent, newline } = context
 
   // 如 template: <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
   // 则 properties 包含: style、class、onClick
+  // 则 解析结果为 code += '{\n   style: "color: blue;",\n   class: "red",\n   onClick: "handleClick"}'
 
-  const { properties } = node // node 为 props节点
+  const { properties } = node // node 为 props节点，注意去重合并的prop节点类型为JS_ARRAY_EXPRESSION
   if (!properties.length) {
     push(`{}`, node)
     return
@@ -1029,15 +1141,23 @@ function genObjectExpression(node: ObjectExpression, context: CodegenContext) {
 
   for (let i = 0; i < properties.length; i++) {
     const { key, value } = properties[i]
-
     // key 生成属性值 节点渲染片段
+    // 1、动态v-on, 则 code += '_toHandlerKey(someEvent)'
+    // 2、静态属性/指令 isStatic true, 则 code += 'class' 或 'style' 或 ...
+    // 3、动态指令 isStatic false, 则 code += '['attrObjs || ""']'
+    // 4、动态属性可能要考虑驼峰转换 'Symbol('camelize')(prop-name || "")'
     genExpressionAsPropertyKey(key, context)
     push(`: `)
 
     // value
-    // 1、静态属性节点：SIMPLE_EXPRESSION
+    // 1、静态属性节点：SIMPLE_EXPRESSION，如 <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
+    // 静态style属性值节点内容 code += '{"color": "blue"}' // 注意经过transformStyle处理
+    // 静态指令属性class属性值节点内容 code += 'red'  // 这个是动态的 isStatic false
+    // 静态指令click属性值节点内容，需要考虑单语句、多行表达式、修饰符， code += 'handleClick'
     // 2、指令: on、bind、model、html、text、show、cloak，注意其它指令v-if/v-for/slot等 transform会注入特有属性injectProps，比如key
-    genNode(value, context)
+    // 3、注意去重合并的prop节点类型为value.type = JS_ARRAY_EXPRESSION， value.elements = [mergeProp1.value, mergeProp2.value, ...]
+    // 如 <div class="blue" :class="red">hello</div>，则 code += '["blue", red]'
+    genNode(value, context) // value解析过程主要在 buildProps、injectProps
     if (i < properties.length - 1) {
       // will only reach this if it's multilines
       push(`,`)
@@ -1048,8 +1168,11 @@ function genObjectExpression(node: ObjectExpression, context: CodegenContext) {
   push(multilines ? `}` : ` }`)
 }
 
+// 处理合并属性节点 <div class="blue" :class="red">hello</div>
+// 去重合并的prop节点类型为value.type = JS_ARRAY_EXPRESSION， value.elements = [mergeProp1.value, mergeProp2.value, ...]
+// 结果为： code += '[blue, red]'
 function genArrayExpression(node: ArrayExpression, context: CodegenContext) {
-  genNodeListAsArray(node.elements, context)
+  genNodeListAsArray(node.elements, context) // 数组包裹起来
 }
 
 function genFunctionExpression(

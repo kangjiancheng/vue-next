@@ -30,8 +30,8 @@ const listDelimiterRE = /;(?![^(]*\))/g // 注意 断言匹配'空隙'，所以�
 const propertyDelimiterRE = /:(.+)/
 
 // 行内样式转换对象样式
-// 如：parseStringStyle('color: red;font-size: 12px;') =》 {color: "red", font-size: "12px"}，匹配到符号条件的分隔符 ';'
-// 注意：parseStringStyle('color: red;font-size: 12px;)') =》 {color: "red;font-size: 12px;)"} 错误写法，没有匹配的分隔符 ';'
+// 如：parseStringStyle('color: red;font-size: 12px;') =》 {"color": "red", "font-size": "12px"}，匹配到符号条件的分隔符 ';'
+// 注意：parseStringStyle('color: red;font-size: 12px;)') =》 {"color": "red;font-size: 12px;)"} 错误写法，没有匹配的分隔符 ';'
 export function parseStringStyle(cssText: string): NormalizedStyle {
   const ret: NormalizedStyle = {}
   cssText.split(listDelimiterRE).forEach(item => {

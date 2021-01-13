@@ -254,10 +254,11 @@ export function createTransformContext(
     },
     hoist(exp) {
       context.hoists.push(exp)
+      // 重新生成节点的codegenNode
       const identifier = createSimpleExpression(
         // codegen时，对应的变量名字，如 <div><i :class="red">1</i>abc</div>，
         // 其中静态abc节点： 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")'
-        `_hoisted_${context.hoists.length}`,
+        `_hoisted_${context.hoists.length}`, // 指向该静态节点的vnode
         false,
         exp.loc,
         ConstantTypes.CAN_HOIST
@@ -298,6 +299,7 @@ export function transform(root: RootNode, options: TransformOptions) {
   traverseNode(root, context)
 
   // 静态提升： 元素节点、文本节点、属性节点
+  // 在之后ast生成该节点的渲染片段时，可以直接用这个变量替换对应位置的渲染片段，同时生成渲染函数时，可以先执行这个静态节点，得到对应vnode，在执行渲染函数时，不必花时间去执行生成这个vnode
   // 提升静态ast节点，如 template:
   // <div class="btn-click" @click="handleClick">
   //   <i class="loading"></i> 点击 {{ count }}
@@ -307,7 +309,32 @@ export function transform(root: RootNode, options: TransformOptions) {
   //   </div>
   // </div>
   // 提升静态节点：标签i节点 '<i class="loading"></i>' 和 文本节点 'abc'
-  // 标记静态属性节点：<div class="red" style="color:blue;"></div>，即没有动态属性，会重新转换标签节点codegenNode props属性列表
+  // 提升静态属性节点：<div class="red" style="color:blue;"></div>，即没有动态属性，会重新转换标签节点codegenNode props属性列表
+  // "const _Vue = Vue
+  // const { createVNode: _createVNode, createTextVNode: _createTextVNode } = _Vue
+  //
+  //
+  // 在之后ast生成该节点的渲染片段时，可以直接用这个变量替换对应位置的渲染片段，同时生成渲染函数时，可以先执行这个静态节点，得到对应vnode，在执行渲染函数时，不必花时间去执行生成这个vnode
+  // const _hoisted_1 = /*#__PURE__*/_createVNode("i", { class: "loading" }, null, -1 /* HOISTED */)
+  // const _hoisted_2 = /*#__PURE__*/_createTextVNode(" abc ")
+  //
+  // return function render(_ctx, _cache) {
+  //   with (_ctx) {
+  //     const { createVNode: _createVNode, toDisplayString: _toDisplayString, createTextVNode: _createTextVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
+  //
+  //     return (_openBlock(), _createBlock("div", {
+  //       class: "btn-click",
+  //       onClick: handleClick
+  //     }, [
+  //       _hoisted_1,
+  //       _createTextVNode(" 点击 " + _toDisplayString(count) + " ", 1 /* TEXT */),
+  //       _createVNode("div", { class: hello }, [
+  //         _createVNode("div", null, "123 " + _toDisplayString(count), 1 /* TEXT */),
+  //         _hoisted_2
+  //       ], 2 /* CLASS */)
+  //     ], 8 /* PROPS */, ["onClick"]))
+  //   }
+  // }"
   if (options.hoistStatic) {
     hoistStatic(root, context)
   }

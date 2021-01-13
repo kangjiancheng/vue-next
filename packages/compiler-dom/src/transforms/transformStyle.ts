@@ -38,14 +38,16 @@ export const transformStyle: NodeTransform = node => {
   }
 }
 
+// 转换 为对象表格式 style="color: blue;" 转换为 :style='{"color": "blue"}'
 const parseInlineCSS = (
   cssText: string,
   loc: SourceLocation
 ): SimpleExpressionNode => {
-  const normalized = parseStringStyle(cssText) // 转换 为对象表达式格式style
+  // cssText="color: blue;" 格式化对象 cssText = {"color": "blue"}
+  const normalized = parseStringStyle(cssText)
   // 创建对应的style 表达式配置对象
   return createSimpleExpression(
-    JSON.stringify(normalized), // style表达式 字符串化
+    JSON.stringify(normalized), // style表达式 字符串化'{"color": "blue"}'
     false, // 动态表达式
     loc, // style 节点信息
     ConstantTypes.CAN_STRINGIFY //

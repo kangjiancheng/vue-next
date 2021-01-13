@@ -9,7 +9,13 @@
 <body>
 
   <div id="app">
-    <div class="red" :[attrObjs]="someAttrs">hello {{ someone }} !</div>
+    <div class="btn-click" @click="handleClick">
+      <i class="loading"></i> 点击 {{ count }}
+      <div :class="hello">
+      <div>123 {{ count }}</div>
+      abc
+      </div>
+    </div>
   </div>
 
   <!-- 开发模式 -->

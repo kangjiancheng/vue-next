@@ -497,6 +497,7 @@ export function buildProps(
     const prop = props[i]
     if (prop.type === NodeTypes.ATTRIBUTE) {
       // dom 静态属性，节点光标位置、属性名、属性值
+      // 注意 静态style 已经被转换为动态style，即 style="color: blue;" 转换为 :style='{"color": "blue"}'
       const { loc, name, value } = prop
       let isStatic = true
       if (name === 'ref') {
@@ -524,7 +525,7 @@ export function buildProps(
           // objProp.key: {type, loc, content, isStatic, constType }
           createSimpleExpression(
             // 创建 属性名表达式对象 （形如ast指令属性值节点的结构）
-            name, // 静态属性名，如'style'、'class'
+            name, // 静态属性名，'class'
             true, // 静态属性
             getInnerRange(loc, 0, name.length) // 获取属性名的模版解析的光标位置信息
           ),
@@ -705,7 +706,7 @@ export function buildProps(
       // 元素节点属性 只有v-on或v-bind(无参数)一个属性，则不需要创建合并函数
       // 如 <span v-bind="{class: 'red'}"></span>
       // single v-bind with nothing else - no need for a mergeProps call
-      propsExpression = mergeArgs[0] // v-bind属性值 节点 SIMPLE_EXPRESSION、 v-on createCallExpression
+      propsExpression = mergeArgs[0] // v-bind 属性值节点 SIMPLE_EXPRESSION、 v-on 属性值节点 createCallExpression
     }
   } else if (properties.length) {
     // 不存在v-on/v-bind(无参数)属性，同样需要合并去重属性

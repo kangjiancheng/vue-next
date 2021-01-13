@@ -100,7 +100,8 @@ export function baseCompile(
   const [nodeTransforms, directiveTransforms] = getBaseTransformPreset(
     prefixIdentifiers
   )
-  // 进一步转换处理ast语法树中的节点，如：解析节点上的指令、属性、解析组件、解析子元素文本、解析元素等等并获取对应的codegenNode、提升静态节点（不需要patch）。
+  // 进一步转换处理ast语法树中的节点，如：解析节点上的指令、属性、解析组件、解析子元素文本、解析元素等等并获取对应的codegenNode、提升静态节点。
+  // 转换ast树为codegen树，即ast树的节点下多出一个codegenNode属性，为之后生成渲染函数源码
   transform(
     ast,
     extend({}, options, {
@@ -118,6 +119,42 @@ export function baseCompile(
     })
   )
 
+  // 解析codegen树，得到ast的渲染函数源码：
+  // 如，template:
+  // <div class="btn-click" @click="handleClick">
+  //   <i class="loading"></i> 点击 {{ count }}
+  //   <div :class="hello">
+  //     <div>123 {{ count }}</div>
+  //     abc
+  //   </div>
+  // </div>
+  //
+  // 对应的 源码code 为：
+  //
+  //"const _Vue = Vue
+  // const { createVNode: _createVNode, createTextVNode: _createTextVNode } = _Vue
+  //
+  // const _hoisted_1 = /*#__PURE__*/_createVNode("i", { class: "loading" }, null, -1 /* HOISTED */)
+  // const _hoisted_2 = /*#__PURE__*/_createTextVNode(" abc ")
+  //
+  // return function render(_ctx, _cache) {
+  //   with (_ctx) {
+  //     const { createVNode: _createVNode, toDisplayString: _toDisplayString, createTextVNode: _createTextVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
+  //
+  //     return (_openBlock(), _createBlock("div", {
+  //       class: "btn-click",
+  //       onClick: handleClick
+  //     }, [
+  //       _hoisted_1,
+  //       _createTextVNode(" 点击 " + _toDisplayString(count) + " ", 1 /* TEXT */),
+  //       _createVNode("div", { class: hello }, [
+  //         _createVNode("div", null, "123 " + _toDisplayString(count), 1 /* TEXT */),
+  //         _hoisted_2
+  //       ], 2 /* CLASS */)
+  //     ], 8 /* PROPS */, ["onClick"]))
+  //   }
+  // }"
+  // 其中静态提升：在遍历ast生成该静态节点的渲染代码片段时，可以直接用这个变量替换对应位置的渲染片段，同时在之后生成渲染函数时，可以马上执行这个静态节点，得到对应vnode，在最终执行渲染函数时，不必花时间去执行生成这个vnode
   return generate(
     ast,
     extend({}, options, {
