@@ -37,7 +37,7 @@ export const enum NodeTypes {
   IF_BRANCH,
   FOR,
   TEXT_CALL,
-  // codegen
+  // codegen 即生成js渲染源码树节点
   VNODE_CALL,
   JS_CALL_EXPRESSION,
   JS_OBJECT_EXPRESSION,
@@ -556,6 +556,7 @@ export function createVNodeCall(
   loc = locStub
 ): VNodeCall {
   if (context) {
+    // 渲染源码 引入 将要用到的辅助函数的定义，如：'const { openBlock: _openBlock } = _Vue'
     if (isBlock) {
       context.helper(OPEN_BLOCK)
       context.helper(CREATE_BLOCK)

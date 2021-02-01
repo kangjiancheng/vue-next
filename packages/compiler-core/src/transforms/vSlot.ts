@@ -59,6 +59,8 @@ export const trackSlotScopes: NodeTransform = (node, context) => {
     // 处理带有slot指令的元素节点
     // 查找指令属性节点，并返回指令属性节点
     const vSlot = findDir(node, 'slot')
+
+    // 之后会在transformElement 中分析属性props列表时，进一步处理
     if (vSlot) {
       const slotProps = vSlot.exp // 指令属性值内容节点
       if (!__BROWSER__ && context.prefixIdentifiers) {

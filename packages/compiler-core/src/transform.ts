@@ -159,7 +159,7 @@ export function createTransformContext(
 
     // state
     root,
-    helpers: new Set(),
+    helpers: new Set(), // 收集 在创建vnode时要用到的函数，为了在渲染阶段可以调用这些的函数去创建对应的虚拟节点，如：openBlock、createBlock、createVNode等
     components: new Set(), // 保存用户自定义的组件标签名
     directives: new Set(),
     hoists: [],
@@ -336,6 +336,7 @@ export function transform(root: RootNode, options: TransformOptions) {
   //   }
   // }"
   if (options.hoistStatic) {
+    // 节点静态标记 => 生成静态节点 => 提升静态节点（生成VNode） => 最终加速渲染函数执行
     hoistStatic(root, context)
   }
 
@@ -355,12 +356,12 @@ export function transform(root: RootNode, options: TransformOptions) {
   root.cached = context.cached // 缓存编译结果，如 v-once
 }
 
-// 非ssr环境下，创建ast root根节点的codegenNode
+// 创建ast root根节点的codegenNode
 function createRootCodegen(root: RootNode, context: TransformContext) {
   const { helper } = context
   const { children } = root
   if (children.length === 1) {
-    // ast根节点就一个子节点，即编译模版只有一个根元素
+    // ast根节点就一个子节点，即vue模版只有一个根元素
 
     const child = children[0]
     // root ast根节点就一个元素，但不是 slot元素，设置为block
@@ -454,25 +455,25 @@ export function traverseNode(
   /**
    *
    * nodeTransforms = [
-       transformOnce, // 处理 v-once 指令属性节点，编译一次节点，不进行再次编译，缓存codegenNode
-       transformIf,  // 处理 v-if 指令属性节点，在添加插件时，会先插件一个新的if branch node分支流节点，将之后的else-f、else节点移进来，创建if codegenNode，并将else-if、else的codegenNode链式绑定到if分支流节点
-       transformFor, // 处理 v-for 指令属性节点， 在添加插件时，会先创建一个新的for node 类型节点，并替换当前for类型的节点，之后会处理slot场景下的v-for，和template场景下的v-for，包括对key属性的处理，并生成for节点的codegenNode
+       transformOnce,                 // 处理 v-once 指令属性节点，编译一次节点，不进行再次编译，缓存codegenNode
+       transformIf,                   // 处理 v-if 指令属性节点，在添加插件时，会先插件一个新的if branch node分支流节点，将之后的else-f、else节点移进来，创建if codegenNode，并将else-if、else的codegenNode链式绑定到if分支流节点
+       transformFor,                  // 处理 v-for 指令属性节点， 在添加插件时，会先创建一个新的for node 类型节点，并替换当前for类型的节点，之后会处理slot场景下的v-for，和template场景下的v-for，包括对key属性的处理，并生成for节点的codegenNode
        ...(!__BROWSER__ && prefixIdentifiers
         ? [
         // order is important
-          trackVForSlotScopes, // 注意 非浏览器，如node下cfs
-          transformExpression // 注意 非浏览器
+          trackVForSlotScopes,        // 注意 非浏览器，如node下cfs
+          transformExpression         // 注意 非浏览器
         ]
         : __BROWSER__ && __DEV__
-          ? [transformExpression] // 处理插值表达式内容，指令属性节点值表达式，排除v-for和v-on:arg属性节点，在浏览器中只需要节点验证表达式值的js语法规则：validateBrowserExpression
+          ? [transformExpression]     // 处理插值表达式内容，指令属性节点值表达式，排除v-for和v-on:arg属性节点，在浏览器中只需要节点验证表达式值的js语法规则：validateBrowserExpression
           : []),
-       transformSlotOutlet, // 处理slot元素组件：name属性、其它属性prop节点列表（处理方式buildProps，同transformElements）
-       transformElement,  // 处理html元素节点或组件节点，解析元素节点的prop属性列表（on/bind/model/text/html/show/is）、v-slot指令与默认/具名插槽转换、patchFlag信息、用户定义的指令等，为当前节点的ast生成对应的codegen vnode执行函数节点
-       trackSlotScopes, // 处理并跟踪节点的slot指令，通过计数来识别出是否内嵌了slot指令，为transformElement检测是否定义了动态slot，创建对应的patchflag信息
-       transformText, // 处理 连续子文本节点/表达式节点 的合并；或 如果即包含文本又包含其它类型节点时，则需要设置该子节点文本/表达式的diff patch codegenNode 信息，同时也重新定义当前节点的子节点配置
-       ignoreSideEffectTags, // 删减style/script元素节点
+       transformSlotOutlet,           // 处理slot元素组件：name属性、其它属性prop节点列表（处理方式buildProps，同transformElements）
+       transformElement,              // 处理html元素节点或组件节点，解析元素节点的prop属性列表（on/bind/model/text/html/show/is）、v-slot指令与默认/具名插槽转换、patchFlag信息、用户定义的指令等，为当前节点的ast生成对应的codegen vnode执行函数节点
+       trackSlotScopes,               // 处理并跟踪节点的slot指令，通过计数来识别出是否内嵌了slot指令，为transformElement检测是否定义了动态slot，创建对应的patchflag信息
+       transformText,                 // 处理 连续子文本节点/表达式节点 的合并；或 如果即包含文本又包含其它类型节点时，则需要设置该子节点文本/表达式的diff patch codegenNode 信息，同时也重新定义当前节点的子节点配置
+       ignoreSideEffectTags,          // 删减style/script元素节点
        ...[
-        transformStyle, // 不返回回调转换插件， html元素全部转换静态style属性为对应的动态style指令属性节点
+        transformStyle,               // 不返回回调转换插件， html元素全部转换静态style属性为对应的动态style指令属性节点
         ...(__DEV__ ? [warnTransitionChildren] : []) // transition组件只接收一个子元素/子组件
        ],
     ]

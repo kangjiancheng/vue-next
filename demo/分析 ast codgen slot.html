@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>分析 ast codgen slot</title>
+</head>
+<body>
+
+<div id="app">
+  <slot-demo>
+    <template  v-slot:default>哈哈哈 default</template>
+    <template  v-slot:header v-if="current === 'header'">哈哈哈 {{ isHeader }}</template>
+    <template  v-slot:body v-for="item in items">哈哈哈 body</template>
+    <template  v-slot:footer>哈哈哈 {{ isFooter }}</template>
+  </slot-demo>
+</div>
+<!-- 结果为： -->
+<!--
+"const _Vue = Vue
+const { createVNode: _createVNode, createTextVNode: _createTextVNode } = _Vue
+
+const _hoisted_1 = /*#__PURE__*/_createTextVNode("哈哈哈 default")
+const _hoisted_2 = /*#__PURE__*/_createTextVNode("哈哈哈 body")
+
+return function render(_ctx, _cache) {
+  with (_ctx) {
+    const { createTextVNode: _createTextVNode, toDisplayString: _toDisplayString, resolveComponent: _resolveComponent, withCtx: _withCtx, renderList: _renderList, createSlots: _createSlots, createVNode: _createVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
+
+    const _component_slot_demo = _resolveComponent("slot-demo")
+
+    return (_openBlock(), _createBlock(_component_slot_demo, null, _createSlots({
+      default: _withCtx(() => [
+        _hoisted_1
+      ]),
+      footer: _withCtx(() => [
+        _createTextVNode("哈哈哈 " + _toDisplayString(isFooter), 1 /* TEXT */)
+      ]),
+      _: 2 /* DYNAMIC */
+    }, [
+      (current === 'header')
+        ? {
+            name: "header",
+            fn: _withCtx(() => [
+              _createTextVNode("哈哈哈 " + _toDisplayString(isHeader), 1 /* TEXT */)
+            ])
+          }
+        : undefined,
+      _renderList(items, (item) => {
+        return {
+          name: "body",
+          fn: _withCtx(() => [
+            _hoisted_2
+          ])
+        }
+      })
+    ]), 1024 /* DYNAMIC_SLOTS */))
+  }
+}"
+-->
+
+<!-- 开发模式 -->
+<script src="../packages/vue/dist/vue.global.js"></script>
+<!-- 生产模式-->
+<!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
+<script>
+
+  const {
+    createApp,
+    ref,
+    reactive,
+    onMounted,
+  } = Vue
+
+  // 定义局部组件
+  const SlotDemo = {
+    name: 'slot-demo',
+    template: `
+        <div class="slot-demo">
+          <div class="default-slot"><slot></slot></div>
+          <div class="header-slot"><slot name="header"></slot></div>
+        </div>
+      `,
+    data () {
+      return {
+        title: '这是局部组件',
+        globalTitle: '这是全局组件',
+      }
+    }
+  }
+
+
+
+  const rootComponent = {
+    name: 'root-component',
+    components: {
+      SlotDemo,
+    },
+    props: {
+      age: Number,
+    },
+    // props 不可通过解构来获取对应值
+    setup(props, context ) {
+      const count = ref(0)
+
+      const handleClick = () => {
+        count.value++
+      }
+
+      return {
+        count,
+        handleClick,
+      }
+    }
+  }
+  const rootProps = {
+    age: 10, // props
+    // sex: 'man', // attrs
+  }
+
+  const app = createApp(rootComponent, rootProps)
+  app.mount('#app')
+
+</script>
+</body>
+</html>
