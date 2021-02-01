@@ -56,7 +56,6 @@ import {
   markAttrsAccessed
 } from './componentRenderUtils'
 import { startMeasure, endMeasure } from './profiling'
-import { devtoolsComponentAdded } from './devtools'
 
 export type Data = Record<string, unknown>
 
@@ -493,10 +492,6 @@ export function createComponentInstance(
   }
   instance.root = parent ? parent.root : instance // 绑定root
   instance.emit = emit.bind(null, instance)
-
-  if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
-    devtoolsComponentAdded(instance)
-  }
 
   return instance
 }
