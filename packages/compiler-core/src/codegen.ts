@@ -1199,13 +1199,55 @@ function genArrayExpression(node: ArrayExpression, context: CodegenContext) {
   genNodeListAsArray(node.elements, context) // 数组包裹起来
 }
 
-// 分析slot，如 template:
+// 生成v-slot的渲染代码，如 template:
 // <slot-demo>
 //   <template  v-slot:default>哈哈哈 default</template>
 //   <template  v-slot:header v-if="current === 'header'">哈哈哈 {{ isHeader }}</template>
 //   <template  v-slot:body v-for="item in items">哈哈哈 body</template>
 //   <template  v-slot:footer>哈哈哈 {{ isFooter }}</template>
 // </slot-demo>
+//
+// code:
+// "const _Vue = Vue
+// const { createVNode: _createVNode, createTextVNode: _createTextVNode } = _Vue
+//
+// const _hoisted_1 = /*#__PURE__*/_createTextVNode("哈哈哈 default")
+// const _hoisted_2 = /*#__PURE__*/_createTextVNode("哈哈哈 body")
+//
+// return function render(_ctx, _cache) {
+//   with (_ctx) {
+//     const { createTextVNode: _createTextVNode, toDisplayString: _toDisplayString, resolveComponent: _resolveComponent, withCtx: _withCtx, renderList: _renderList, createSlots: _createSlots, createVNode: _createVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
+//
+//     const _component_slot_demo = _resolveComponent("slot-demo")
+//
+//     return (_openBlock(), _createBlock(_component_slot_demo, null, _createSlots({
+//       default: _withCtx(() => [
+//         _hoisted_1
+//       ]),
+//       footer: _withCtx(() => [
+//         _createTextVNode("哈哈哈 " + _toDisplayString(isFooter), 1 /* TEXT */)
+//       ]),
+//       _: 2 /* DYNAMIC */
+//     }, [
+//       (current === 'header')
+//         ? {
+//             name: "header",
+//             fn: _withCtx(() => [
+//               _createTextVNode("哈哈哈 " + _toDisplayString(isHeader), 1 /* TEXT */)
+//             ])
+//           }
+//         : undefined,
+//       _renderList(items, (item) => {
+//         return {
+//           name: "body",
+//           fn: _withCtx(() => [
+//             _hoisted_2
+//           ])
+//         }
+//       })
+//     ]), 1024 /* DYNAMIC_SLOTS */))
+//   }
+// }"
 function genFunctionExpression(
   node: FunctionExpression,
   context: CodegenContext
