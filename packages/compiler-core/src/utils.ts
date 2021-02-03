@@ -153,6 +153,7 @@ export function assert(condition: boolean, msg?: string) {
 }
 
 // 查找指令属性节点
+// 如 <hello-world v-is="Welcome" />
 export function findDir(
   node: ElementNode,
   name: string | RegExp, // 指令名
@@ -172,7 +173,9 @@ export function findDir(
   }
 }
 
-// 查找属性节点：静态属性、静态bind属性
+// 查找属性节点：静态属性、静态bind属性，
+// 如 <component is="HelloWorld" />
+// 或 <component :is="HelloWorld" />
 export function findProp(
   node: ElementNode,
   name: string, // 静态dom属性名 或 bind的某个指令名
@@ -362,7 +365,8 @@ export function toValidAssetId(
   name: string,
   type: 'component' | 'directive'
 ): string {
-  return `_${type}_${name.replace(/[^\w]/g, '_')}` // 非[A-Za-z0-9_]， 如 name = 'hello  world' 转换为 '_component_hello__world'
+  // 非[A-Za-z0-9_]， 如 tag name = 'hello-world' 转换为 '_component_hello__world'
+  return `_${type}_${name.replace(/[^\w]/g, '_')}`
 }
 
 // Check if a node contains expressions that reference current context scope ids

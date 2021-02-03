@@ -71,7 +71,7 @@ export const transformElement: NodeTransform = (node, context) => {
         node.tagType === ElementTypes.COMPONENT)
     ) // 组件元素
   ) {
-    // 排除 SLOT、 TEMPLATE
+    // 排除 SLOT元素、 TEMPLATE元素
     return
   }
 
@@ -92,9 +92,9 @@ export const transformElement: NodeTransform = (node, context) => {
 
     // 解析组件类型，返回相关内容，如动态is组件的 vnode patch方法、内置组件名、区分用户自定义组件名
     const vnodeTag = isComponent
-      ? resolveComponentType(node as ComponentNode, context) // 解析is指令
+      ? resolveComponentType(node as ComponentNode, context) // 解析is属性: 静态属性is、静态指令属性:is、v-is，返回一个对象
       : `"${tag}"` // dom 元素标签名
-    // 是否是动态组件
+    // 是否是动态组件，即存在静态is、:is、v-is
     const isDynamicComponent =
       isObject(vnodeTag) && vnodeTag.callee === RESOLVE_DYNAMIC_COMPONENT
 
@@ -117,7 +117,7 @@ export const transformElement: NodeTransform = (node, context) => {
 
     let shouldUseBlock =
       // dynamic component may resolve to plain elements
-      isDynamicComponent || // 动态is组件
+      isDynamicComponent || // 动态组件存在is属性
       vnodeTag === TELEPORT || // Teleport
       vnodeTag === SUSPENSE || // Suspense
       (!isComponent &&
@@ -151,6 +151,7 @@ export const transformElement: NodeTransform = (node, context) => {
           : undefined
     }
 
+    // keep-alive 不可以有多个子元素
     // children
     if (node.children.length > 0) {
       if (vnodeTag === KEEP_ALIVE) {
@@ -182,7 +183,7 @@ export const transformElement: NodeTransform = (node, context) => {
 
       // 处理 v-slot、设定 vnodeChildren
 
-      // 组件，非 teleport、keep-alive组件（不是真实的组件）
+      // 处理组件的slot信息，如v-slot指令，非 teleport、keep-alive组件（不是真实的组件）
       const shouldBuildAsSlots =
         isComponent && // 组件类型的节点
         // Teleport is not a real component and has dedicated runtime handling
@@ -295,17 +296,21 @@ export function resolveComponentType(
   const { tag } = node // 组件标签名
 
   // 1. dynamic component
-  // 动态组件，存在is属性节点
+  // 存在is属性（动态组件）
   const isProp =
-    node.tag === 'component' ? findProp(node, 'is') : findDir(node, 'is') // findProp 查找属性静态 is、bind静态属性 :is 。 findDir查找指令 v-is 。
+    node.tag === 'component' ? findProp(node, 'is') : findDir(node, 'is')
   if (isProp) {
-    // 注意： 如 template = '<HelloWorld is="Welcome" />' 则不符合此条件
+    // 如 存在属性is：'<component is="HelloWorld" />' 或 '<component :is="HelloWorld" />'
+    // 或 存在指令is：'<hello-world v-is="Welcome" />'
+
+    // 指令值节点格式，存储is指令值内容，一个简单的存值对象，存的是一个js表达式片段
     const exp =
-      isProp.type === NodeTypes.ATTRIBUTE // dom静态is属性，如 '<component is="HelloWorld" />'
-        ? isProp.value && createSimpleExpression(isProp.value.content, true) // 返回属性值相应的表达式对象
-        : isProp.exp // 指令形式is属性，如 '<component :is="HelloWorld"/>' 或 v-is
+      isProp.type === NodeTypes.ATTRIBUTE // 静态dom属性
+        ? isProp.value && createSimpleExpression(isProp.value.content, true) // 转换为指令值节点格式
+        : isProp.exp // 指令值节点
     if (exp) {
-      // 创建 is属性值表达式对应的组件patch方法：Symbol(`resolveDynamicComponent`)
+      // 创建一个类型为 JS_CALL_EXPRESSION 的渲染源码树codegen节点
+      // Symbol(`resolveDynamicComponent`) 为执行的方法 callee
       return createCallExpression(context.helper(RESOLVE_DYNAMIC_COMPONENT), [
         exp
       ])
@@ -319,7 +324,7 @@ export function resolveComponentType(
     // built-ins are simply fallthroughs / have special handling during ssr
     // so we don't need to import their runtime equivalents
     if (!ssr) context.helper(builtIn)
-    return builtIn // 内置属性返回相应的KEEP_ALIVE= Symbol(__DEV__ ? `KeepAlive` : ``)
+    return builtIn // 内置属性返回相应的标识符，如 KEEP_ALIVE = Symbol(__DEV__ ? `KeepAlive` : ``)
   }
 
   // TODO: analyze cfs
@@ -343,10 +348,10 @@ export function resolveComponentType(
   }
 
   // 5. user component (resolve)
-  //将用户自定义组件加入上下文
-  context.helper(RESOLVE_COMPONENT)
-  context.components.add(tag)
-  return toValidAssetId(tag, `component`) // 设置组件id信息 如 tag = 'hello  world' 转换为 '_component_hello__world'
+  //用户自定义组件
+  context.helper(RESOLVE_COMPONENT) // 收集渲染源码要用的辅助函数，在渲染源码开始处定义这些函数，为了之后执行渲染函数时正确引用这些的函数
+  context.components.add(tag) // 保存 组件标签名
+  return toValidAssetId(tag, `component`) // 格式话组件名 如 tag = 'hello world' 转换为 '_component_hello__world'
 }
 
 // TODO: analyze cfs

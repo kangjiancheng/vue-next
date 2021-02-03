@@ -656,19 +656,27 @@ function parseTag(
       p => p.type === NodeTypes.DIRECTIVE && p.name === 'is'
     )
 
-    // 判断是组件元素
+    // 判断 ElementTypes 为是 COMPONENT 元素
+    // 一：不存在v-is指令属性，并且是非原生标签，如：<hello-world />
+    // 二：存在v-is指令属性
+    //    标签为内置元素：Teleport、Suspense、KeepAlive、BaseTransition、Transition、TransitionGroup
+    //    大写开头的标签
+    //    标签名为 component
     if (options.isNativeTag && !hasVIs) {
-      if (!options.isNativeTag(tag)) tagType = ElementTypes.COMPONENT // 如果不是html 标签，则判定为组件，注意 template标签属于html
+      // 不存在 v-is 指令属性
+      // 如：<hello-world /> // 非原生标签，则判定为组件，注意 template标签属于html
+      if (!options.isNativeTag(tag)) tagType = ElementTypes.COMPONENT
     } else if (
-      hasVIs ||
+      hasVIs || // 存在 v-is 指令属性
       isCoreComponent(tag) || // 内置组件：Teleport、Suspense、KeepAlive、BaseTransition  (可以大小写横线)
       (options.isBuiltInComponent && options.isBuiltInComponent(tag)) || // 内置组件 Transition、TransitionGroup
-      /^[A-Z]/.test(tag) || // 大写标签默认被识别为组件
+      /^[A-Z]/.test(tag) || // 开头大写标签
       tag === 'component'
     ) {
       tagType = ElementTypes.COMPONENT
     }
 
+    // 判断 ElementTypes 为 TEMPLATE 元素
     if (tag === 'slot') {
       tagType = ElementTypes.SLOT // 元素类型 为slot
     } else if (

@@ -9,12 +9,7 @@
 <body>
 
 <div id="app">
-  <slot-demo>
-    <template  v-slot:default>哈哈哈 default</template>
-    <template  v-slot:header v-if="current === 'header'">哈哈哈 {{ isHeader }}</template>
-    <template  v-slot:body v-for="(item, index) in items" :key="item.id">哈哈哈 {{ item }} - {{ index }}</template>
-    <template  v-slot:footer>哈哈哈 {{ isFooter }}</template>
-  </slot-demo>
+  <slot-demo class="red" :data-text="true" v-slot="slotProps">abc - {{ slotProps.id }}</slot-demo>
 </div>
 
 <!-- 开发模式 -->
@@ -35,7 +30,7 @@
     name: 'slot-demo',
     template: `
         <div class="slot-demo">
-          <div class="default-slot"><slot></slot></div>
+          <div class="default-slot"><slot id="001"></slot></div>
           <div class="header-slot"><slot name="header"></slot></div>
         </div>
       `,

@@ -617,7 +617,7 @@ export function createObjectProperty(
   }
 }
 
-// 创建一个基本表达式节点，如为：transform阶段的 prop 属性格式转换、动态指令名参数节点的格式转换
+// 一个简单的存值对象，存的是一个js表达式片段，如一个变量的值、函数的参数或参数名
 export function createSimpleExpression(
   content: SimpleExpressionNode['content'],
   isStatic: SimpleExpressionNode['isStatic'], // Boolean
