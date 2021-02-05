@@ -617,7 +617,8 @@ export function createObjectProperty(
   }
 }
 
-// 一个简单的存值对象，存的是一个js表达式片段，如一个变量的值、函数的参数或参数名
+// 创建js ast的一个简单表达式节点
+// 如js中的一个变量值、对象属性名、函数参数或参数名
 export function createSimpleExpression(
   content: SimpleExpressionNode['content'],
   isStatic: SimpleExpressionNode['isStatic'], // Boolean
@@ -627,7 +628,7 @@ export function createSimpleExpression(
   return {
     type: NodeTypes.SIMPLE_EXPRESSION,
     loc,
-    content,
+    content, // 字符串
     isStatic, // 静态表达式
     constType: isStatic ? ConstantTypes.CAN_STRINGIFY : constType
   }

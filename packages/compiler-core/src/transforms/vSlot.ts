@@ -112,8 +112,10 @@ export type SlotFnBuilder = (
   loc: SourceLocation
 ) => FunctionExpression
 
+// 创建组件某个slot的内容 对应的js ast节点
 const buildClientSlotFn: SlotFnBuilder = (props, children, loc) =>
   createFunctionExpression(
+    // JS_FUNCTION_EXPRESSION
     props, // 参数
     children, // 返回值
     false /* newline */,
@@ -121,30 +123,37 @@ const buildClientSlotFn: SlotFnBuilder = (props, children, loc) =>
     children.length ? children[0].loc : loc
   )
 
-// 解析节点上的 slot属性，并分析子元素中带有v-slot的template节点
+// 解析组件子元素，作为组件内部的slot元素（不包括 TELEPORT、KEEP_ALIVE）
+// 如 template: '<slot-demo class="red" :data-text="true" v-slot="slotProps">abc - {{ slotProps.id }}</slot-demo>'
+
 // Instead of being a DirectiveTransform, v-slot processing is called during
 // transformElement to build the slots object for a component.
 export function buildSlots(
   node: ElementNode,
   context: TransformContext,
-  buildSlotFn: SlotFnBuilder = buildClientSlotFn // 创建构建slot的函数节点
+  buildSlotFn: SlotFnBuilder = buildClientSlotFn // 创建组件某个slot的内容对应的js ast节点
 ): {
   slots: SlotsExpression // slot模版节点信息替换子节点列表，如：当前节点的v-slot; 当前节点下如果都没有slot模版，保存所有子元素为默认slot; 不存在默认slot模版时，保存非slot模版子元素为默认slot; 保存slotFlag相关信息； 动态的v-if/v-for的 dynamicSlots
   hasDynamicSlots: boolean // 动态的slot: 是否存在嵌套的slot，根据 trackSlotScopes 插件; 或 slot指令是动态，v-slot:[xxx]；或template标签模版上带有v-slot 且 还带有 v-if或 v-for
 } {
+  // 收集添加组件vnode渲染源码的上下文，如渲染源码： default: _withCtx((slotProps) => [...]),
   context.helper(WITH_CTX) // WITH_CTX = Symbol(__DEV__ ? `withCtx` : ``)
 
   // 节点子元素列表
   const { children, loc } = node
-  const slotsProperties: Property[] = [] //
-  const dynamicSlots: (ConditionalExpression | CallExpression)[] = [] // 保存子元素中的动态slot v-if/v-for slot节点
+  // 组件的slots列表，即将子元素转换到对应的slot，如 [ {default: {...}, { header: {...} }
+  const slotsProperties: Property[] = []
+  // 动态的slots列表: 子元素<template v-slot> 存在v-if/v-for指令
+  const dynamicSlots: (ConditionalExpression | CallExpression)[] = []
 
+  // 将子元素默认解析为 default slot
   const buildDefaultSlotProperty = (
     props: ExpressionNode | undefined,
     children: TemplateChildNode[]
-  ) => createObjectProperty(`default`, buildSlotFn(props, children, loc))
+  ) => createObjectProperty(`default`, buildSlotFn(props, children, loc)) // JS_PROPERTY 创建一个js对象属性节点，如 { default: _withCtx((slotProps) => [...]) }
 
-  // 是否存在嵌套的slot，根据 trackSlotScopes 插件
+  // 组件/子元素存在动态v-slot、 子元素<template v-slot> 存在v-if/v-for指令
+  // 或组件元素的祖先元素中存在v-slot/v-for
   // If the slot is inside a v-for or another v-slot, force it to be dynamic
   // since it likely uses a scope variable.
   let hasDynamicSlots = context.scopes.vSlot > 0 || context.scopes.vFor > 0
@@ -156,112 +165,111 @@ export function buildSlots(
     hasDynamicSlots = hasScopeRef(node, context.identifiers)
   }
 
-  // 解析 此元素 slot指令
-
   // 1. Check for slot with slotProps on component itself.
-  //    <Comp v-slot="{ prop }"/> 或 <span v-slot:header="propObj" />，注意：v-slot:header 缩写 #header，ast解析时，把 # 解析为 slot
+  // 解析 组件的 v-slot 指令，得到指定name slot 的内容
+  // 如：<slot-demo class="red" :data-text="true" v-slot:header="slotProps">abc - {{ slotProps.id }}</slot-demo>
+  // 组件SlotDemo：template:
+  //         '<div class="slot-demo">
+  //           <div class="default-slot"><slot id="001"></slot></div>
+  //           <div class="header-slot"><slot name="header" id="002"></slot></div>
+  //         </div>'
+  // 把子元素解析到组件的header slot，结果为：abc - 002
   const onComponentSlot = findDir(node, 'slot', true)
   if (onComponentSlot) {
-    const { arg, exp } = onComponentSlot // arg指令参数：插槽名；exp 插槽prop
+    // 如 v-slot:header="slotProps"
+    // arg 指令参数节点 - 设置 插槽名，如 'header'
+    // exp 指令值节点 - 设置 插槽prop，如 'slotProps'
+    const { arg, exp } = onComponentSlot
     if (arg && !isStaticExp(arg)) {
-      // 动态slot，<Comp v-slot:[xxx]="{ prop }" />
+      // 动态指令参数，<Comp v-slot:[xxx]="{ prop }" />
       hasDynamicSlots = true
     }
     slotsProperties.push(
-      // 创建此元素的 slot prop属性节点
+      // 根据 v-slot 指定，创建组件的 slot 子元素：
       createObjectProperty(
-        arg || createSimpleExpression('default', true), // key: 插件默认插槽
-        buildSlotFn(exp, children, loc) // value: 创建一个slot执行函数节点
+        arg || createSimpleExpression('default', true), // 指定 slot的name: 代表此组件的子元素内容属于哪个slot
+        buildSlotFn(exp, children, loc) // 创建该slot代表的子元素内容的js ast节点
       )
     )
   }
 
-  // 解析 子元素 slot指令
+  // 解析子元素 <template v-slot>
 
   // 2. Iterate through children and check for template slots
-  //    <template v-slot:foo="{ prop }">
-  let hasTemplateSlots = false // 是否存在 <Comp><template v-slot></template></Comp>
-  let hasNamedDefaultSlot = false // 是否 存在名为 'default' 的slot，默认为default
-  const implicitDefaultChildren: TemplateChildNode[] = [] // 非注释子元素节点，同时也不是 <template v-slot></template>，为了添加到默认slot
+  let hasTemplateSlots = false // 存在子元素 <template v-slot>
+  let hasNamedDefaultSlot = false // 存在子元素 default slot
+  const implicitDefaultChildren: TemplateChildNode[] = [] // 保存非<template v-slot>子元素，添加到 default slot
   const seenSlotNames = new Set<string>() // 保存slot的名字，如 v-slot:default、v-slot:header
 
-  // 注意 会移除带有v-if指令的children：<template v-slot v-if=""></template>
   for (let i = 0; i < children.length; i++) {
     const slotElement = children[i]
     let slotDir // 子元素标签为template的slot指令属性节点
 
-    // 跳过 非 <template v-slot>，添加到默认slot
+    // 子元素非 <template v-slot>，保存到 default slot
     if (
       !isTemplateNode(slotElement) || // 是否是template标签节点: <template />
       !(slotDir = findDir(slotElement, 'slot', true)) // 是否存在slot指令属性
     ) {
       // not a <template v-slot>, skip.
       if (slotElement.type !== NodeTypes.COMMENT) {
-        // 非注释节点，添加到默认插槽
         implicitDefaultChildren.push(slotElement)
       }
       continue
     }
 
-    // 解析 子元素template： <Comp><template v-slot></template></Comp>
-
+    // 组件与子元素template 不可同时存在 v-slot 指令
     if (onComponentSlot) {
-      // 当前节点（即父节点）不能重复设置 slot，如: <Comp v-slot><template v-slot></template></Comp>
       // already has on-component slot - this is incorrect usage.
       context.onError(
-        // Mixed v-slot usage on both the component and nested
-        // When there are multiple named slots, all slots should use <template> syntax to avoid scope ambiguity.
+        // 如: <Comp v-slot...><template v-slot...>...</template></Comp>
+        // 这种情况下，所有slot都该选择子元素template形式
         createCompilerError(ErrorCodes.X_V_SLOT_MIXED_SLOT_USAGE, slotDir.loc)
       )
-      // 结束遍历子元素
       break
     }
 
-    hasTemplateSlots = true // 如 <Comp><template v-slot></template></Comp>
-    const { children: slotChildren, loc: slotLoc } = slotElement
+    // 开始处理 子元素 <template v-slot>
+    hasTemplateSlots = true
+    const { children: slotChildren, loc: slotLoc } = slotElement // 组件当前子元素
     const {
-      arg: slotName = createSimpleExpression(`default`, true), // 指令参数节点，默认slot的参数为 'default'
-      exp: slotProps, // slot的props
+      // v-slot:header="slotProps"
+      arg: slotName = createSimpleExpression(`default`, true), // 指令参数，即slot name，SIMPLE_EXPRESSION
+      exp: slotProps, // 指令属性值，即 slot props
       loc: dirLoc
-    } = slotDir // 子元素template的slot指令属性节点
+    } = slotDir // 当前子元素slot的的指令属性节点
 
-    // check if name is dynamic.
+    // 保存静态v-slot的 name、子元素是否存在动态v-slot
     let staticSlotName: string | undefined
     if (isStaticExp(slotName)) {
       // 静态的slot，如：v-slot:header，则 slotName.content = 'header'，默认 'default'
       staticSlotName = slotName ? slotName.content : `default`
     } else {
-      // 动态，如: v-slot:[xxx]
+      // 子元素存在动态v-slot，如: v-slot:[xxx]
       hasDynamicSlots = true
     }
 
-    // 解析 子元素template的v-if、v-else/v-else-if、v-for指令，优先处理这些指令; 如果都没有，在正常处理静态的slot: 'v-slot:header' 之类
-
-    const slotFunction = buildSlotFn(slotProps, slotChildren, slotLoc) // 创建slot运行函数，type: NodeTypes.JS_FUNCTION_EXPRESSION
+    // 子元素对应的js ast节点，节点类型为 JS_FUNCTION_EXPRESSION，
+    const slotFunction = buildSlotFn(slotProps, slotChildren, slotLoc)
 
     // check if this slot is conditional (v-if/v-for)
-    let vIf: DirectiveNode | undefined
-    let vElse: DirectiveNode | undefined
-    let vFor: DirectiveNode | undefined
+    let vIf: DirectiveNode | undefined // 子元素存在 v-if
+    let vElse: DirectiveNode | undefined // 子元素存在 v-else-if/else
+    let vFor: DirectiveNode | undefined // 子元素存在 v-for
     if ((vIf = findDir(slotElement, 'if'))) {
-      // v-if 指令
-
       hasDynamicSlots = true // 动态slot
       dynamicSlots.push(
-        // 保存子元素的
+        // 动态slot，创建一个条件js ast节点: JS_CONDITIONAL_EXPRESSION
         createConditionalExpression(
-          // 创建条件表达式节点 type: NodeTypes.JS_CONDITIONAL_EXPRESSION
-          vIf.exp!, // test， if指令值节点
-          buildDynamicSlot(slotName, slotFunction), // consequent， 创建 type: NodeTypes.JS_OBJECT_EXPRESSION
-          defaultFallback // alternate，vElse条件值，  createSimpleExpression(`undefined`, false)
+          vIf.exp!, // test - if 条件表达式
+          // 创建动态子元素slot的 js ast节点: 节点key - slot name，节点value - 子元素内容
+          buildDynamicSlot(slotName, slotFunction), // consequent - if true， 动态slot对象 js ast节点
+          defaultFallback // alternate - if false，默认为undefined -  createSimpleExpression(`undefined`, false)
         )
       )
     } else if (
       (vElse = findDir(slotElement, /^else(-if)?$/, true /* allowEmpty */))
     ) {
-      // v-else 或 v-else-if 指令
-
-      // 查找前边相邻带有v-if的子元素
+      // 匹配前边相邻带有v-if的子元素
       // find adjacent v-if
       let j = i
       let prev
@@ -280,7 +288,7 @@ export function buildSlots(
 
         __TEST__ && assert(dynamicSlots.length > 0)
 
-        // 关联前边v-if信息
+        // 设置上一个if/else-if条件为false时的节点内容
         // attach this slot to previous conditional
         let conditional = dynamicSlots[
           dynamicSlots.length - 1 // 前边子元素的v-if slot条件表达式节点
@@ -288,17 +296,18 @@ export function buildSlots(
         while (
           conditional.alternate.type === NodeTypes.JS_CONDITIONAL_EXPRESSION
         ) {
-          // 查找前边相邻带有v-if指令的子元素
+          // 获取上一个子元素slot的条件表达式为false时的节点信息
           conditional = conditional.alternate
         }
-        conditional.alternate = vElse.exp
+
+        // 更新上一个if/else-if条件为false时的js ast节点内容
+        conditional.alternate = vElse.exp // v-else-if 存在条件
           ? createConditionalExpression(
-              // 有条件值
-              vElse.exp,
-              buildDynamicSlot(slotName, slotFunction), // createObjectExpression([ createObjectProperty(`name`, name), createObjectProperty(`fn`, fn)])
-              defaultFallback // createSimpleExpression(`undefined`, false)
+              vElse.exp, // v-else-if 条件表达式
+              buildDynamicSlot(slotName, slotFunction), // v-else-if 为 true 时的 slot 内容
+              defaultFallback // v-else-if 为false时，slot内容默认为 'undefined'
             )
-          : buildDynamicSlot(slotName, slotFunction) // createObjectExpression([ createObjectProperty(`name`, name), createObjectProperty(`fn`, fn)])
+          : buildDynamicSlot(slotName, slotFunction) // 条件 v-else 对应的 slot 内容
       } else {
         // 前边无相邻的v-if，即前边第一个非注释的节点不带有v-if指令
         context.onError(
@@ -439,18 +448,19 @@ export function buildSlots(
 
   return {
     slots, // 保存默认slot信息，如：当前节点的v-slot; 当前节点下如果都没有slot模版，保存所有子元素为默认slot; 不存在默认slot模版时，保存非slot模版子元素为默认slot; 保存slotFlag相关信息； 动态的v-if/v-for的 dynamicSlots
-    hasDynamicSlots // 存在动态的slot: 是否存在嵌套的slot，根据 trackSlotScopes 插件; 或 slot指令是动态，v-slot:[xxx]；或template标签模版上带有v-slot 且 还带有 v-if或 v-for
+    hasDynamicSlots // 存在动态的slot:
   }
 }
 
-// 创建动态slot对象节点
+// 创建动态子元素slot的 js ast节点: 节点key - slot name，节点value - 子元素内容
 function buildDynamicSlot(
   name: ExpressionNode,
   fn: FunctionExpression
 ): ObjectExpression {
   return createObjectExpression([
-    createObjectProperty(`name`, name),
-    createObjectProperty(`fn`, fn)
+    // js 对象 节点
+    createObjectProperty(`name`, name), // js 对象属性 节点，参数1、参数2都是 createSimpleExpression
+    createObjectProperty(`fn`, fn) // js 对象属性 节点， fn 为 动态子元素slot内容 js ast节点
   ])
 }
 

@@ -181,7 +181,12 @@ export const transformElement: NodeTransform = (node, context) => {
         }
       }
 
-      // 处理 v-slot、设定 vnodeChildren
+      // 处理组件slot、解析节点的 vnodeChildren：
+      //    情况一：解析组件（不包括 TELEPORT、KEEP_ALIVE）
+      //    情况二：节点只有一个子节点：
+      //          解析 普通dom元素
+      //          解析 KEEP_ALIVE 组件 ，如 template: '<keep-alive><div>...</div></keep-alive>'
+      //    情况三：节点有多个子节点；或 解析 TELEPORT 组件
 
       // 处理组件的slot信息，如v-slot指令，非 teleport、keep-alive组件（不是真实的组件）
       const shouldBuildAsSlots =
@@ -192,6 +197,7 @@ export const transformElement: NodeTransform = (node, context) => {
         // explained above.
         vnodeTag !== KEEP_ALIVE
 
+      // 解析组件（不包括 TELEPORT、KEEP_ALIVE）
       if (shouldBuildAsSlots) {
         // 解析节点上的 v-slot，并分析子元素template中的v-slot指令、分析其中的v-if/v-for指令
         // slots: slot模版节点信息，如：当前节点的v-slot; 当前节点下不存在为slot模版子元素，保存所有子元素为默认slot; 不存在默认slot模版时，保存非slot模版子元素为默认slot; 保存slotFlag相关信息；动态的v-if/v-for的 dynamicSlots
@@ -204,8 +210,9 @@ export const transformElement: NodeTransform = (node, context) => {
           patchFlag |= PatchFlags.DYNAMIC_SLOTS
         }
       } else if (node.children.length === 1 && vnodeTag !== TELEPORT) {
-        // 如果节点是非组件或是组件且为KEEP_ALIVE，且只有一个子节点
-        // 如 template: '<keep-alive><div>...</div></keep-alive>'
+        // 如果节点只有一个子节点：
+        //    是非组件，即普通dom元素
+        //    是组件且为KEEP_ALIVE，如 template: '<keep-alive><div>...</div></keep-alive>'
 
         const child = node.children[0]
         const type = child.type
@@ -233,7 +240,8 @@ export const transformElement: NodeTransform = (node, context) => {
           vnodeChildren = node.children // 保存当前子节点
         }
       } else {
-        // 如果节点是非组件且有多个子节点；或节点是TELEPORT组件
+        // 当前节点为 普通dom元素且有多个子节点；
+        // 或是TELEPORT组件
         vnodeChildren = node.children
       }
     }
