@@ -519,6 +519,10 @@ export function validateComponentName(name: string, config: AppConfig) {
   }
 }
 
+export function isStatefulComponent(instance: ComponentInternalInstance) {
+  return instance.vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT
+}
+
 export let isInSSRComponentSetup = false
 
 /**
@@ -532,9 +536,9 @@ export function setupComponent(
 
   // 组件的vnode，在 createVnode 初始化
   // 传递给组件的props：rootProps（非组件上的props属性）
-  const { props, children, shapeFlag } = instance.vnode
+  const { props, children } = instance.vnode
   // 是组件式：4
-  const isStateful = shapeFlag & ShapeFlags.STATEFUL_COMPONENT
+  const isStateful = isStatefulComponent(instance)
 
   // 进一步处理组件的props（在初始化组件实例时，已经规范了组件的props格式)
   // 设置组件实际接收的props、attrs，并进行props的类型检查、默认值处理等
