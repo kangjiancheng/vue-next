@@ -40,6 +40,7 @@ import { PatchFlags, PatchFlagNames } from '@vue/shared'
  * 创建v-if解析插件时，原理是基于 if分支流节点 来解析的，如一个分支流中可能是：if节点、else节点、else-if节点，构成的一个逻辑判断流程。
  * 合并一个if分支流里的if、else-if、else节点到 if分支流节点 中，同时替换ast中的位置。
  * 解析时：创建if codegenNode，并将else-if、else的codegenNode链式绑定到if分支流节点
+ * 注意：不处理 <template v-slot></template> v-if节点，由vSlot.ts处理
  */
 export const transformIf = createStructuralDirectiveTransform(
   /^(if|else|else-if)$/,

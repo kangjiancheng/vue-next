@@ -336,7 +336,7 @@ export function parseForExpression(
   const [, LHS, RHS] = inMatch
 
   const result: ForParseResult = {
-    // 右侧目标 createSimpleExpression
+    // 右侧目标 createSimpleExpression，js ast 函数参数节点
     source: createAliasExpression(
       // 创建一个表达式节点，且带单独针对in/of左侧内容的光标位置信息
       loc,
@@ -346,7 +346,7 @@ export function parseForExpression(
     // 左侧目标
     value: undefined, // createAliasExpression(loc, valueContent, trimmedOffset)
     key: undefined, // createAliasExpression(loc, keyContent, keyOffset)
-    index: undefined // createAliasExpression
+    index: undefined // createAliasExpression(loc, indexContent, index源码光标位置)
   }
 
   // TODO: analyze - !__BROWSER__
@@ -363,8 +363,7 @@ export function parseForExpression(
 
   // 解析 in/of 左边内容: value, key, index  以逗号 ',' 分隔
 
-  // 如 <div v-for="(value, key, index) in object"></div> 其中的 'value, key, index'
-  // value
+  // value， 如 <div v-for="(value, key, index) in object"></div> 其中的 'value, key, index'
   let valueContent = LHS.trim()
     .replace(stripParensRE, '') // 去掉括号 /^\(|\)$/g
     .trim()
@@ -377,10 +376,10 @@ export function parseForExpression(
     // match[1] 为 key
     // match[2] 为 index
 
-    // 解析 v-for value， 保留其中 'value' 内容部分
+    // 解析 v-for value， 去掉 ', key, index' 保留其中 'value' 内容部分
     valueContent = valueContent.replace(forIteratorRE, '').trim()
 
-    // 解析 v-for key
+    // 解析 v-for key，创建 key 的 js ast 节点
     const keyContent = iteratorMatch[1].trim()
     let keyOffset: number | undefined
     if (keyContent) {
@@ -406,11 +405,12 @@ export function parseForExpression(
       const indexContent = iteratorMatch[2].trim()
 
       if (indexContent) {
-        // 创建 index 节点
+        // 创建 index 的 js ast 节点
         result.index = createAliasExpression(
           loc,
           indexContent,
           exp.indexOf(
+            // 定位 index 源码位置
             indexContent,
             result.key
               ? keyOffset! + keyContent.length // 存在 key，如 <div v-for="(value, key, index) in object"></div>
@@ -471,6 +471,15 @@ function createAliasExpression(
   )
 }
 
+// v-for 渲染源码回调函数的参数：item, key, index
+// 如    _renderList(items, (item, key, index) => {
+//         return {
+//           name: item.name,
+//           fn: _withCtx((slotProps) => [
+//             _createTextVNode("嘿嘿嘿 " + _toDisplayString(item.name), 1 /* TEXT */)
+//           ])
+//         }
+//       }
 export function createForLoopParams({
   value,
   key,

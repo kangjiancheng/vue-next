@@ -37,14 +37,16 @@ export const enum NodeTypes {
   IF_BRANCH,
   FOR,
   TEXT_CALL,
-  // codegen 即生成js渲染源码树节点
+
+  // codegen 即 渲染函数源码对应的 js ast 节点
+  // 将 vue模版ast 转换到 js渲染源码ast，然后 解析渲染源码ast，最终生成vue模版对应渲染源码
   VNODE_CALL,
-  JS_CALL_EXPRESSION,
-  JS_OBJECT_EXPRESSION,
-  JS_PROPERTY,
-  JS_ARRAY_EXPRESSION,
-  JS_FUNCTION_EXPRESSION,
-  JS_CONDITIONAL_EXPRESSION,
+  JS_CALL_EXPRESSION, // js 表达式 - 函数调用
+  JS_OBJECT_EXPRESSION, // js 对象
+  JS_PROPERTY, // js 属性
+  JS_ARRAY_EXPRESSION, //
+  JS_FUNCTION_EXPRESSION, // js 表达式 - 箭头函数定义
+  JS_CONDITIONAL_EXPRESSION, // js 条件表达式 - 条件true/false ? ... : ...
   JS_CACHE_EXPRESSION,
 
   // ssr codegen
@@ -593,8 +595,10 @@ export function createArrayExpression(
   }
 }
 
+// 创建 一个对象
+// 如： { name: "default", fn: ... }
 export function createObjectExpression(
-  properties: ObjectExpression['properties'],
+  properties: ObjectExpression['properties'], // 对象属性节点列表
   loc: SourceLocation = locStub
 ): ObjectExpression {
   return {
@@ -664,7 +668,8 @@ type InferCodegenNodeType<T> = T extends typeof RENDER_SLOT
   ? RenderSlotCall
   : CallExpression
 
-// 创建运行函数配置
+// 创建 表达式 - 函数调用 的js ast节点
+// 如创建js表达式:  _renderList(..., ...)
 export function createCallExpression<T extends CallExpression['callee']>(
   callee: T, // 如 transforms的上下文context.helpers集合
   args: CallExpression['arguments'] = [],
@@ -673,12 +678,21 @@ export function createCallExpression<T extends CallExpression['callee']>(
   return {
     type: NodeTypes.JS_CALL_EXPRESSION,
     loc,
-    callee,
-    arguments: args
+    callee, // 正在调用的函数
+    arguments: args // 函数的参数列表
   } as any
 }
 
-// 如 构建slot函数节点
+// 创建 表达式 - 箭头函数定义 的js ast节点
+// 如:   _renderList(items, (item, key, index) => {
+//         return {
+//           name: item.name,
+//           fn: _withCtx((slotProps) => [
+//             _createTextVNode("嘿嘿嘿 " + _toDisplayString(item.name), 1 /* TEXT */)
+//           ])
+//         }
+//       })
+// 创建其中的回调函数：(item, key, index) => {...}
 export function createFunctionExpression(
   params: FunctionExpression['params'],
   returns: FunctionExpression['returns'] = undefined,
@@ -688,10 +702,10 @@ export function createFunctionExpression(
 ): FunctionExpression {
   return {
     type: NodeTypes.JS_FUNCTION_EXPRESSION,
-    params,
-    returns,
-    newline,
-    isSlot,
+    params, // 函数参数
+    returns, // 函数返回值
+    newline, // 是否换行
+    isSlot, // 是否是slot节点
     loc
   }
 }
@@ -705,9 +719,9 @@ export function createConditionalExpression(
 ): ConditionalExpression {
   return {
     type: NodeTypes.JS_CONDITIONAL_EXPRESSION,
-    test,
-    consequent,
-    alternate,
+    test, // if/else 的条件表达式
+    consequent, // true 对应的slot节点
+    alternate, // false 对应的slot节点
     newline,
     loc: locStub
   }

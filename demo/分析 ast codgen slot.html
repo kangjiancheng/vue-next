@@ -14,7 +14,7 @@
     <template v-slot:header v-if="current === 'header'">哈哈哈 {{ isHeader }}</template>
     <template v-slot:body v-else-if="current === 'aside-right'">哈哈哈 {{ body }}</template>
     <template v-slot:footer v-else>哈哈哈 footer </template>
-    <template v-slot:[item.name]="slotProps" v-for="item in items" :key="item.id">嘿嘿嘿 {{ item.name }}</template>
+    <template v-slot:[item.name]="slotProps" v-for="(item, key, index) in items" :key="item.id" class="red">嘿嘿嘿 {{ item.name }}</template>
   </slot-demo>
 </div>
 
