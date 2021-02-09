@@ -10,11 +10,23 @@
 
 <div id="app">
   <slot-demo>
-    <template v-slot>呵呵呵</template>
-    <template v-slot:header v-if="current === 'header'">哈哈哈 {{ isHeader }}</template>
-    <template v-slot:body v-else-if="current === 'aside-right'">哈哈哈 {{ body }}</template>
-    <template v-slot:footer v-else>哈哈哈 footer </template>
-    <template v-slot:[item.name]="slotProps" v-for="(item, key, index) in items" :key="item.id" class="red">嘿嘿嘿 {{ item.name }}</template>
+
+    <template v-slot>
+      <div>嗷嗷嗷0</div>
+      <div>哈哈哈1 {{ isShow || 'default' }}</div>
+    </template>
+
+    <template v-slot:header v-if="current === 'header'">啊啊啊2 {{ isShow }}</template>
+    <template v-slot:body v-else-if="current === 'body'">啦啦啦3</template>
+    <template v-slot:footer v-else>呵呵呵4 {{ isShow }}</template>
+
+    <template
+      v-slot:[item.name]="slotProps"
+      v-for="(item, key, index) in items"
+      :key="item.id" class="red">
+      滚滚滚5 {{ item.name }}
+    </template>
+
   </slot-demo>
 </div>
 
@@ -38,6 +50,10 @@
         <div class="slot-demo">
           <div class="default-slot"><slot id="001"></slot></div>
           <div class="header-slot"><slot name="header" id="002"></slot></div>
+          <div class="body-slot"><slot name="body" id="003"></slot></div>
+          <div class="footer-slot"><slot name="footer" id="004"></slot></div>
+          <div class="section1"><slot name="section1" id="004"></slot></div>
+          <div class="section2"><slot name="section2" id="004"></slot></div>
         </div>
       `,
     data () {
@@ -69,6 +85,12 @@
       return {
         count,
         handleClick,
+        current: 'here',
+        isShow: false,
+        items: [
+          { id:1, name: 'section1' },
+          { id:2, name: 'section2' },
+        ]
       }
     }
   }
