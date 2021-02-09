@@ -1,4 +1,4 @@
-// 在解析v-slot指令过程中
+// 在解析组件 v-slot指令过程中
 
 export const enum SlotFlags {
   /**
@@ -6,7 +6,7 @@ export const enum SlotFlags {
    * can fully capture its own dependencies so when passed down the parent won't
    * need to force the child to update.
    */
-  STABLE = 1, // 静态slot下， 节点的子孙元素中不存在元素标签为 slot
+  STABLE = 1, // 静态slot下， 组件节点的子孙元素中不存在元素标签为 slot
   /**
    * Slots that reference scope variables (v-for or an outer slot prop), or
    * has conditional structure (v-if, v-for). The parent will need to force
@@ -19,7 +19,7 @@ export const enum SlotFlags {
    * received. This has to be refined at runtime, when the child's vnode
    * is being created (in `normalizeChildren`)
    */
-  FORWARDED = 3 // 静态slot下， 节点的子孙元素中存在元素标签为 slot
+  FORWARDED = 3 // 静态slot下， 组件节点的子孙元素中存在元素标签为 slot
 }
 
 /**

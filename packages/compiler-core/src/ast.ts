@@ -596,7 +596,7 @@ export function createArrayExpression(
 }
 
 // 创建 一个对象
-// 如： { name: "default", fn: ... }
+// 如创建slots节点列表的对象格式： { name: "default", fn: ... }
 export function createObjectExpression(
   properties: ObjectExpression['properties'], // 对象属性节点列表
   loc: SourceLocation = locStub

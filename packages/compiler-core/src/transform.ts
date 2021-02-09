@@ -364,6 +364,7 @@ function createRootCodegen(root: RootNode, context: TransformContext) {
     // ast根节点就一个子节点，即vue模版只有一个根元素
 
     const child = children[0]
+
     // root ast根节点就一个元素，但不是 slot元素，设置为block
     // template: '<div>...</div>'
     // if the single child is an element, turn it into a block.
@@ -374,6 +375,7 @@ function createRootCodegen(root: RootNode, context: TransformContext) {
       const codegenNode = child.codegenNode
       if (codegenNode.type === NodeTypes.VNODE_CALL) {
         // 如 template: '<div>hello {{ "world" }} !</div>'
+        // 如 组件 - template: '<component-demo>...</component-demo>'
         codegenNode.isBlock = true
         helper(OPEN_BLOCK)
         helper(CREATE_BLOCK)

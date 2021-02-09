@@ -117,7 +117,7 @@ export const transformElement: NodeTransform = (node, context) => {
 
     let shouldUseBlock =
       // dynamic component may resolve to plain elements
-      isDynamicComponent || // 动态组件存在is属性
+      isDynamicComponent || // 动态组件 即存在is属性
       vnodeTag === TELEPORT || // Teleport
       vnodeTag === SUSPENSE || // Suspense
       (!isComponent &&
@@ -130,7 +130,7 @@ export const transformElement: NodeTransform = (node, context) => {
           // #938: elements with dynamic keys should be forced into blocks
           findProp(node, 'key', true))) //  绑定了key指令： ':key'，非静态属性
 
-    // props 节点属性列表
+    // 节点 props
 
     if (props.length > 0) {
       // 解析属性列表：静态属性、指令属性
@@ -150,6 +150,8 @@ export const transformElement: NodeTransform = (node, context) => {
             ) as DirectiveArguments)
           : undefined
     }
+
+    // 节点 children
 
     // keep-alive 不可以有多个子元素
     // children
@@ -199,9 +201,9 @@ export const transformElement: NodeTransform = (node, context) => {
 
       // 解析组件（不包括 TELEPORT、KEEP_ALIVE）
       if (shouldBuildAsSlots) {
-        // 创建组件及子元素的slot节点列表（并在此处理v-slot的v-if/for）
-        // slots: slot模版节点信息，如：当前节点的v-slot; 当前节点下不存在为slot模版子元素，保存所有子元素为默认slot; 不存在默认slot模版时，保存非slot模版子元素为默认slot; 保存slotFlag相关信息；动态的v-if/v-for的 dynamicSlots
-        // hasDynamicSlots 动态的slot: 是否存在嵌套的v-slot指令，根据transform trackSlotScopes 插件; 或 slot指令是动态，v-slot:[xxx]；或子元素template标签模版上带有v-slot 且 还带有 v-if或 v-for
+        // 创建组件及子元素的slots节点列表（并在此处理v-slot的v-if/for）
+        // slots: 组件的slots节点列表：静态节点列表、动态节点列表
+        // hasDynamicSlots 是否存在动态 slot: 如 动态v-slot:[xxx]、或 <template v-slot... v-if/v-for>、或 嵌套v-if/v-for
         const { slots, hasDynamicSlots } = buildSlots(node, context)
 
         vnodeChildren = slots
@@ -246,7 +248,7 @@ export const transformElement: NodeTransform = (node, context) => {
       }
     }
 
-    // 添加patchFlag 开发帮助提示
+    // 节点 patchFlags
 
     // patchFlag & dynamicPropNames
     if (patchFlag !== 0) {
@@ -837,7 +839,7 @@ function mergeAsArray(existing: Property, incoming: Property) {
 }
 
 // 进一步解析 buildProps() 中的 runtimeDirectives：v-show、v-model、用户自定义指令
-// 解析指令参数、指令值、指令修饰符
+// 设置 指令参数
 function buildDirectiveArgs(
   dir: DirectiveNode, // 解析后的指令节点：key/value
   context: TransformContext

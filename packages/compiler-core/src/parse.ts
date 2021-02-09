@@ -830,7 +830,8 @@ function parseAttribute(
 
   // 解析标签指令，判断属性名是否代表指令
   // 如：template = '<span v-bind:["指令参数(如click或change)"].prevent="someHandler"></span>'
-  // 此时: name = 'v-bind:["指令参数(如click或change)"].prevent'
+  // 此时指令属性名: name = 'v-bind:["指令参数(如click或change)"].prevent'
+  // 指令属性名组成: 指令名、指令参数、指令修饰符，如 v-bind:click.prevent
 
   // 指令开头必须是：v-、:、@、#
   // context.inVPre 即指令列表存在v-pre指令，则不需要解析（触发时机：当解析完所有指令之后，会判断指令列表中是否有v-pre指令，有则会重新解析一遍所有属性，且把指令属性当做普通html标签属性处理）
@@ -847,9 +848,9 @@ function parseAttribute(
 
     /**
      * 如属性名name为： 'v-bind:["指令参数(如click或change)"].prevent'  或者 '#header' 或 '@click'
-     *    match[1] 为匹配第一个待捕获的括号内容：([a-z0-9-]+) 指令，则 match[1] = 'bind' 或 '' 或 ''
-     *    match[2] 为匹配第二个待捕获的括号内容：(\[[^\]]+\]|[^\.]+)，则 match[2] = '["指令参数(如click或change)"]' 或 'header' 或 'click'
-     *    match[3] 为匹配第三个待捕获的括号内容：(.+)，则 match[3] = '.prevent'
+     *    match[1] 指令类型 - 为匹配第一个待捕获的括号内容：([a-z0-9-]+) 指令，则 match[1] = 'bind' 或 '' 或 ''
+     *    match[2] 指令名/参数 - 为匹配第二个待捕获的括号内容：(\[[^\]]+\]|[^\.]+)，则 match[2] = '["指令参数(如click或change)"]' 或 'header' 或 'click'
+     *    match[3] 指令修饰符 - 为匹配第三个待捕获的括号内容：(.+)，则 match[3] = '.prevent'
      * 注意 '?:' 表示不进行捕获这个括号中内容
      */
     /**
@@ -936,9 +937,9 @@ function parseAttribute(
     // 返回指令属性节点
     return {
       type: NodeTypes.DIRECTIVE, // 节点类型为指令类型
-      name: dirName, // 指令类别，如 if、show、或 bind、on、slot等指令名
+      name: dirName, // 指令名，如 if、show、或 bind、on、slot等指令名
       exp: value && {
-        // 指令值表达式节点
+        // 指令值节点
         type: NodeTypes.SIMPLE_EXPRESSION,
         content: value.content, // 指令属性值
         isStatic: false,
@@ -947,8 +948,8 @@ function parseAttribute(
         constType: ConstantTypes.NOT_CONSTANT, // 默认为NOT_CONSTANT，在transformExpression中可能调整成相应的值，为了之后的hoisting设置。
         loc: value.loc
       },
-      arg, // 指令表达式名内容信息，注意必须是个变量 @['click'] 不符合语法，指令名不能包含 ' " <
-      modifiers: match[3] ? match[3].substr(1).split('.') : [], // 指令的修饰符列表 '@click.prevent.once'中的 'prevent'、'once'
+      arg, //  指令参数节点，注意必须是个变量 @['click'] 不符合语法，指令名不能包含 ' " <
+      modifiers: match[3] ? match[3].substr(1).split('.') : [], // 指令修饰符节点 '@click.prevent.once'中的 'prevent'、'once'
       loc // 指令属性位置，包括属性名与属性值
     }
   }

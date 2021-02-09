@@ -16,6 +16,7 @@ import { PatchFlags, isString, isSymbol } from '@vue/shared'
 import { isSlotOutlet } from '../utils'
 import { CREATE_VNODE } from '../runtimeHelpers'
 
+// 静态提升：节点属性列表、节点子元素
 export function hoistStatic(root: RootNode, context: TransformContext) {
   walk(
     root, // ast 根节点
