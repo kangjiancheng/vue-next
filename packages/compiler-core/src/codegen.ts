@@ -853,7 +853,7 @@ function genNode(node: CodegenNode | symbol | string, context: CodegenContext) {
       break
 
     case NodeTypes.JS_CALL_EXPRESSION:
-      // 如：静态提升文本节点: 'abc'，节点类型在
+      // 如：静态提升文本节点: 'abc'
       genCallExpression(node, context)
       break
     case NodeTypes.JS_OBJECT_EXPRESSION:

@@ -47,18 +47,21 @@ import { PatchFlags, PatchFlagNames } from '@vue/shared'
 // 先通过结构化创建插件
 export const transformFor = createStructuralDirectiveTransform(
   'for',
+  // 添加阶段，会执行这个回调方法，返回 onExit
   (node, dir, context) => {
     // dir： v-for 指令属性节点
     const { helper } = context
 
-    // 开始解析v-for指令属性节点
+    // transform for 添加阶段，返回 transform for onExit
+    // processFor: 解析v-for指令节点，创建新的forNode节点并替换原先节点
     return processFor(node, dir, context, forNode => {
-      // 回调继续解析forNode指令节点
+      // 还是处于 transform for 添加阶段，执行这个回调，返回 transform的 onExit
 
       // create the loop render function expression now, and add the
       // iterator on exit after all children have been traversed
 
-      // 创建执行渲染表达式
+      // 创建 一个函数执行的表达式
+      // 其中 arguments - 遍历回调： 在执行transform阶段 设置，并重新调整子列表
       const renderExp = createCallExpression(helper(RENDER_LIST), [
         // RENDER_LIST = Symbol(__DEV__ ? `renderList` : ``)
         forNode.source // 遍历目标信息
@@ -115,8 +118,10 @@ export const transformFor = createStructuralDirectiveTransform(
         node.loc
       ) as ForCodegenNode
 
-      // 最终解析v-for指令
+      // 执行 transform for 插件（以上为 添加 插件阶段）
+      // transform 执行阶段，只执行这个返回方法
       return () => {
+        // 执行阶段，根据子节点情况调整子节点列表：slot节点、多子节点、单标签元素子节点
         // finish the codegen now that all children have been traversed
         let childBlock: BlockCodegenNode
         const isTemplate = isTemplateNode(node) // <template v-for="(item, index) in items" :key="index"></template>
@@ -145,12 +150,13 @@ export const transformFor = createStructuralDirectiveTransform(
         const needFragmentWrapper =
           children.length !== 1 || children[0].type !== NodeTypes.ELEMENT
 
+        // 遍历slot标签节点：<slot v-for> 或 <template v-for><slot>
         const slotOutlet = isSlotOutlet(node)
           ? node // <slot v-for="...">
           : isTemplate &&
             node.children.length === 1 &&
-            isSlotOutlet(node.children[0])
-            ? (node.children[0] as SlotOutletNode) // 只有一个slot子节点 <template v-for="..."><slot/></template>， api-extractor somehow fails to infer this
+            isSlotOutlet(node.children[0]) //  只有一个slot子节点 <template v-for><slot>...</slot></template>，
+            ? (node.children[0] as SlotOutletNode) // api-extractor somehow fails to infer this
             : null // null
 
         if (slotOutlet) {
@@ -167,11 +173,8 @@ export const transformFor = createStructuralDirectiveTransform(
             injectProp(childBlock, keyProperty, context)
           }
         } else if (needFragmentWrapper) {
-          // 当前节点（非slot标签）下，存在多个子节点，如：<template v-for="..."><div>...</div><div>...</div></template>
-          // 或者当前节点（非slot标签）只有一个子节点，如：<div v-for="...">文本内容 或插值文本 或 注释节点，即非element/组件节点</div>
-          // 注意：当template标签仅有一个slot子节点，如：<template v-for="..."><slot/></template>，则不处理
+          // 多个子节点：如多个标签节点 或 多个文本节点（文本/插值/注释）
 
-          // 为子节点列表生成一个代码块，方便之后的循环处理
           // should generate a fragment block for each loop
           childBlock = createVNodeCall(
             context,
@@ -210,7 +213,7 @@ export const transformFor = createStructuralDirectiveTransform(
         }
 
         renderExp.arguments.push(createFunctionExpression(
-          createForLoopParams(forNode.parseResult), // for 表达式解析结果
+          createForLoopParams(forNode.parseResult), // 遍历回调参数列表：item, key, index
           childBlock, // 子节点列表
           true /* force newline */
         ) as ForIteratorExpression)
@@ -268,6 +271,7 @@ export function processFor(
   context.replaceNode(forNode)
 
   // bookkeeping
+  // transform 添加阶段
   scopes.vFor++ // 记录是否存在嵌套v-for
 
   // TODO: analyze - !__BROWSER__
@@ -281,8 +285,10 @@ export function processFor(
 
   const onExit = processCodegen && processCodegen(forNode)
 
-  // 遍历节点阶段得到v-for的transform
+  // transform 的 onExit
+  // 在 transform 执行阶段，执行这个方法
   return () => {
+    // transform 执行阶段
     scopes.vFor-- // 当前解析的v-for指令
     if (!__BROWSER__ && context.prefixIdentifiers) {
       value && removeIdentifiers(value)

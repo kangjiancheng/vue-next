@@ -253,17 +253,19 @@ export function createTransformContext(
       }
     },
     hoist(exp) {
+      // 静态节点列表
       context.hoists.push(exp)
+
       // 重新生成节点的codegenNode
       const identifier = createSimpleExpression(
         // codegen时，对应的变量名字，如 <div><i :class="red">1</i>abc</div>，
         // 其中静态abc节点： 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")'
-        `_hoisted_${context.hoists.length}`, // 指向该静态节点的vnode
+        `_hoisted_${context.hoists.length}`, // 静态节点的变量名
         false,
         exp.loc,
         ConstantTypes.CAN_HOIST
       )
-      identifier.hoisted = exp // 静态提升节点内容
+      identifier.hoisted = exp // 静态节点
       return identifier
     },
     cache(exp, isVNode = false) {
@@ -299,48 +301,15 @@ export function transform(root: RootNode, options: TransformOptions) {
   traverseNode(root, context)
 
   // 静态提升： 元素节点、文本节点、属性节点
-  // 在之后ast生成该节点的渲染片段时，可以直接用这个变量替换对应位置的渲染片段，同时生成渲染函数时，可以先执行这个静态节点，得到对应vnode，在执行渲染函数时，不必花时间去执行生成这个vnode
-  // 提升静态ast节点，如 template:
-  // <div class="btn-click" @click="handleClick">
-  //   <i class="loading"></i> 点击 {{ count }}
-  //   <div :class="hello">
-  //     <div>123 {{ count }}</div>
-  //     abc
-  //   </div>
-  // </div>
-  // 提升静态节点：标签i节点 '<i class="loading"></i>' 和 文本节点 'abc'
-  // 提升静态属性节点：<div class="red" style="color:blue;"></div>，即没有动态属性，会重新转换标签节点codegenNode props属性列表
-  // "const _Vue = Vue
-  // const { createVNode: _createVNode, createTextVNode: _createTextVNode } = _Vue
-  //
-  //
-  // 在之后ast生成该节点的渲染片段时，可以直接用这个变量替换对应位置的渲染片段，同时生成渲染函数时，可以先执行这个静态节点，得到对应vnode，在执行渲染函数时，不必花时间去执行生成这个vnode
-  // const _hoisted_1 = /*#__PURE__*/_createVNode("i", { class: "loading" }, null, -1 /* HOISTED */)
-  // const _hoisted_2 = /*#__PURE__*/_createTextVNode(" abc ")
-  //
-  // return function render(_ctx, _cache) {
-  //   with (_ctx) {
-  //     const { createVNode: _createVNode, toDisplayString: _toDisplayString, createTextVNode: _createTextVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
-  //
-  //     return (_openBlock(), _createBlock("div", {
-  //       class: "btn-click",
-  //       onClick: handleClick
-  //     }, [
-  //       _hoisted_1,
-  //       _createTextVNode(" 点击 " + _toDisplayString(count) + " ", 1 /* TEXT */),
-  //       _createVNode("div", { class: hello }, [
-  //         _createVNode("div", null, "123 " + _toDisplayString(count), 1 /* TEXT */),
-  //         _hoisted_2
-  //       ], 2 /* CLASS */)
-  //     ], 8 /* PROPS */, ["onClick"]))
-  //   }
-  // }"
+  // 在之后ast生成该节点的渲染片段时，可以直接用这个变量替换对应位置的渲染片段，
+  // 同时生成渲染函数时，可以先执行这个静态节点，得到对应vnode，在执行渲染函数时，不必花时间去执行生成这个vnode
   if (options.hoistStatic) {
     // 节点静态标记 => 生成静态节点 => 提升静态节点（生成VNode） => 最终加速渲染函数执行
     hoistStatic(root, context)
   }
 
   // 非ssr环境下，创建ast root根节点的codegenNode
+  // 即创建根节点的 js ast 节点
   if (!options.ssr) {
     createRootCodegen(root, context)
   }
@@ -356,20 +325,23 @@ export function transform(root: RootNode, options: TransformOptions) {
   root.cached = context.cached // 缓存编译结果，如 v-once
 }
 
-// 创建ast root根节点的codegenNode
+// 创建vue ast 根节点的 js ast 节点
+// 情况：
+// 1、 vue模版只有一个根元素：（1）element 类型，则选其codegenNode；（2）除 element类型外，如，IfNode、forNode则选其child
+// 2、 vue模版有多个根元素：创建一个fragment节点，作为其codegenNode
 function createRootCodegen(root: RootNode, context: TransformContext) {
   const { helper } = context
   const { children } = root
   if (children.length === 1) {
-    // ast根节点就一个子节点，即vue模版只有一个根元素
+    // vue模版只有一个根元素
 
     const child = children[0]
 
-    // root ast根节点就一个元素，但不是 slot元素，设置为block
     // template: '<div>...</div>'
     // if the single child is an element, turn it into a block.
     if (isSingleElementRoot(root, child) && child.codegenNode) {
-      // 只有一个根标签元素（不包括slot标签元素）
+      // vue模版的根节点为非slot的 标签元素
+
       // single element root is never hoisted so codegenNode will never be
       // SimpleExpressionNode
       const codegenNode = child.codegenNode
@@ -384,19 +356,16 @@ function createRootCodegen(root: RootNode, context: TransformContext) {
     } else {
       // - single <slot/>, IfNode, ForNode: already blocks. slot、if、for节点已经被转换处理为相应类型
       // - single text node: always patched.
-      // root codegen falls through via genNode() 在codegen阶段通过genNode处理生成渲染代码
+      // root codegen falls through via genNode()
       root.codegenNode = child
     }
   } else if (children.length > 1) {
-    // 模版存在多个根节点，转换为fragment block
-    // template: '<div>...</div><div>...</div>'
+    // vue模版有多个根元素：创建fragment节点，根节点作为其子节点
     // root has multiple nodes - return a fragment block.
 
     let patchFlag = PatchFlags.STABLE_FRAGMENT
     let patchFlagText = PatchFlagNames[PatchFlags.STABLE_FRAGMENT] // 'STABLE_FRAGMENT'
 
-    // 模版template，根节点有多个，其中只有一个是非注释节点
-    // template: '<!-- 123 --><div>...</div><!-- 123 -->'
     // check if the fragment actually contains a single valid child with
     // the rest being comments
     if (
@@ -407,6 +376,7 @@ function createRootCodegen(root: RootNode, context: TransformContext) {
       patchFlag |= PatchFlags.DEV_ROOT_FRAGMENT
       patchFlagText += `, ${PatchFlagNames[PatchFlags.DEV_ROOT_FRAGMENT]}` // DEV_ROOT_FRAGMENT
     }
+    // 多个根节点
     root.codegenNode = createVNodeCall(
       context,
       helper(FRAGMENT), // FRAGMENT = Symbol(__DEV__ ? `Fragment` : ``)
@@ -459,7 +429,7 @@ export function traverseNode(
    * nodeTransforms = [
        transformOnce,                 // 处理 v-once 指令属性节点，编译一次节点，不进行再次编译，缓存codegenNode
        transformIf,                   // 处理 v-if 指令属性节点，在添加插件时，会先插件一个新的if branch node分支流节点，将之后的else-f、else节点移进来，创建if codegenNode，并将else-if、else的codegenNode链式绑定到if分支流节点
-       transformFor,                  // 处理 v-for 指令属性节点，在添加插件时，会先创建一个新的for node 类型节点，并替换当前for类型的节点，之后会处理slot场景下的v-for，和template场景下的v-for，包括对key属性的处理，并生成for节点的codegenNode
+       transformFor,                  // 处理 v-for 指令属性节点，在添加插件时，创建一个新的forNode节点并替换当前的节点，同时初步设置节点的 codegenNode；然后在执行插件阶段，完善 codegenNode 的 arguments，即根据子节点列表设置for节点的子元素列表和遍历回调方法
        ...(!__BROWSER__ && prefixIdentifiers
         ? [
         // order is important
@@ -478,6 +448,7 @@ export function traverseNode(
         transformStyle,               // 不返回回调转换插件， html元素全部转换静态style属性为对应的动态style指令属性节点
         ...(__DEV__ ? [warnTransitionChildren] : []) // transition组件只接收一个子元素/子组件
        ],
+       transformHoist: __BROWSER__ ? null : stringifyStatic
     ]
    */
   const { nodeTransforms } = context // transform 节点所有插件列表
@@ -562,7 +533,8 @@ export function createStructuralDirectiveTransform(
     ? (n: string) => n === name // 如 v-for 的 'for'
     : (n: string) => name.test(n) // 如 v-if 的 /^(if|else|else-if)$/
 
-  // v-if、v-for的 transform插件
+  // 返回 v-if、v-for 的 transform 插件
+  // 添加阶段时，会执行这个返回方法
   return (node, context) => {
     if (node.type === NodeTypes.ELEMENT) {
       const { props } = node
@@ -585,12 +557,13 @@ export function createStructuralDirectiveTransform(
           props.splice(i, 1) // 已在父节点中v-if 处理子节点列表中的 v-if
           i--
 
+          // 添加 transform 插件
           const onExit = fn(node, prop, context)
           if (onExit) exitFns.push(onExit)
         }
       }
 
-      // 返回transform插件
+      // 返回transform插件列表
       return exitFns
     }
   }

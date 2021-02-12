@@ -4,16 +4,27 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Vue 3 调试 - 分析 ast codgen</title>
+  <title>Vue 3 调试 - 分析 ast codegen</title>
 </head>
 <body>
 
-  <div id="app">
-    <div id="test" style="color: blue;" class="blue" :class="red" @click="handleClick">
-      hello {{ someone }} !
-      <i class="blue">{{ text }}</i>
+<div id="app">
+  <div class="red0" @click="handleClick">
+
+    <div :class="red1">
+      <div class="red2" style="color: blue;">静态提升 - 节点 1</div>
+      静态提升 - 纯文本: 有纯文本节点 又有 存在其它类型节点
     </div>
+
+    <div class="red3">静态提升 - 节点 2</div>
+    <div :class="red4">只有纯文本，不需要提升</div>
+
+    <div class="red5">静态提升 - 节点属性 {{ count }}</div>
+
+    <div class="red6" :class="red7">不需要提升 {{ count }}</div>
+
   </div>
+</div>
 
   <!-- 开发模式 -->
   <script src="../packages/vue/dist/vue.global.js"></script>

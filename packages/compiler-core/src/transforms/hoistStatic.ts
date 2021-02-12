@@ -17,13 +17,19 @@ import { isSlotOutlet } from '../utils'
 import { CREATE_VNODE } from '../runtimeHelpers'
 
 // 静态提升：节点属性列表、节点子元素
+// ConstantTypes {
+//   NOT_CONSTANT = 0,  // 静态属性
+//   CAN_SKIP_PATCH,
+//   CAN_HOIST,         // 静态节点/文本
+//   CAN_STRINGIFY      // 静态节点/文本
+// }
 export function hoistStatic(root: RootNode, context: TransformContext) {
   walk(
     root, // ast 根节点
     context,
     // Root node is unfortunately non-hoistable due to potential parent
     // fallthrough attributes.
-    isSingleElementRoot(root, root.children[0]) // ast 根节点下只有一个节点，即template内容只有一个元素
+    isSingleElementRoot(root, root.children[0]) // vue模版只有一个根标签元素：true
   )
 }
 
@@ -41,10 +47,11 @@ export function isSingleElementRoot(
   )
 }
 
+// 递归节点子元素，对节点的子元素进行静态标记并创建静态节点
 function walk(
   node: ParentNode,
   context: TransformContext,
-  doNotHoistNode: boolean = false // 是否单节点
+  doNotHoistNode: boolean = false
 ) {
   let hasHoistedNode = false
   // Some transforms, e.g. transformAssetUrls from @vue/compiler-sfc, replaces
@@ -55,27 +62,39 @@ function walk(
   // @vue/compiler-dom), but doing it here allows us to perform only one full
   // walk of the AST and allow `stringifyStatic` to stop walking as soon as its
   // stringficiation threshold is met.
-  let canStringify = true
+  let canStringify = true // NOT_CONSTANT、CAN_STRINGIFY、
+
+  // ConstantTypes {
+  //   NOT_CONSTANT = 0,
+  //   CAN_SKIP_PATCH,
+  //   CAN_HOIST,
+  //   CAN_STRINGIFY
+  // }
 
   const { children } = node // ast子节点列表
   for (let i = 0; i < children.length; i++) {
     const child = children[i]
     // only plain elements & text calls are eligible for hoisting.
+    // 普通元素节点和文本节点是符合静态提升
     if (
-      child.type === NodeTypes.ELEMENT &&
-      child.tagType === ElementTypes.ELEMENT
+      child.type === NodeTypes.ELEMENT && // ELEMENT、FOR、IF_BRANCH、IF
+      child.tagType === ElementTypes.ELEMENT // ELEMENT、 COMPONENT、 SLOT、 TEMPLATE
     ) {
-      const constantType = doNotHoistNode // 默认false
-        ? ConstantTypes.NOT_CONSTANT // 单根节点
+      // 普通dom节点（没有vue语法），需要静态提升
+
+      const constantType = doNotHoistNode
+        ? ConstantTypes.NOT_CONSTANT // vue 模版 单根标签元素节点
         : getConstantType(child, context)
 
       // ConstantTypes {
-      //   NOT_CONSTANT = 0,
-      //   CAN_SKIP_PATCH,
-      //   CAN_HOIST,
-      //   CAN_STRINGIFY
+      //   NOT_CONSTANT = 0,  // 静态属性
+      //   CAN_SKIP_PATCH,    // 静态节点
+      //   CAN_HOIST,         // 静态节点
+      //   CAN_STRINGIFY      // 静态节点
       // }
       if (constantType > ConstantTypes.NOT_CONSTANT) {
+        // 静态提升节点
+
         if (constantType < ConstantTypes.CAN_STRINGIFY) {
           // ConstantTypes = CAN_SKIP_PATCH、CAN_HOIST
           canStringify = false
@@ -84,13 +103,15 @@ function walk(
           // ConstantTypes = CAN_HOIST、CAN_STRINGIFY
 
           ;(child.codegenNode as VNodeCall).patchFlag =
-            PatchFlags.HOISTED + (__DEV__ ? ` /* HOISTED */` : ``)
-          // 重新转换 生成
+            PatchFlags.HOISTED + (__DEV__ ? ` /* HOISTED */` : ``) //  -1
+
+          // 创建静态节点与变量名
           child.codegenNode = context.hoist(child.codegenNode!)
           hasHoistedNode = true
           continue
         }
       } else {
+        // 静态提升节点属性
         // node may contain dynamic children, but its props may be eligible for
         // hoisting.
         const codegenNode = child.codegenNode!
@@ -100,6 +121,7 @@ function walk(
             (!flag ||
               flag === PatchFlags.NEED_PATCH ||
               flag === PatchFlags.TEXT) &&
+            // CAN_HOIST、CAN_STRINGIFY
             getGeneratedPropsConstantType(child, context) >=
               ConstantTypes.CAN_HOIST
           ) {
@@ -112,13 +134,23 @@ function walk(
         }
       }
     } else if (child.type === NodeTypes.TEXT_CALL) {
+      // 提升静态文本节点（纯文本，不存在插值之类）
+      //
+      // TEXT_CALL - 不纯的子节点：（处理其中的文本合并）
+      // 1、即有文本又有其它， 如 template: '{{ foo }} - {{ bar }} <span>123</span>'
+      // 2、当前为非 根节点/dom标签元素节点，且存在子文本节点，如 template: '<component-demo>123</component-demo>
+
       const contentType = getConstantType(child.content, context)
+
       if (contentType > 0) {
+        // CAN_SKIP_PATCH、CAN_HOIST、CAN_STRINGIFY
+
         if (contentType < ConstantTypes.CAN_STRINGIFY) {
           // ConstantTypes = CAN_SKIP_PATCH、CAN_HOIST
 
           canStringify = false
         }
+
         if (contentType >= ConstantTypes.CAN_HOIST) {
           // ConstantTypes = CAN_HOIST、CAN_STRINGIFY
 
