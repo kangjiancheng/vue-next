@@ -93,7 +93,7 @@ function walk(
       //   CAN_STRINGIFY      // 静态节点
       // }
       if (constantType > ConstantTypes.NOT_CONSTANT) {
-        // 静态提升节点
+        // 静态提升节点: CAN_SKIP_PATCH、CAN_HOIST、CAN_STRINGIFY
 
         if (constantType < ConstantTypes.CAN_STRINGIFY) {
           // ConstantTypes = CAN_SKIP_PATCH、CAN_HOIST
@@ -111,9 +111,11 @@ function walk(
           continue
         }
       } else {
-        // 静态提升节点属性
+        // 静态提升节点属性 NOT_CONSTANT
+
         // node may contain dynamic children, but its props may be eligible for
         // hoisting.
+
         const codegenNode = child.codegenNode!
         if (codegenNode.type === NodeTypes.VNODE_CALL) {
           const flag = getPatchFlag(codegenNode)
@@ -121,10 +123,11 @@ function walk(
             (!flag ||
               flag === PatchFlags.NEED_PATCH ||
               flag === PatchFlags.TEXT) &&
-            // CAN_HOIST、CAN_STRINGIFY
             getGeneratedPropsConstantType(child, context) >=
               ConstantTypes.CAN_HOIST
           ) {
+            // CAN_HOIST、CAN_STRINGIFY
+
             const props = getNodeProps(child)
             if (props) {
               // 设置 提升静态节点属性

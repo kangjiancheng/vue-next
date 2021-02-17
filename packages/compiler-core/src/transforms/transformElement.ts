@@ -142,6 +142,7 @@ export const transformElement: NodeTransform = (node, context) => {
       vnodeProps = propsBuildResult.props // 解析后的props列表
       patchFlag = propsBuildResult.patchFlag // 根据相关prop信息，进行二进制运算设置patchFlag
       dynamicPropNames = propsBuildResult.dynamicPropNames // 静态prop key的name列表，且非 ref、style、class，且该指令没有被设置缓存，如：v-bind、 v-model、 v-on
+
       const directives = propsBuildResult.directives // 需要在运行时，重新处理的：v-model、v-show、用户自定义指令
       vnodeDirectives =
         directives && directives.length

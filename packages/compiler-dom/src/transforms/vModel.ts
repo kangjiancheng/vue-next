@@ -116,7 +116,7 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
         __DEV__ && checkDuplicatedValue() // 检测是否存在不必要的value属性
       }
     } else if (tag === 'select') {
-      // 选择框
+      // 选择框 Symbol(__DEV__ ? `vModelSelect` : ``)
       directiveToUse = V_MODEL_SELECT
     } else {
       // 解析富文本框： textarea

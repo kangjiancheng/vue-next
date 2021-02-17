@@ -56,6 +56,8 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
     bindingType &&
     bindingType !== BindingTypes.SETUP_CONST
 
+  // 必须有值，不可为空，如：v-model=""
+
   // v-model绑定的应该是一个变量或某个对象属性，如：$_abc[foo][bar] 或 $_abc.foo.bar
   if (!isMemberExpression(expString) && !maybeRef) {
     context.onError(
@@ -78,8 +80,10 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
     return createTransformProps()
   }
 
-  // 属性名 指令参数内容，如 <input v-model:xxx="inputText" placeholder="input text" />， arg为xxx节点
-  // dom 环境下，v-model不该有arg
+  // 指令参数节点
+
+  // 属性名 指令参数内容
+  // dom 环境下，v-model 目前暂时没有参数节点arg，如： v-model:arg.trim="value"
   const propName = arg ? arg : createSimpleExpression('modelValue', true)
 
   // 属性值节点 key
@@ -95,6 +99,7 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
   let assignmentExp: ExpressionNode
   const eventArg = context.isTS ? `($event: any)` : `$event` // isTS，编译为TS格式代码
   if (maybeRef) {
+    // TODO: cfs
     if (bindingType === BindingTypes.SETUP_REF) {
       // v-model used on known ref.
       assignmentExp = createCompoundExpression([
@@ -114,7 +119,7 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
       ])
     }
   } else {
-    // '($event: any) => (', exp, ' = $event)'
+    // ['($event: any) => (', exp, ' = $event)']
     assignmentExp = createCompoundExpression([
       `${eventArg} => (`,
       exp,

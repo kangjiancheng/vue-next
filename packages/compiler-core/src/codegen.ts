@@ -254,7 +254,7 @@ export function generate(
   const genScopeId = !__BROWSER__ && scopeId != null && mode === 'module'
   const isSetupInlined = !__BROWSER__ && !!options.inline
 
-  // 设置前置变量，静态节点提升
+  // 生成 前置环境变量、静态节点提升
 
   // preambles
   // in setup() inline mode, the preamble is generated in a sub context
@@ -266,9 +266,7 @@ export function generate(
     // TODO: cfs - analyze
     genModulePreamble(ast, preambleContext, genScopeId, isSetupInlined)
   } else {
-    // 针对存在静态提升节点，如：<div><i :class="red">1</i>abc</div> s
-    genFunctionPreamble(ast, preambleContext)
-
+    // 针对存在静态提升节点，如：<div><i :class="red">1</i>abc</div>
     // 解析其中静态提升文本节点abc，结果为：context.code +=
     // 'const _Vue = Vue'
     // 'const { createTextVNode: _createTextVNode } = _Vue'
@@ -276,6 +274,7 @@ export function generate(
     // 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")'
     // ''
     // 'return '
+    genFunctionPreamble(ast, preambleContext)
   }
 
   // 开始生成渲染函数代码
@@ -342,7 +341,8 @@ export function generate(
     // '    const { createVNode: _createVNode, createTextVNode: _createTextVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue\n\n'
   }
 
-  // 生成组件定义源码，解析自定义组件，方便渲染函数直接引入该变量，如：'const _component_hello__world = _resolveComponent("hello-world")' // 解析组件
+  // 生成 组件定义 源码
+  // 如：'const _component_hello__world = _resolveComponent("hello-world")' // 解析组件
   // generate asset resolution statements
   if (ast.components.length) {
     // 自定义组件列表，在transformElement中初始化
@@ -467,6 +467,10 @@ function genFunctionPreamble(ast: RootNode, context: CodegenContext) {
   // 重新赋值helpers的名字，e.g: CREATE_TEXT 对应的 Symbol('createTextVNode') 则 '{createTextVNode: _createTextVNode} = _Vue'
   const aliasHelper = (s: symbol) => `${helperNameMap[s]}: _${helperNameMap[s]}`
 
+  // 静态部分：引入 函数变量 的代码 ast code:
+  // 'const _Vue = Vue'
+  // 'const { createVNode: _createVNode, createTextVNode: _createTextVNode } = _Vue'
+
   // 生成 定义辅助函数 的代码，如：'{createTextVNode: _createTextVNode} = _Vue'
   // Generate const declaration for helpers
   // In prefix mode, we place the const declaration at top so it's done
@@ -536,7 +540,8 @@ function genFunctionPreamble(ast: RootNode, context: CodegenContext) {
     )
   }
 
-  // 生成静态节点渲染源码
+  // 引入 静态vnode变量 的代码 ast code：
+  // 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")'
   genHoists(ast.hoists, context)
   newline()
   push(`return `) // 紧接之后 渲染函数render
@@ -651,24 +656,14 @@ function genAssets(
   }
 }
 
-// 静态提升节点 codegenNode
-// 如：<div><i :class="red">1</i>abc</div>
-// 解析其中静态提升文本节点abc，即得到了vnode节点: 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")\n'
-// 在之后ast生成该节点的渲染片段时，可以直接用这个变量替换对应位置的渲染片段，同时生成渲染函数时，可以先执行这个静态节点，得到对应vnode，在执行渲染函数时，不必花时间去执行生成这个vnode
+// 生产 静态提升节点 的渲染代码 ast code:
+// hoists： 静态节点的codegenNode、节点的静态属性列表、静态纯文本节点的codegenNode
+// 在之后ast生成该节点的渲染片段时，可以直接用这个变量替换对应位置的渲染片段，
+// 同时生成渲染函数时，可以先执行这个静态节点，得到对应vnode，在执行渲染函数时，不必花时间去执行生成这个vnode
 function genHoists(hoists: (JSChildNode | null)[], context: CodegenContext) {
   if (!hoists.length) {
     return
   }
-  // e.g:
-  // template:
-  //    <div class="btn-click" @click="handleClick">
-  //      <i class="loading"></i> 点击 {{ count }}
-  //      <div :class="hello">
-  //        <div>123 {{ count }}</div>
-  //        abc
-  //      </div>
-  //    </div>
-  // 此时提升静态节点：标签i节点 '<i class="loading"></i>' 和 文本节点 'abc'
 
   context.pure = true
   const { push, newline, helper, scopeId, mode } = context
@@ -684,11 +679,11 @@ function genHoists(hoists: (JSChildNode | null)[], context: CodegenContext) {
     newline()
   }
 
-  // 如：<div><i :class="red">1</i>abc</div>
+  // exp: 静态节点的codegenNode、节点的静态属性列表props、静态纯文本节点的codegenNode
   hoists.forEach((exp, i) => {
     if (exp) {
       // exp 为节点的codegenNode，注意此codegenNode为静态提升前的codegenNode，不是静态提升后的ast节点的codegenNode
-      push(`const _hoisted_${i + 1} = `) // 'const _hoisted_1 = '
+      push(`const _hoisted_${i + 1} = `) // 'const _hoisted_1 = ' 按添加顺序命名
       genNode(exp, context) // 生成静态节点的渲染源码
       newline()
     }

@@ -253,19 +253,19 @@ export function createTransformContext(
       }
     },
     hoist(exp) {
-      // 静态节点列表
+      // 静态节点、静态节点属性props、静态文本节点的codegenNode
       context.hoists.push(exp)
 
       // 重新生成节点的codegenNode
       const identifier = createSimpleExpression(
         // codegen时，对应的变量名字，如 <div><i :class="red">1</i>abc</div>，
         // 其中静态abc节点： 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")'
-        `_hoisted_${context.hoists.length}`, // 静态节点的变量名
+        `_hoisted_${context.hoists.length}`, // 静态节点的变量名，按添加顺序命名
         false,
         exp.loc,
         ConstantTypes.CAN_HOIST
       )
-      identifier.hoisted = exp // 静态节点
+      identifier.hoisted = exp
       return identifier
     },
     cache(exp, isVNode = false) {
@@ -318,7 +318,7 @@ export function transform(root: RootNode, options: TransformOptions) {
   // finalize meta information
   root.helpers = [...context.helpers] // 此root的helper 列表
   root.components = [...context.components] // 保存用户自定义的组件标签名，transformElement
-  root.directives = [...context.directives] // 用户自定义的指令名，transformElement
+  root.directives = [...context.directives] // 用户自定义的指令名，transformElement - buildDirectiveArgs
   root.imports = [...context.imports]
   root.hoists = context.hoists // 需要静态提升的 codegenNode列表
   root.temps = context.temps // 临时变量个数
