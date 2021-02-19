@@ -96,16 +96,14 @@ export function baseCompile(
     onError(createCompilerError(ErrorCodes.X_SCOPE_ID_NOT_SUPPORTED))
   }
 
-  // 解析模板，生成语法树ast：解析模版元素、元素标签、元素指令、元素内容、子元素内容等
+  // 解析 vue模版源码 => vue模版源码ast
   const ast = isString(template) ? baseParse(template, options) : template
 
   const [nodeTransforms, directiveTransforms] = getBaseTransformPreset(
     prefixIdentifiers
   )
 
-  // 转换vue模版ast树 为 js源码对应语法树
-  // 进一步转换处理ast语法树中的节点，如：解析节点上的指令、属性、解析组件、解析子元素文本、解析元素等等并获取对应的codegenNode、静态标记创建静态节点 为之后进行提升静态节点vnode的创建。
-  // 转换ast树为codegen树，即ast树的节点下多出一个codegenNode属性，为之后生成渲染函数源码
+  // 转换 vue模版源码ast => js渲染源码ast
   transform(
     ast,
     extend({}, options, {
@@ -123,81 +121,7 @@ export function baseCompile(
     })
   )
 
-  // 生成js ast语法树的源码
-  // 解析codegen树，得到ast的渲染函数源码：
-  // 如，template:
-  //
-  //  <div id="app">
-  //     <div class="btn-click" @click="handleClick">
-  //       <div v-if="isA">show {{ A }}</div>
-  //       <!-- 静态注释 1 -->
-  //       <div v-else-if="isB">show {{ B }}</div>
-  //       <div v-else>default C</div>
-  //       <i class="loading"></i>
-  //       点击
-  //       {{ count }}
-  //       abc
-  //       <div :class="hello">
-  //         <div>123 {{ count }}</div>
-  //         <div>
-  //           <span>哈哈哈</span>
-  //           abc
-  //         </div>
-  //         <!-- 静态注释 2 -->
-  //       </div>
-  //       <div class="red" id="test">{{ count }}</div>
-  //       <my-component :prop-a="A" />
-  //     </div>
-  //   </div>
-  //
-  // 对应的 渲染源码code 为：
-  //
-  // "const _Vue = Vue
-  // const { createVNode: _createVNode, createCommentVNode: _createCommentVNode, createTextVNode: _createTextVNode } = _Vue
-  //
-  // const _hoisted_1 = { key: 0 }
-  // const _hoisted_2 = { key: 2 }
-  // const _hoisted_3 = /*#__PURE__*/_createVNode("i", { class: "loading" }, null, -1 /* HOISTED */)
-  // const _hoisted_4 = /*#__PURE__*/_createVNode("div", null, [
-  //   /*#__PURE__*/_createVNode("span", null, "哈哈哈"),
-  //   /*#__PURE__*/_createTextVNode(" abc ")
-  // ], -1 /* HOISTED */)
-  // const _hoisted_5 = {
-  //   class: "red",
-  //   id: "test"
-  // }
-  //
-  // return function render(_ctx, _cache) {
-  //   with (_ctx) {
-  //     const { toDisplayString: _toDisplayString, createVNode: _createVNode, openBlock: _openBlock, createBlock: _createBlock, createCommentVNode: _createCommentVNode, Fragment: _Fragment, createTextVNode: _createTextVNode, resolveComponent: _resolveComponent } = _Vue
-  //
-  //     const _component_my_component = _resolveComponent("my-component")
-  //
-  //     return (_openBlock(), _createBlock("div", {
-  //       class: "btn-click",
-  //       onClick: handleClick
-  //     }, [
-  //       isA
-  //         ? (_openBlock(), _createBlock("div", _hoisted_1, "show " + _toDisplayString(A), 1 /* TEXT */))
-  //         : isB
-  //           ? (_openBlock(), _createBlock(_Fragment, { key: 1 }, [
-  //               _createCommentVNode(" 静态注释 1 "),
-  //               _createVNode("div", null, "show " + _toDisplayString(B), 1 /* TEXT */)
-  //             ], 64 /* STABLE_FRAGMENT */))
-  //           : (_openBlock(), _createBlock("div", _hoisted_2, "default C")),
-  //       _hoisted_3,
-  //       _createTextVNode(" 点击 " + _toDisplayString(count) + " abc ", 1 /* TEXT */),
-  //       _createVNode("div", { class: hello }, [
-  //         _createVNode("div", null, "123 " + _toDisplayString(count), 1 /* TEXT */),
-  //         _hoisted_4,
-  //         _createCommentVNode(" 静态注释 2 ")
-  //       ], 2 /* CLASS */),
-  //       _createVNode("div", _hoisted_5, _toDisplayString(count), 1 /* TEXT */),
-  //       _createVNode(_component_my_component, { "prop-a": A }, null, 8 /* PROPS */, ["prop-a"])
-  //     ], 8 /* PROPS */, ["onClick"]))
-  //   }
-  // }"
-  // 其中静态提升：在遍历ast生成该静态节点的渲染代码片段时，可以直接用这个变量替换对应位置的渲染片段，同时在之后生成渲染函数时，可以马上执行这个静态节点，得到对应vnode，在最终执行渲染函数时，不必花时间去执行生成这个vnode
+  // js渲染源码ast =>  js渲染源码
   return generate(
     ast,
     extend({}, options, {

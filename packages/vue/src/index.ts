@@ -46,6 +46,7 @@ function compileToFunction(
     template = el ? el.innerHTML : ``
   }
 
+  // 编译阶段：解析 vue模版源码template 得到对应的 js渲染源码code
   const { code } = compile(
     template,
     extend(
@@ -74,6 +75,8 @@ function compileToFunction(
       options
     )
   )
+
+  // 执行渲染源码 生成 渲染函数
 
   // The wildcard import results in a huge object with every export
   // with keys that cannot be mangled, and can be quite heavy size-wise.
