@@ -839,8 +839,8 @@ function mergeAsArray(existing: Property, incoming: Property) {
   }
 }
 
-// 进一步解析 buildProps() 中的 runtimeDirectives：v-show、v-model、用户自定义指令
-// 设置 指令参数
+// 解析构建指令节点，v-show、v-model、用户自定义指令
+// 解析其中： 指令名、指令值、指令参数、参数修饰符
 function buildDirectiveArgs(
   dir: DirectiveNode, // 解析后的指令节点：key/value
   context: TransformContext
@@ -849,6 +849,8 @@ function buildDirectiveArgs(
 
   // 内置的运行时指令
   const runtime = directiveImportMap.get(dir)
+
+  // 指令名
 
   if (runtime) {
     // 在 buildProps 中设置directiveImportMap：v-show、v-model 相关指令的运行函数
@@ -870,20 +872,30 @@ function buildDirectiveArgs(
       dirArgs.push(toValidAssetId(dir.name, `directive`)) // [^A-Za-z0-9_]， 如自定义： v-click-out，name='click-out' 转换为 '_directive_click_out'
     }
   }
+
   const { loc } = dir
+
+  // 指令值 - 指令处理事件
+
   if (dir.exp) dirArgs.push(dir.exp) // 指令值节点表达式
+
+  // 指令参数
+
   if (dir.arg) {
     if (!dir.exp) {
       dirArgs.push(`void 0`) // 没有值，如用户定义的指令
     }
     dirArgs.push(dir.arg) // 指令参数节点
   }
+
+  // 指令修饰符
+
   if (Object.keys(dir.modifiers).length) {
     // 修饰符节点
     if (!dir.arg) {
-      // 无参数节点
+      // 无指令参数节点
       if (!dir.exp) {
-        // 无属性值：'<span v-click-me></span>'
+        // 无指令值：'<span v-click-me></span>'
         dirArgs.push(`void 0`)
       }
       // 如 '<span v-click-me="true"></span>'
@@ -892,6 +904,7 @@ function buildDirectiveArgs(
     // 创建指令对应的修饰符列表节点
     const trueExpression = createSimpleExpression(`true`, false, loc)
     dirArgs.push(
+      // 创建一个 对象格式 的来保存修饰符列表值
       createObjectExpression(
         dir.modifiers.map(modifier =>
           createObjectProperty(modifier, trueExpression)
@@ -900,7 +913,8 @@ function buildDirectiveArgs(
       )
     )
   }
-  // 返回指令参数节点
+
+  // 返回自定义指令节点
   return createArrayExpression(dirArgs, dir.loc)
 }
 
