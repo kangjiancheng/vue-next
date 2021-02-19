@@ -10,22 +10,9 @@
 
 <div id="app">
 
-  <button class="name" v-resize="handleResizeEditor">自定义指令</button>
+  <h1>自定义指令</h1>
 
-  <button class="name-arg" v-resize:editor="handleResizeEditor">自定义指令：参数，无修饰符</button>
-
-  <button class="name-modifiers" v-resize.lazy="handleResizeEditor">自定义指令：无参数，修饰符</button>
-
-  <button class="name-arg-modifiers" v-resize:editor.lazy="handleResizeEditor">自定义指令： 指令参数 - 指令修饰符</button>
-
-
-  <button class="empty-handler" v-resize>自定义指令，无处理事件</button>
-
-  <button class="empty-handler" v-resize:editor>自定义指令： 参数，无处理事件</button>
-
-  <button class="empty-handler" v-resize.lazy>自定义指令： 修饰符，无处理事件</button>
-
-  <button class="empty-handler" v-resize:editor.lazy>自定义指令： 无处理事件</button>
+  <button class="my-directives" v-resize:editor.lazy="handleResizeEditor">调整编辑框</button>
 
 </div>
 
