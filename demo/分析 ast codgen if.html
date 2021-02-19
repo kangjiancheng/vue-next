@@ -4,16 +4,26 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Vue 3 调试 - 分析 ast codegen</title>
+  <title>Vue 3 调试 - 分析 ast codegen if</title>
 </head>
 <body>
 
 <div id="app">
-  纯文本001
-  <span>纯文本</span>
-  <span class="text" :data-text="baseText">纯文本</span>
-  <span class="compound-text">混合文本 {{ isText }}</span>
-  <span class="red" :class="compoundNode">混合文本 {{ isText }} <i>文本相邻元素节点</i></span>
+  <div class="codegen-if">
+    <div v-if="isA" :class="A">isA</div>
+
+    <div v-if="isB">isB</div>
+    <div v-else-if="isBB">isBB</div>
+
+    <div v-if="isC">isC</div>
+    <div v-else>isCC</div>
+
+    <div :class="ifBranch">
+      <div v-if="isD" key="my-d" class="d">isD</div>
+      <div v-else-if="isDD" key="my-dd">isDD</div>
+      <div v-else :key="'my-ddd'" class="ddd">isDDD</div>
+    </div>
+  </div>
 </div>
 
   <!-- 开发模式 -->

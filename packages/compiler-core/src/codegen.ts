@@ -633,7 +633,8 @@ function genModulePreamble(
   }
 }
 
-// 生成指自定义组件与自定义指令的code
+// 生成 - 自定义组件与自定义指令 的渲染代码 ast code
+// 如: 'const _component_hello__world = _resolveComponent("hello-world")'
 function genAssets(
   assets: string[], // 自定义组件标签名
   type: 'component' | 'directive',
@@ -711,6 +712,7 @@ function genImports(importsOptions: ImportItem[], context: CodegenContext) {
   })
 }
 
+// 判断是否是 js ast 文本节点
 function isText(n: string | CodegenNode) {
   return (
     isString(n) ||
@@ -721,7 +723,8 @@ function isText(n: string | CodegenNode) {
   )
 }
 
-// 通过数组包裹起来 '[red]', 如 合并的属性，如多个子节点列表
+// 生成 - 数组格式 的渲染代码js ast code
+// 如 生成元素节点 多个的class属性列表code，'["red", "blue"]'
 function genNodeListAsArray(
   nodes: (string | CodegenNode | TemplateChildNode[])[],
   context: CodegenContext
@@ -784,8 +787,8 @@ function genNodeList(
   }
 }
 
-// 生成ast节点对应的渲染代码片段（由这些源码片段构成渲染函数）
-// node：ast节点的codegenNode
+// 遍历 渲染源码的js ast节点，生成相应ast节点对应的 js 渲染源码
+// node：ast节点的 codegenNode
 function genNode(node: CodegenNode | symbol | string, context: CodegenContext) {
   if (isString(node)) {
     context.push(node)
@@ -905,7 +908,7 @@ function genNode(node: CodegenNode | symbol | string, context: CodegenContext) {
   }
 }
 
-// 生成文本节点的渲染代码片段
+// 生成 文本节点 的渲染代码片段
 function genText(
   node: TextNode | SimpleExpressionNode,
   context: CodegenContext
@@ -913,21 +916,7 @@ function genText(
   context.push(JSON.stringify(node.content), node)
 }
 
-// 生成表达式：字符串或不处理
-// 如 <div style="color: blue;" :class="red" data-test="123">hello {{ someone }} !</div>
-// 当解析标签元素的style属性值内容时："{"color":"blue"}"，则isStatic 为false, code+= 'style: {"color":"blue"}'
-//
-// 当解析完属性data-test时，code +=
-// "const _Vue = Vue
-//
-// return function render(_ctx, _cache) {
-//   with (_ctx) {
-//     const { toDisplayString: _toDisplayString, createVNode: _createVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
-//
-//     return (_openBlock(), _createBlock("div", {
-//       style: {"color":"blue"},
-//       class: red,
-//       "data-test": "123""
+// 生成 字符串或某个变量 的渲染片段表达式
 function genExpression(node: SimpleExpressionNode, context: CodegenContext) {
   const { content, isStatic } = node
   // 如<div style="color: blue;" :class="red" data-test="123">hello {{ someone }} !</div>

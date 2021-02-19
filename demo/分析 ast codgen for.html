@@ -4,16 +4,29 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Vue 3 调试 - 分析 ast codegen</title>
+  <title>Vue 3 调试 - 分析 ast codegen for</title>
 </head>
 <body>
 
 <div id="app">
-  纯文本001
-  <span>纯文本</span>
-  <span class="text" :data-text="baseText">纯文本</span>
-  <span class="compound-text">混合文本 {{ isText }}</span>
-  <span class="red" :class="compoundNode">混合文本 {{ isText }} <i>文本相邻元素节点</i></span>
+
+  <div class="for-array" v-for="(value, index) in arrList" :key="index">
+    {{ value }} - {{ index }}
+  </div>
+
+  <div class="for-ojbect-value" v-for="value in item">
+    {{ value }}
+  </div>
+
+  <div class="for-object-key" v-for="(value, key) in item" :key="key">
+    {{ key }} - {{ value }}
+  </div>
+
+  <div class="for-box">
+    <div class="for-object-index" v-for="(value, key, index) in item" :key="index">
+      {{ key }} - {{ value }} - {{ index }}
+    </div>
+  </div>
 </div>
 
   <!-- 开发模式 -->
@@ -64,7 +77,10 @@
           blueClass,
           count,
           handleClick,
-          loadStatus: 'loading',
+
+          arrList: [{id: 10, name: '小明'}, {id: 11, name: '小王'}, {id: 12, name: '小红'}, ],
+
+          item: { id: 1, name: '小李', age: '20', sex: 'man' },
         }
       }
     }

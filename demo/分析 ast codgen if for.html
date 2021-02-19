@@ -4,16 +4,28 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Vue 3 调试 - 分析 ast codegen</title>
+  <title>Vue 3 调试 - 分析 ast codegen if for</title>
 </head>
 <body>
 
 <div id="app">
-  纯文本001
-  <span>纯文本</span>
-  <span class="text" :data-text="baseText">纯文本</span>
-  <span class="compound-text">混合文本 {{ isText }}</span>
-  <span class="red" :class="compoundNode">混合文本 {{ isText }} <i>文本相邻元素节点</i></span>
+
+  <div class="for-array" v-if="showFor" v-for="(value, index) in arrList":key="index">
+    {{ value }} - {{ index }}
+  </div>
+
+  <!-- 由于源码先 解析if 指令，因此不能访问 for指令里的变量，如以下的 value：-->
+  <div class="for-array" v-for="(value, index) in arrList" v-if="value.id" :key="index">
+    {{ value }} - {{ index }}
+  </div>
+
+  <!-- 推荐：if 与 for 结合，如下 -->
+  <template v-for="(value, index) in arrList">
+    <div class="for-array" v-if="value.id === 11" :key="index">
+      {{ value }} - {{ index }}
+    </div>
+  </template>
+
 </div>
 
   <!-- 开发模式 -->
@@ -64,7 +76,10 @@
           blueClass,
           count,
           handleClick,
-          loadStatus: 'loading',
+
+          arrList: [{id: 10, name: '小明'}, {id: 11, name: '小王'}, {id: 12, name: '小红'}, ],
+
+          item: { id: 1, name: '小李', age: '20', sex: 'man' },
         }
       }
     }
