@@ -122,7 +122,7 @@ function createCodegenContext(
     helper(key) {
       return `_${helperNameMap[key]}`
     },
-    // 添加源码
+    // 增加 渲染源码片段
     push(code, node) {
       context.code += code
       if (!__BROWSER__ && context.map) {
@@ -249,12 +249,14 @@ export function generate(
     ssr
   } = context
 
-  const hasHelpers = ast.helpers.length > 0 // 是否需要内置函数
+  // 渲染函数中需要使用的 Vue 辅助函数列表，如: createVNode、createTextVNode 等
+  const hasHelpers = ast.helpers.length > 0
+  // 使用关键字 with，调整当前作用域的 this 指向，变量默认指向 with的指定
   const useWithBlock = !prefixIdentifiers && mode !== 'module' // true
   const genScopeId = !__BROWSER__ && scopeId != null && mode === 'module'
   const isSetupInlined = !__BROWSER__ && !!options.inline
 
-  // 生成 前置环境变量、静态节点提升
+  // 生成 前置变量、静态节点
 
   // preambles
   // in setup() inline mode, the preamble is generated in a sub context
@@ -278,6 +280,7 @@ export function generate(
   }
 
   // 开始生成渲染函数代码
+  // 渲染函数的 函数名与参数 code
 
   // enter render function
   const functionName = ssr ? `ssrRender` : `render` // render
@@ -310,6 +313,8 @@ export function generate(
     push(`function ${functionName}(${signature}) {`)
   }
   indent() // 换行并缩进
+
+  // 渲染函数体 内部变量 的 code
 
   if (useWithBlock) {
     // 非module环境下，默认function，则设置当前作用域为: _ctx
@@ -379,10 +384,9 @@ export function generate(
     newline() // 添加新行并缩进
   }
 
-  /**
-   * 遍历解析渲染源码ast树，生成对应的VNode节点源码 (执行渲染函数 会得到对应的VNode节点)
-   * 注意：之前前面的工作是为了引入相关常量，渲染函数可以直接调用这些常量
-   */
+  // 渲染函数 返回值 code (即vnode)
+
+  // 遍历 渲染函数源码的 ast树，生成渲染函数的vnode code
   // generate the VNode tree expression
   if (!ssr) {
     push(`return `)
@@ -723,7 +727,7 @@ function isText(n: string | CodegenNode) {
   )
 }
 
-// 生成 - 数组格式 的渲染代码js ast code
+// 生成 数组格式 的渲染代码js ast code
 // 如 生成元素节点 多个的class属性列表code，'["red", "blue"]'
 function genNodeListAsArray(
   nodes: (string | CodegenNode | TemplateChildNode[])[],
@@ -739,8 +743,9 @@ function genNodeListAsArray(
   context.push(`]`)
 }
 
-// 生成 标签节点、属性节点、子节点、patchFlag、dynamicProps节点的 渲染代码片段
-// 如 template: <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
+// 生成 多个节点 的渲染代码片段
+// 如在 genVNodeCall中生成一个元素节点：标签节点、属性节点、子节点、patchFlag、dynamicProps节点 的渲染代码片段
+// template: <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
 // 则 nodes：
 //    tag: '"div"',                                                     // code += '"div"'
 //    props: style、class、onClick                                       // code += '{\n   style: {"color": "blue"},\n   class: red,\n   onClick: "handleClick"}'
@@ -925,7 +930,7 @@ function genExpression(node: SimpleExpressionNode, context: CodegenContext) {
   context.push(isStatic ? JSON.stringify(content) : content, node)
 }
 
-// 生成文本插值的渲染代码
+// 生成 文本插值 的渲染源码代码
 // 如：template = 'hello {{ who }} !'，生成其中 '{{ who }}' 节点的渲染代码片段
 // 则：context.code += '_toDisplayString(who)'
 function genInterpolation(node: InterpolationNode, context: CodegenContext) {
@@ -964,7 +969,8 @@ function genCompoundExpression(
   }
 }
 
-// 生成节点属性列表的 属性名节点 的渲染片段：混合静态属性/静态指令节点、动态v-on参数节点、动态v-bind参数节点
+// 生成 对象属性名key 的渲染源码片段
+// 如：混合静态属性/静态指令节点、动态v-on参数节点、动态v-bind参数节点
 // 如果标签元素只有静态属性节点，则会被静态标记，不走该流程
 function genExpressionAsPropertyKey(
   node: ExpressionNode,
@@ -1006,7 +1012,8 @@ function genComment(node: CommentNode, context: CodegenContext) {
   }
 }
 
-// 生成标签元素节点的code，如 标签元素、if节点、for节点
+// 生成 标签元素节点 的渲染源码片段 code
+// 如 标签元素、if节点、for节点
 // 如 template: <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
 // 则 code += '(_openBlock(), _createBlock("div", {\n   style: "color: blue;",\n   class: "red",\n   onClick: "handleClick"}, "hello " + _toDisplayString(someone) + " !, 11 /* TEXT, CLASS, PROPS */, ["onClick"]))'
 // 最终：code =
@@ -1099,9 +1106,7 @@ function genNullableArgs(args: any[]): CallExpression['arguments'] {
   return args.slice(0, i + 1).map(arg => arg || `null`)
 }
 
-// JavaScript
-// 静态dom标签节点
-// 如生成静态提升节点对应的code代码，template: <div><i :class="red">1</i>abc</div>，其中的静态文本节点 'abc'，得到 '/*#__PURE__*/_createTextVNode(["abc"])'
+// 生成 函数执行 的渲染源码片段code
 function genCallExpression(node: CallExpression, context: CodegenContext) {
   const { push, helper, pure } = context
   // 如提升静态文本节点，template: <div><i :class="red">1</i>abc</div>
@@ -1115,19 +1120,14 @@ function genCallExpression(node: CallExpression, context: CodegenContext) {
   push(callee + `(`, node)
   // 转换参数个数，如静态节点 'abc'
   // context.code += 'abc'
-  genNodeList(node.arguments, context)
+  genNodeList(node.arguments, context) // 待执行函数 的参数列表
   push(`)`)
 
   // 最终
   // context.code += '/*#__PURE__*/_createTextVNode("abc")'
 }
 
-// 生成节点的属性props节点列表的渲染片段， 对象表达式格式
-// 该情况当node props类型 不包含v-on/v-bind无参数属性时才为ObjectExpression
-// 注意：如果都是静态属性，则会被静态标记，不会走该流程
-// 如 template: <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
-// 则 props 包含: style、class、onClick，解析过程在transformElements中的buildProps
-// 结果： '{\n   style: "color: blue;",\n   class: "red",\n   onClick: "handleClick"}'
+// 生成 对象 的渲染源码片段
 function genObjectExpression(node: ObjectExpression, context: CodegenContext) {
   const { push, indent, deindent, newline } = context
 
@@ -1147,9 +1147,11 @@ function genObjectExpression(node: ObjectExpression, context: CodegenContext) {
   push(multilines ? `{` : `{ `)
   multilines && indent() // 换行并缩进
 
+  // 生成 对象属性列表 的渲染源码
   for (let i = 0; i < properties.length; i++) {
     const { key, value } = properties[i]
-    // key 生成属性值 节点渲染片段
+    // 对象属性的 key
+
     // 1、动态v-on, 则 code += '_toHandlerKey(someEvent)'
     // 2、静态属性/指令 isStatic true, 则 code += 'class' 或 'style' 或 ...
     // 3、动态指令 isStatic false, 则 code += '['attrObjs || ""']'
@@ -1157,7 +1159,8 @@ function genObjectExpression(node: ObjectExpression, context: CodegenContext) {
     genExpressionAsPropertyKey(key, context)
     push(`: `)
 
-    // value
+    // 对象属性的 value
+
     // 1、静态属性节点：SIMPLE_EXPRESSION，如 <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
     // 静态style属性值节点内容 code += '{"color": "blue"}' // 注意经过transformStyle处理
     // 静态指令属性class属性值节点内容 code += 'red'  // 这个是动态的 isStatic false
@@ -1176,62 +1179,24 @@ function genObjectExpression(node: ObjectExpression, context: CodegenContext) {
   push(multilines ? `}` : ` }`)
 }
 
-// 处理合并属性节点 <div class="blue" :class="red">hello</div>
-// 去重合并的prop节点类型为value.type = JS_ARRAY_EXPRESSION， value.elements = [mergeProp1.value, mergeProp2.value, ...]
+// 生成 数组 的渲染源码片段code
+// 如：处理合并属性节点 <div class="blue" :class="red">hello</div>
+// 其中，去重合并的prop节点类型为value.type = JS_ARRAY_EXPRESSION， value.elements = [mergeProp1.value, mergeProp2.value, ...]
 // 结果为： code += '[blue, red]'
 function genArrayExpression(node: ArrayExpression, context: CodegenContext) {
   genNodeListAsArray(node.elements, context) // 数组包裹起来
 }
 
-// 生成v-slot的渲染代码，如 template:
-// <slot-demo>
-//   <template  v-slot:default>哈哈哈 default</template>
-//   <template  v-slot:header v-if="current === 'header'">哈哈哈 {{ isHeader }}</template>
-//   <template  v-slot:body v-for="item in items">哈哈哈 body</template>
-//   <template  v-slot:footer>哈哈哈 {{ isFooter }}</template>
-// </slot-demo>
-//
-// code:
-// "const _Vue = Vue
-// const { createVNode: _createVNode, createTextVNode: _createTextVNode } = _Vue
-//
-// const _hoisted_1 = /*#__PURE__*/_createTextVNode("哈哈哈 default")
-// const _hoisted_2 = /*#__PURE__*/_createTextVNode("哈哈哈 body")
-//
-// return function render(_ctx, _cache) {
-//   with (_ctx) {
-//     const { createTextVNode: _createTextVNode, toDisplayString: _toDisplayString, resolveComponent: _resolveComponent, withCtx: _withCtx, renderList: _renderList, createSlots: _createSlots, createVNode: _createVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
-//
-//     const _component_slot_demo = _resolveComponent("slot-demo")
-//
-//     return (_openBlock(), _createBlock(_component_slot_demo, null, _createSlots({
-//       default: _withCtx(() => [
-//         _hoisted_1
-//       ]),
-//       footer: _withCtx(() => [
-//         _createTextVNode("哈哈哈 " + _toDisplayString(isFooter), 1 /* TEXT */)
-//       ]),
-//       _: 2 /* DYNAMIC */
-//     }, [
-//       (current === 'header')
-//         ? {
-//             name: "header",
-//             fn: _withCtx(() => [
-//               _createTextVNode("哈哈哈 " + _toDisplayString(isHeader), 1 /* TEXT */)
-//             ])
-//           }
-//         : undefined,
-//       _renderList(items, (item) => {
+// 生成 箭头函数 的渲染源码片段code：
+// 如 template slot v-for 中的箭头函数代码：
+//       _renderList(items, (value, index) => {
 //         return {
 //           name: "body",
 //           fn: _withCtx(() => [
-//             _hoisted_2
+//             ...
 //           ])
 //         }
 //       })
-//     ]), 1024 /* DYNAMIC_SLOTS */))
-//   }
-// }"
 function genFunctionExpression(
   node: FunctionExpression,
   context: CodegenContext
@@ -1245,8 +1210,12 @@ function genFunctionExpression(
   if (genScopeId) {
     push(`_withId(`)
   } else if (isSlot) {
+    // _withCtx
     push(`_${helperNameMap[WITH_CTX]}(`)
   }
+
+  // 箭头函数
+
   push(`(`, node)
   if (isArray(params)) {
     genNodeList(params, context)
@@ -1254,6 +1223,9 @@ function genFunctionExpression(
     genNode(params, context)
   }
   push(`) => `)
+
+  // 函数体
+
   if (newline || body) {
     push(`{`)
     indent()
@@ -1279,12 +1251,17 @@ function genFunctionExpression(
   }
 }
 
+// 生成 条件表达式 的渲染源码片段
+// 如 组件的 slot v-if： boolean条件 ? true... : false...
 function genConditionalExpression(
   node: ConditionalExpression,
   context: CodegenContext
 ) {
   const { test, consequent, alternate, newline: needNewline } = node
   const { push, indent, deindent, newline } = context
+
+  // 条件表达式 判断部分
+
   if (test.type === NodeTypes.SIMPLE_EXPRESSION) {
     const needsParens = !isSimpleIdentifier(test.content)
     needsParens && push(`(`)
@@ -1298,12 +1275,21 @@ function genConditionalExpression(
   needNewline && indent()
   context.indentLevel++
   needNewline || push(` `)
+
   push(`? `)
+
+  // 条件表达式 为 true 的code
+
   genNode(consequent, context)
   context.indentLevel--
   needNewline && newline()
   needNewline || push(` `)
+
   push(`: `)
+
+  // 条件表达式 为 false 的code
+
+  // 多重条件表达式，if... else if... else if... else...
   const isNested = alternate.type === NodeTypes.JS_CONDITIONAL_EXPRESSION
   if (!isNested) {
     context.indentLevel++
@@ -1315,8 +1301,27 @@ function genConditionalExpression(
   needNewline && deindent(true /* without newline */)
 }
 
+// 生成 缓存表达式 的渲染源码片段
+// 如 template: '<span v-once>{{ msg }}</span>'
+// 则 渲染 code:
+// "const _Vue = Vue
+//
+// return function render(_ctx, _cache) {
+//   with (_ctx) {
+//     const { setBlockTracking: _setBlockTracking, toDisplayString: _toDisplayString, createVNode: _createVNode } = _Vue
+//
+//     return _cache[1] || (
+//       _setBlockTracking(-1),
+//       _cache[1] = _createVNode("span", null, _toDisplayString(msg), 1 /* TEXT */),
+//       _setBlockTracking(1),
+//       _cache[1]
+//     )
+//   }
+// }"
 function genCacheExpression(node: CacheExpression, context: CodegenContext) {
   const { push, helper, indent, deindent, newline } = context
+
+  // 缓存 变量名
   push(`_cache[${node.index}] || (`)
   if (node.isVNode) {
     indent()
@@ -1324,7 +1329,10 @@ function genCacheExpression(node: CacheExpression, context: CodegenContext) {
     newline()
   }
   push(`_cache[${node.index}] = `)
+
+  // 缓存 渲染执行结果
   genNode(node.value, context)
+
   if (node.isVNode) {
     push(`,`)
     newline()
@@ -1336,6 +1344,7 @@ function genCacheExpression(node: CacheExpression, context: CodegenContext) {
   push(`)`)
 }
 
+/*** SSR ***/
 function genTemplateLiteral(node: TemplateLiteral, context: CodegenContext) {
   const { push, indent, deindent } = context
   push('`')
@@ -1356,6 +1365,7 @@ function genTemplateLiteral(node: TemplateLiteral, context: CodegenContext) {
   push('`')
 }
 
+/*** SSR ***/
 function genIfStatement(node: IfStatement, context: CodegenContext) {
   const { push, indent, deindent } = context
   const { test, consequent, alternate } = node
@@ -1380,6 +1390,7 @@ function genIfStatement(node: IfStatement, context: CodegenContext) {
   }
 }
 
+/*** SSR ***/
 function genAssignmentExpression(
   node: AssignmentExpression,
   context: CodegenContext
@@ -1389,6 +1400,7 @@ function genAssignmentExpression(
   genNode(node.right, context)
 }
 
+/*** SSR ***/
 function genSequenceExpression(
   node: SequenceExpression,
   context: CodegenContext
@@ -1398,6 +1410,7 @@ function genSequenceExpression(
   context.push(`)`)
 }
 
+/*** SSR ***/
 function genReturnStatement(
   { returns }: ReturnStatement,
   context: CodegenContext
