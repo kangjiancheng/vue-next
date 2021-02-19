@@ -189,47 +189,21 @@ function createCodegenContext(
   return context
 }
 
-// 如 标签节点template，且只有文本节点: <div style="color: blue;" class="green" :class="red" @click="handleClick">hello {{ someone }} !</div>
-// code =
-// 'const _Vue = Vue
-//
-// return function render(_ctx, _cache) {
-//   with (_ctx) {
-//     const { toDisplayString: _toDisplayString, createVNode: _createVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
-//
-//     return (_openBlock(), _createBlock("div", {
-//       style: {"color":"blue"},
-//       class: red,                    // 注意：合并属性，如 class="blue" :class="red" 转换为 ["blue", red]
-//       onClick: handleClick
-//     }, "hello " + _toDisplayString(someone) + " !", 11 /* TEXT, CLASS, PROPS */, ["onClick"]))  // 如果只有文本节点，即都是静态的，则不需要提升
-//   }
-// }'
-// 如果有自定义指令，则 'return _withDirectives((_openBlock(), _createBlock(...)), 自定义指令属性节点code... )'
-
-/****** 静态提升、多个子元素、合并属性 ***********/
-// 如 template: '<div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} ! <i>123</i></div>'
-// 则 code =
-// "const _Vue = Vue
-// const { createVNode: _createVNode, createTextVNode: _createTextVNode } = _Vue
-//
-// const _hoisted_1 = /*#__PURE__*/_createVNode("i", null, "123", -1 /* HOISTED */)
-//
-// return function render(_ctx, _cache) {
-//   with (_ctx) {
-//     const { toDisplayString: _toDisplayString, createVNode: _createVNode, createTextVNode: _createTextVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
-//
-//     return (_openBlock(), _createBlock("div", {
-//       style: {"color":"blue"},
-//       class: ["green", red],
-//       onClick: handleClick
-//     }, [
-//       _createTextVNode("hello " + _toDisplayString(someone) + " ! ", 1 /* TEXT */),
-//       _hoisted_1
-//     ], 10 /* CLASS, PROPS */, ["onClick"]))
-//   }
-// }"
+/**
+ * 解析vue模版ast对应的 js渲染源码ast，生成 渲染源码的code
+ *
+ * 生成顺序如下：
+ *    1、前置函数变量，如 code: '_Vue = Vue'
+ *    2、静态节点、静态属性、静态文本
+ *    3、渲染函数render
+ *        1、函数名、函数参数、with 更改 this
+ *        2、函数内部的 前置函数变量：_Vue 内部辅助函数引入、指令、组件
+ *        3、函数的返回值，依次遍历整个 渲染源码的ast，生成 VNode code
+ *            1、ast 节点类型：VNODE_CALL、JS_CALL_EXPRESSION、JS_PROPERTY、IF_BRANCH 等
+ *
+ */
 export function generate(
-  ast: RootNode,
+  ast: RootNode, // js渲染源码ast
   options: CodegenOptions & {
     onContextCreated?: (context: CodegenContext) => void
   } = {}
@@ -1013,24 +987,7 @@ function genComment(node: CommentNode, context: CodegenContext) {
 }
 
 // 生成 标签元素节点 的渲染源码片段 code
-// 如 标签元素、if节点、for节点
-// 如 template: <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
-// 则 code += '(_openBlock(), _createBlock("div", {\n   style: "color: blue;",\n   class: "red",\n   onClick: "handleClick"}, "hello " + _toDisplayString(someone) + " !, 11 /* TEXT, CLASS, PROPS */, ["onClick"]))'
-// 最终：code =
-// 'const _Vue = Vue
-//
-// return function render(_ctx, _cache) {
-//   with (_ctx) {
-//     const { toDisplayString: _toDisplayString, createVNode: _createVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
-//
-//     return (_openBlock(), _createBlock("div", {
-//       style: {"color":"blue"},
-//       class: red,
-//       onClick: handleClick
-//     }, "hello " + _toDisplayString(someone) + " !", 11 /* TEXT, CLASS, PROPS */, ["onClick"]))
-//   }
-// }'
-// 如果 存在自定义指令则 'return _withDirectives((_openBlock(), _createBlock(...)), 自定义指令code... )'
+// 如 标签元素、if节点、for节点等 其中的标签、子元素列表、属性列表、事件列表、自定义指令列表
 function genVNodeCall(node: VNodeCall, context: CodegenContext) {
   const { push, helper, pure } = context
   const {
