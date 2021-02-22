@@ -243,14 +243,15 @@ export function generate(
     genModulePreamble(ast, preambleContext, genScopeId, isSetupInlined)
   } else {
     // 针对存在静态提升节点，如：<div><i :class="red">1</i>abc</div>
-    // 解析其中静态提升文本节点abc，结果为：context.code +=
+    // 解析其中静态提升文本节点abc
+    genFunctionPreamble(ast, preambleContext)
+    // 结果为：context.code +=
     // 'const _Vue = Vue'
     // 'const { createTextVNode: _createTextVNode } = _Vue'
     // ''
     // 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")'
     // ''
     // 'return '
-    genFunctionPreamble(ast, preambleContext)
   }
 
   // 开始生成渲染函数代码
