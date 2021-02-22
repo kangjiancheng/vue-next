@@ -1255,7 +1255,7 @@ function isEnd(
   switch (mode) {
     case TextModes.DATA: // 元素默认为DATA
       if (startsWith(s, '</')) {
-        //TODO: probably bad performance
+        // TODO: probably bad performance
         for (let i = ancestors.length - 1; i >= 0; --i) {
           // 判断是否是某一个开始标签对应的结束标签
           // s='</span>', ancestors[0].tag = 'span'

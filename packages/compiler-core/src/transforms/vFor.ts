@@ -23,7 +23,8 @@ import {
   VNodeCall,
   ForRenderListExpression,
   BlockCodegenNode,
-  ForIteratorExpression
+  ForIteratorExpression,
+  ConstantTypes
 } from '../ast'
 import { createCompilerError, ErrorCodes } from '../errors'
 import {
@@ -95,15 +96,12 @@ export const transformFor = createStructuralDirectiveTransform(
       // 默认false
       const isStableFragment =
         forNode.source.type === NodeTypes.SIMPLE_EXPRESSION && // true
-        forNode.source.constType > 0 // 默认为ConstantTypes.NOT_CONSTANT 0 则 false , (注意 cfs环境)
-
+        forNode.source.constType > ConstantTypes.NOT_CONSTANT // 默认为 ConstantTypes.NOT_CONSTANT 0 则 false , (注意 cfs环境)
       const fragmentFlag = isStableFragment // 默认false
         ? PatchFlags.STABLE_FRAGMENT // 稳定片段
         : keyProp // 带key属性节点
           ? PatchFlags.KEYED_FRAGMENT // 带key的片段 <div v-for="(item, index) in items" :key="index"></div>
           : PatchFlags.UNKEYED_FRAGMENT //  <div v-for="(item, index) in items"></div>
-
-      // 生成for节点的codegenNode
       forNode.codegenNode = createVNodeCall(
         context,
         helper(FRAGMENT), // FRAGMENT = Symbol(__DEV__ ? `Fragment` : ``)

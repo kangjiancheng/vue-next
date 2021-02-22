@@ -89,7 +89,7 @@ export interface TransformContext
   components: Set<string>
   directives: Set<string>
   hoists: (JSChildNode | null)[]
-  imports: Set<ImportItem>
+  imports: ImportItem[]
   temps: number
   cached: number
   identifiers: { [name: string]: number | undefined }
@@ -163,7 +163,7 @@ export function createTransformContext(
     components: new Set(), // 保存用户自定义的组件标签名
     directives: new Set(),
     hoists: [],
-    imports: new Set(),
+    imports: [],
     constantCache: new Map(),
     temps: 0,
     cached: 0,
@@ -319,7 +319,7 @@ export function transform(root: RootNode, options: TransformOptions) {
   root.helpers = [...context.helpers] // 此root的helper 列表
   root.components = [...context.components] // 保存用户自定义的组件标签名，transformElement
   root.directives = [...context.directives] // 用户自定义的指令名，transformElement - buildDirectiveArgs
-  root.imports = [...context.imports]
+  root.imports = context.imports
   root.hoists = context.hoists // 需要静态提升的 codegenNode列表
   root.temps = context.temps // 临时变量个数
   root.cached = context.cached // 缓存编译结果，如 v-once

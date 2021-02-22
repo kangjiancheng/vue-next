@@ -11,9 +11,10 @@ if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
   initDev()
 }
 
+// 以vue模板源码为key，缓存对应的编译结果：渲染函数render
 const compileCache: Record<string, RenderFunction> = Object.create(null)
 
-// 当执行完setup函数后， 将template编译为 render函数
+// 当执行完setup函数后：编译vue模版源码template得到对应的js渲染函数
 function compileToFunction(
   template: string | HTMLElement,
   options?: CompilerOptions
