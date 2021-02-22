@@ -452,6 +452,7 @@ if (__DEV__ && !__TEST__) {
   }
 }
 
+// 编译vue模版的render函数：instance.withProxy
 export const RuntimeCompiledPublicInstanceProxyHandlers = extend(
   {},
   PublicInstanceProxyHandlers,
@@ -542,9 +543,11 @@ export function exposePropsOnRenderContext(
 export function exposeSetupStateOnRenderContext(
   instance: ComponentInternalInstance
 ) {
+  // ctx 渲染
   const { ctx, setupState } = instance
   Object.keys(toRaw(setupState)).forEach(key => {
     if (key[0] === '$' || key[0] === '_') {
+      // setup方法的返回值属性里不能以 $、_ 开头，这些是Vue的 内部属性预留前置代表
       warn(
         `setup() return property ${JSON.stringify(
           key
@@ -553,6 +556,7 @@ export function exposeSetupStateOnRenderContext(
       )
       return
     }
+
     Object.defineProperty(ctx, key, {
       enumerable: true,
       configurable: true,

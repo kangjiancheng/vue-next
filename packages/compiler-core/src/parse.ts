@@ -54,7 +54,7 @@ const decodeMap: Record<string, string> = {
 }
 
 export const defaultParserOptions: MergedParserOptions = {
-  delimiters: [`{{`, `}}`],
+  delimiters: [`{{`, `}}`], // 默认插值分割
   getNamespace: () => Namespaces.HTML,
   getTextMode: () => TextModes.DATA,
   isVoidTag: NO,

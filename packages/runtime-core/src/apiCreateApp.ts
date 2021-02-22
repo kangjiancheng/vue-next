@@ -231,10 +231,12 @@ export function createAppAPI<HostElement>(
       // 基本挂载方法
       // 在不同情景下实现各自的功能：客户端版的mount方法会在入口重新初始化
       mount(rootContainer: HostElement, isHydrate?: boolean): any {
-        // isMounted 避免对同一个Vue.createApp()结果, 多次调用mount()
-        // 此时，需要重新 createApp，然后再调用mount
+        // isMounted 避免对同一个Vue.createApp()结果, 即同一个app 多次调用mount()
+        // 当然 可以重新 createApp 一个app，然后再调用mount
         if (!isMounted) {
-          // 初始化 vnode 属性，其中vnode.type=rootComponent
+          // 初始化 vnode 属性
+          // vnode.type: rootComponent
+          // vnode.props: rootProps
           const vnode = createVNode(
             rootComponent as ConcreteComponent,
             rootProps
@@ -267,8 +269,7 @@ export function createAppAPI<HostElement>(
             devtoolsInitApp(app, version)
           }
 
-          // ts 类型断言：后缀 '!' 排除null或undefined
-          return vnode.component!.proxy
+          return vnode.component!.proxy // ts 类型断言：后缀 '!' 排除null或undefined
         } else if (__DEV__) {
           // 开发环境下，如开发库（非*.prod.js）vue.global.js 或构建构建的 env != production
           warn(

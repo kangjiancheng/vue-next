@@ -77,12 +77,14 @@ export const createApp = ((...args) => {
 
     // app._component 即 rootComponent，由createApp(rootComponent)传递，是根组件选项。
     const component = app._component
-    // 默认情况下，使用挂载目标的dom子内容
+
+    // 调整 vue模版内容template 为 挂载目标dom的内容
+    // 此外 vue模版内容template 可为：组件为函数、或 组件为对象有render方法、或 组件为对象有template属性
     if (!isFunction(component) && !component.render && !component.template) {
-      // 注意使用mount时，component 如果是一个函数或带有render属性或template属性，则挂载目标的dom内容模版将没有意义
-      component.template = container.innerHTML
+      // rootComponent 是一个对象，且不存在 render 方法、不存在 template 属性
+      component.template = container.innerHTML // 挂载目标dom节点的内容
     }
-    // 每次重新挂载内容时，都灰清空原先的dom内容
+    // 清空 挂载目标dom 已存在的内容
     container.innerHTML = ''
 
     // 执行 mount

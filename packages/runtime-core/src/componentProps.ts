@@ -130,7 +130,7 @@ export type NormalizedPropsOptions = [NormalizedProps, string[]] | []
 
 /**
  * 生成有效的props: 结合组件所定义的props属性 和 传进给组件的props
- * 生成有效 props和attrs 即接收传进来的props，并进行类型校验、默认值处理等
+ * 生成有效的props和attrs 即接收传进来的props，并进行类型校验、默认值处理等
  */
 export function initProps(
   instance: ComponentInternalInstance,

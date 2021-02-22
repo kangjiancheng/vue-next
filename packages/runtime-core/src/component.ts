@@ -401,9 +401,9 @@ const emptyAppContext = createAppContext()
 
 let uid = 0
 
-// mountComponent时，初始化component实例配置
+// 挂载前 mountComponent 时，初始化 组件实例信息
 export function createComponentInstance(
-  vnode: VNode, // 根组件的vnode
+  vnode: VNode, // 组件的 vnode 属性
   parent: ComponentInternalInstance | null,
   suspense: SuspenseBoundary | null
 ) {
@@ -417,7 +417,7 @@ export function createComponentInstance(
   const instance: ComponentInternalInstance = {
     uid: uid++,
     vnode,
-    type,
+    type, // 即组件对象
     parent,
     appContext,
     root: null!, // to be immediately set
@@ -490,8 +490,8 @@ export function createComponentInstance(
     // 其它环境下，则不处理
     instance.ctx = { _: instance }
   }
-  instance.root = parent ? parent.root : instance // 绑定root
-  instance.emit = emit.bind(null, instance)
+  instance.root = parent ? parent.root : instance // 绑定 root根组件的实例信息
+  instance.emit = emit.bind(null, instance) // 组件实例的emit
 
   return instance
 }
@@ -526,26 +526,28 @@ export function isStatefulComponent(instance: ComponentInternalInstance) {
 export let isInSSRComponentSetup = false
 
 /**
- * 开始挂载渲染component
+ * 解析组件信息，设置props、slots、setup方法返回值、组件的render方法
  */
 export function setupComponent(
-  instance: ComponentInternalInstance, // 组件的实例，由上边的ComponentInternalInstance() 创建
+  instance: ComponentInternalInstance, // 组件的实例信息
   isSSR = false
 ) {
   isInSSRComponentSetup = isSSR
 
   // 组件的vnode，在 createVnode 初始化
-  // 传递给组件的props：rootProps（非组件上的props属性）
+  // 传递给组件的props，如：rootProps
   const { props, children } = instance.vnode
-  // 是组件式：4
+  // 是 组件式：4
   const isStateful = isStatefulComponent(instance)
 
   // 进一步处理组件的props（在初始化组件实例时，已经规范了组件的props格式)
   // 设置组件实际接收的props、attrs，并进行props的类型检查、默认值处理等
   initProps(instance, props, isStateful, isSSR)
 
+  // TODO: analyze - slots
   initSlots(instance, children)
 
+  // setup 方法的返回值
   const setupResult = isStateful
     ? setupStatefulComponent(instance, isSSR)
     : undefined
@@ -553,12 +555,12 @@ export function setupComponent(
   return setupResult
 }
 
-// 状态式组件
+// 设置setup方法的返回到组件实例上，并设置组件实例的render方法
 function setupStatefulComponent(
-  instance: ComponentInternalInstance,
+  instance: ComponentInternalInstance, // 组件实例信息
   isSSR: boolean
 ) {
-  // 组件选项
+  // 组件对象
   const Component = instance.type as ComponentOptions
 
   if (__DEV__) {
@@ -588,26 +590,30 @@ function setupStatefulComponent(
   // 拦截 instance.ctx 的访问get、设置set、判断has
   // get: data、setupState、props、全局属性、组件实例公开属性与方法 等等
   instance.proxy = new Proxy(instance.ctx, PublicInstanceProxyHandlers)
+
   if (__DEV__) {
     // 将组件的props属性暴露给 组件实例instance.ctx
     exposePropsOnRenderContext(instance)
   }
+
+  // 组件的 setup 方法
   // 2. call setup()
   const { setup } = Component
   if (setup) {
-    // 初始 setup.length = 0，setupContext = null
+    // 设置setup方法的上下文
     const setupContext = (instance.setupContext =
       setup.length > 1 ? createSetupContext(instance) : null)
 
-    currentInstance = instance
+    currentInstance = instance // 当前正在挂载的组件实例
+
     pauseTracking() // 停止对setup()内部错误追踪，由引擎或用户自定义
 
-    // 执行setup，返回结果 setupResult
+    // 执行组件的setup方法，并返回结果： setupResult
     const setupResult = callWithErrorHandling(
       setup,
       instance,
       ErrorCodes.SETUP_FUNCTION, // 标志 报错时的范围
-      // TODO：shallowReadonly ？
+      // 传递给 setup(props, setupContext) 方法的参数列表：最终的instance.props、组件上下文
       [__DEV__ ? shallowReadonly(instance.props) : instance.props, setupContext] // setup(props, context) 接收的参数
     )
 
@@ -632,14 +638,16 @@ function setupStatefulComponent(
         )
       }
     } else {
+      // 设置setup方法的返回到组件实例上，并设置组件render方法
       handleSetupResult(instance, setupResult, isSSR)
     }
   } else {
+    // 设置组件render方法
     finishComponentSetup(instance, isSSR)
   }
 }
 
-// 校验setup返回值: 如果存在，则应该是对象 或  函数(转换为render)
+// 校验组件的setup方法的执行结果：返回值， 如果存在，则应该是对象 或 函数(转换为render)
 export function handleSetupResult(
   instance: ComponentInternalInstance,
   setupResult: unknown, // setup() 返回值
@@ -672,6 +680,7 @@ export function handleSetupResult(
     }
 
     // TODO: proxyRefs(setupResult)
+    // 设置组件实例信息的setup返回值的数据
     instance.setupState = proxyRefs(setupResult)
 
     if (__DEV__) {
@@ -704,7 +713,7 @@ export function registerRuntimeCompiler(_compile: any) {
   compile = _compile
 }
 
-// 设置 组件的render函数，编译compile template得到render函数
+// 设置组件的 render方法
 function finishComponentSetup(
   instance: ComponentInternalInstance,
   isSSR: boolean
@@ -717,17 +726,18 @@ function finishComponentSetup(
       instance.render = Component.render as InternalRenderFunction
     }
   } else if (!instance.render) {
-    // setup不存在； 或如果setup存在，且setup 返回一个对象
+    // setup不存在； 或如果setup存在，且 setup 返回一个对象
     // 如果setup 返回的是一个 函数，则赋值为render，否则render不存在
 
-    // 不存在render函数时，需要进行编译
+    // 不存在render函数时，但组件存在模版代码时，需要进行编译从而得到render
     if (compile && Component.template && !Component.render) {
       if (__DEV__) {
         startMeasure(instance, `compile`)
       }
+      // 编译vue源码模版template 得到 render函数
       Component.render = compile(Component.template, {
-        isCustomElement: instance.appContext.config.isCustomElement,
-        delimiters: Component.delimiters
+        isCustomElement: instance.appContext.config.isCustomElement, // 用户自定义元素的方法
+        delimiters: Component.delimiters // 用户自定义的插值列表，如： ['{{', '}}']
       })
       if (__DEV__) {
         endMeasure(instance, `compile`)
@@ -740,6 +750,7 @@ function finishComponentSetup(
     // proxy used needs a different `has` handler which is more performant and
     // also only allows a whitelist of globals to fallthrough.
     if (instance.render._rc) {
+      // 通过编译vue模版得到的渲染函数，渲染函数带有with作用域，需要引入has、get拦截方法
       instance.withProxy = new Proxy(
         instance.ctx,
         RuntimeCompiledPublicInstanceProxyHandlers
@@ -747,8 +758,10 @@ function finishComponentSetup(
     }
   }
 
+  // 针对 vue 2.x 版本的支持
   // support for 2.x options
   if (__FEATURE_OPTIONS_API__) {
+    // rollup: isBundlerESMBuild ? `__VUE_OPTIONS_API__` : true
     currentInstance = instance
     pauseTracking()
     applyOptions(instance, Component)
@@ -760,7 +773,7 @@ function finishComponentSetup(
   if (__DEV__ && !Component.render && instance.render === NOOP) {
     /* istanbul ignore if */
     if (!compile && Component.template) {
-      // 当compile不存在但存在template时，提示需要带有编译器版本的vue
+      // 当compile不存在，但存在template时，提示需要带有编译器版本的vue
       warn(
         `Component provided template option but ` +
           `runtime compilation is not supported in this build of Vue.` +
@@ -795,6 +808,7 @@ const attrHandlers: ProxyHandler<Data> = {
   }
 }
 
+// 设置组件的setup方法的上下文
 export function createSetupContext(
   instance: ComponentInternalInstance
 ): SetupContext {

@@ -411,13 +411,13 @@ export function createHydrationRenderer(
 /**
  * 重载: 区分ssr
  */
-// overload 1: no hydration
+// overload 1: no hydration    => createRenderer
 function baseCreateRenderer<
   HostNode = RendererNode,
   HostElement = RendererElement
 >(options: RendererOptions<HostNode, HostElement>): Renderer<HostElement>
 
-// overload 2: with hydration
+// overload 2: with hydration  => createHydrationRenderer
 function baseCreateRenderer(
   options: RendererOptions<Node, Element>,
   createHydrationFns: typeof createHydrationFunctions
@@ -461,7 +461,7 @@ function baseCreateRenderer(
   // Note: functions inside this closure should use `const xxx = () => {}`
   // style in order to prevent being inlined by minifiers.
   const patch: PatchFn = (
-    n1, // dom上原先已挂载的VNode
+    n1, // dom实例上已挂载的VNode
     n2, // 当前要挂载的VNode
     container, // dom实例：挂载目标dom节点
     anchor = null,
@@ -470,7 +470,9 @@ function baseCreateRenderer(
     isSVG = false,
     optimized = false
   ) => {
-    // 卸载掉dom原先的vnode tree
+    // 如果 n1 与 n2 代表不同的组件，则需要卸掉 已挂载的 VNode，并重新挂载 n2
+    // 相同 直接更新 updateComponent
+
     // patching & not same type, unmount old tree
     if (n1 && !isSameVNodeType(n1, n2)) {
       anchor = getNextHostNode(n1)
@@ -485,7 +487,7 @@ function baseCreateRenderer(
     }
 
     // 初次渲染，即：createApp(rootComponent, rootProps).mount('#app')，type 是 rootComponent
-    // shapeFlag = ShapeFlags.COMPONENT： 4
+    // shapeFlag = ShapeFlags.STATEFUL_COMPONENT： 4
     const { type, ref, shapeFlag } = n2
     switch (type) {
       case Text:
@@ -527,6 +529,7 @@ function baseCreateRenderer(
             optimized
           )
         } else if (shapeFlag & ShapeFlags.COMPONENT) {
+          // ShapeFlags.STATEFUL_COMPONENT | ShapeFlags.FUNCTIONAL_COMPONENT
           // 当 type 为 组件时，即要渲染当对象是一个组件时：
           processComponent(
             n1,
@@ -1240,6 +1243,7 @@ function baseCreateRenderer(
         )
       }
     } else {
+      // n1 n2 代表同一个组件，更新组件
       updateComponent(n1, n2, optimized)
     }
   }
@@ -1247,7 +1251,7 @@ function baseCreateRenderer(
   // 实际挂载组件方法
   // 第一次开始render patch 挂载并渲染组件
   const mountComponent: MountComponentFn = (
-    initialVNode, // 当前要挂载的VNode
+    initialVNode, // 组件的VNode
     container, // dom实例：挂载目标dom节点
     anchor,
     parentComponent,
@@ -1255,8 +1259,10 @@ function baseCreateRenderer(
     isSVG,
     optimized
   ) => {
-    // 初始化和绑定组件实例基本属性：如type=vnode.type、props初始化、上下文信息appContext、ctx，绑定instance.root=instance 等
+    // 组件实例信息
+
     // 同时也将组件实例绑定到 vnode.component
+    // 规范组件的props属性格式
     const instance: ComponentInternalInstance = (initialVNode.component = createComponentInstance(
       initialVNode,
       parentComponent,
@@ -1283,7 +1289,7 @@ function baseCreateRenderer(
     if (__DEV__) {
       startMeasure(instance, `init`)
     }
-    // 启动配置组件实例，输出组件对应的渲染函数render()
+    // 解析组件信息，设置props、slots、setup方法返回值、组件的render方法（编译Vue模版源码）
     setupComponent(instance)
     if (__DEV__) {
       endMeasure(instance, `init`)
@@ -1319,6 +1325,7 @@ function baseCreateRenderer(
     }
   }
 
+  // n1 n2 代表同一个组件，更新组件
   const updateComponent = (n1: VNode, n2: VNode, optimized: boolean) => {
     const instance = (n2.component = n1.component)!
     if (shouldUpdateComponent(n1, n2, optimized)) {
