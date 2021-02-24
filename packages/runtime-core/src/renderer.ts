@@ -1289,7 +1289,7 @@ function baseCreateRenderer(
     if (__DEV__) {
       startMeasure(instance, `init`)
     }
-    // 解析组件信息，设置props、slots、setup方法返回值、组件的render方法（编译Vue模版源码）
+    // 解析组件信息，设置 props、slots、setup方法返回值、组件的render方法（编译Vue模版源码）
     setupComponent(instance)
     if (__DEV__) {
       endMeasure(instance, `init`)
@@ -1361,6 +1361,7 @@ function baseCreateRenderer(
     }
   }
 
+  // 执行渲染函数
   const setupRenderEffect: SetupRenderEffectFn = (
     instance,
     initialVNode,
@@ -1374,14 +1375,17 @@ function baseCreateRenderer(
     instance.update = effect(function componentEffect() {
       if (!instance.isMounted) {
         let vnodeHook: VNodeHook | null | undefined
-        const { el, props } = initialVNode
+
+        // props: 节点的dom属性列表
+        const { el, props } = initialVNode // 组件对应对 createVNode
+
         const { bm, m, parent } = instance
 
         // beforeMount hook
         if (bm) {
           invokeArrayFns(bm)
         }
-        // onVnodeBeforeMount
+        // 执行 onVnodeBeforeMount
         if ((vnodeHook = props && props.onVnodeBeforeMount)) {
           invokeVNodeHook(vnodeHook, parent, initialVNode)
         }
@@ -1390,6 +1394,7 @@ function baseCreateRenderer(
         if (__DEV__) {
           startMeasure(instance, `render`)
         }
+        // 执行 渲染函数 render，返回 vnode
         const subTree = (instance.subTree = renderComponentRoot(instance))
         if (__DEV__) {
           endMeasure(instance, `render`)
@@ -2277,9 +2282,9 @@ function baseCreateRenderer(
 }
 
 export function invokeVNodeHook(
-  hook: VNodeHook,
-  instance: ComponentInternalInstance | null,
-  vnode: VNode,
+  hook: VNodeHook, // vnode的钩子函数，如：onVnodeBeforeMount
+  instance: ComponentInternalInstance | null, // 组件实例信息
+  vnode: VNode, // vnode 节点
   prevVNode: VNode | null = null
 ) {
   callWithAsyncErrorHandling(hook, instance, ErrorCodes.VNODE_HOOK, [

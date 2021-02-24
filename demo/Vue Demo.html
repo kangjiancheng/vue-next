@@ -20,9 +20,7 @@
 </head>
 <body>
 <div id="app">
-  <h1>Hello Vue 3!</h1>
-  <button :class="count > 1 ? redClass: blueClass" number="123" :test="testAttr" @click="handleClick">Clicked {{{ count }}} times.</button>
-  <span>age: {{{ age }}}</span>
+  <span class="red" :style="myStyle" :user-info="userName" @click="handleClick">age: {{ age }}</span>
 </div>
 
 <script>console.time('Vue App')</script>
@@ -43,7 +41,6 @@
 
   const rootComponent = {
     name: 'root-component',
-    delimiters: ['{{{', '}}}'],
     props: {
       hasDefault: {
         type: Number,
@@ -73,6 +70,11 @@
         console.log('age: ', age)
       },
     },
+    data (){
+      return {
+        dataA: 'AAA'
+      }
+    },
     // props 不可通过解构来获取对应值
     setup(props, context ) {
       const count = ref(0)
@@ -95,7 +97,8 @@
         handleClick,
         redClass: 'red-class',
         blueClass: 'blue-class',
-        testAttr: 'abc',
+        myStyle: 'color: blue;',
+        userName: '小明',
       }
     }
   }

@@ -74,6 +74,7 @@ export function callWithErrorHandling(
   return res
 }
 
+// 同步执行 fn
 export function callWithAsyncErrorHandling(
   fn: Function | Function[],
   instance: ComponentInternalInstance | null,

@@ -51,7 +51,7 @@ export function renderComponentRoot(
     proxy,
     withProxy,
     props,
-    propsOptions: [propsOptions],
+    propsOptions: [propsOptions], //
     slots,
     attrs,
     emit,
@@ -73,10 +73,12 @@ export function renderComponentRoot(
       // withProxy is a proxy with a different `has` trap only for
       // runtime-compiled render functions using `with` block.
       const proxyToUse = withProxy || proxy
+
       result = normalizeVNode(
+        // 执行渲染函数
         render!.call(
           proxyToUse,
-          proxyToUse!,
+          proxyToUse!, // instance.ctx 的代理 proxy： RuntimeCompiledPublicInstanceProxyHandlers
           renderCache,
           props,
           setupState,

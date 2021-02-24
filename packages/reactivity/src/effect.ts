@@ -42,7 +42,9 @@ export interface DebuggerEventExtraInfo {
   oldTarget?: Map<any, any> | Set<any>
 }
 
+// effect 栈列
 const effectStack: ReactiveEffect[] = []
+// 当前激活的 effect
 let activeEffect: ReactiveEffect | undefined
 
 export const ITERATE_KEY = Symbol(__DEV__ ? 'iterate' : '')
@@ -57,13 +59,14 @@ export function effect<T = any>(
   options: ReactiveEffectOptions = EMPTY_OBJ
 ): ReactiveEffect<T> {
   if (isEffect(fn)) {
-    fn = fn.raw
+    // fn._isEffect === true
+    fn = fn.raw // 原函数
   }
   const effect = createReactiveEffect(fn, options)
   if (!options.lazy) {
-    effect()
+    effect() // 立刻执行
   }
-  return effect
+  return effect //
 }
 
 export function stop(effect: ReactiveEffect) {
@@ -78,22 +81,42 @@ export function stop(effect: ReactiveEffect) {
 
 let uid = 0
 
+/**
+ *
+ * @param fn
+ * @param options - dev {
+      scheduler: queueJob,
+      allowRecurse: true,
+      onTrack: instance.rtc ? e => invokeArrayFns(instance.rtc!, e) : void 0,
+      onTrigger: instance.rtg ? e => invokeArrayFns(instance.rtg!, e) : void 0
+    }
+ *  prod - {
+      scheduler: queueJob,
+      // #1801, #2043 component render effects should allow recursive updates
+      allowRecurse: true
+    }
+ */
 function createReactiveEffect<T = any>(
   fn: () => T,
   options: ReactiveEffectOptions
 ): ReactiveEffect<T> {
   const effect = function reactiveEffect(): unknown {
     if (!effect.active) {
+      // 执行 fn
       return options.scheduler ? undefined : fn()
     }
+
     if (!effectStack.includes(effect)) {
       cleanup(effect)
       try {
         enableTracking()
         effectStack.push(effect)
         activeEffect = effect
+
+        // 执行fn，并返回结果
         return fn()
       } finally {
+        // 执行完 fn() 后，停止对当前对effect跟踪
         effectStack.pop()
         resetTracking()
         activeEffect = effectStack[effectStack.length - 1]
@@ -104,12 +127,13 @@ function createReactiveEffect<T = any>(
   effect.allowRecurse = !!options.allowRecurse
   effect._isEffect = true
   effect.active = true
-  effect.raw = fn
+  effect.raw = fn // 保存原函数
   effect.deps = []
   effect.options = options
   return effect
 }
 
+// 删除列表中的 effect
 function cleanup(effect: ReactiveEffect) {
   const { deps } = effect
   if (deps.length) {
@@ -128,11 +152,13 @@ export function pauseTracking() {
   shouldTrack = false
 }
 
+// 启动跟踪
 export function enableTracking() {
   trackStack.push(shouldTrack)
   shouldTrack = true
 }
 
+// 重置 track 状态
 export function resetTracking() {
   const last = trackStack.pop()
   shouldTrack = last === undefined ? true : last

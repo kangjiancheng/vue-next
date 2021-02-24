@@ -319,7 +319,7 @@ export const createVNode = (__DEV__
 // 创建vdom
 function _createVNode(
   type: VNodeTypes | ClassComponent | typeof NULL_DYNAMIC_COMPONENT, // type 组件
-  props: (Data & VNodeProps) | null = null, // 传递给组件的props
+  props: (Data & VNodeProps) | null = null, // 传递给组件的props 或 组件元素节点上的dom属性列表
   children: unknown = null,
   patchFlag: number = 0,
   dynamicProps: string[] | null = null,
@@ -373,7 +373,7 @@ function _createVNode(
 
   // encode the vnode type information into a bitmap
   const shapeFlag = isString(type)
-    ? ShapeFlags.ELEMENT
+    ? ShapeFlags.ELEMENT // 如 执行render的 createVNode
     : __FEATURE_SUSPENSE__ && isSuspense(type)
       ? ShapeFlags.SUSPENSE
       : isTeleport(type)
