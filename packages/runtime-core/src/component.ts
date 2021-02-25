@@ -403,7 +403,7 @@ let uid = 0
 
 // 挂载前 mountComponent 时，初始化 组件实例信息
 export function createComponentInstance(
-  vnode: VNode, // 组件的 vnode 属性
+  vnode: VNode, // 组件初始化的vnode
   parent: ComponentInternalInstance | null,
   suspense: SuspenseBoundary | null
 ) {
@@ -419,15 +419,15 @@ export function createComponentInstance(
     vnode,
     type, // 即组件对象
     parent,
-    appContext,
+    appContext, // app 上下文
     root: null!, // to be immediately set
     next: null,
     subTree: null!, // will be set synchronously right after creation
     update: null!, // will be set synchronously right after creation
     render: null,
-    proxy: null,
+    proxy: null, // instance.ctx  =》PublicInstanceProxyHandlers
     exposed: null,
-    withProxy: null,
+    withProxy: null, // instance.ctx =》有vue模版编译得到的渲染函数 RuntimeCompiledPublicInstanceProxyHandlers
     effects: null,
     provides: parent ? parent.provides : Object.create(appContext.provides),
     accessCache: null!,
@@ -447,13 +447,13 @@ export function createComponentInstance(
     emitted: null,
 
     // state
-    ctx: EMPTY_OBJ,
-    data: EMPTY_OBJ,
+    ctx: EMPTY_OBJ, // 组件实例的上下文
+    data: EMPTY_OBJ, // 2.x 支持
     props: EMPTY_OBJ, // 组件接收到有效props，已经进行类型、默认值处理，同时也赋值了。
     attrs: EMPTY_OBJ, // 存储 那些传给组件但组件未定义 的props属性
     slots: EMPTY_OBJ,
     refs: EMPTY_OBJ,
-    setupState: EMPTY_OBJ,
+    setupState: EMPTY_OBJ, // 组件 setup 返回值
     setupContext: null,
 
     // suspense related
@@ -482,12 +482,9 @@ export function createComponentInstance(
     ec: null
   }
   if (__DEV__) {
-    // ctx 绑定实例相关上下文配置，对组件的相关属性进行proxy拦截处理，不可更改
-    // 设置实例的ctx属性: $xxx 配置，访问相关ctx属性，返回实例相应信息，如instance.ctx.$root 返回 instance.root
-    // 同时也绑定appContext.config内属性到实例的ctx上
+    // 组件实例的上下文，包含：组件本身实例、组件公开的属性与方法、app全局配置
     instance.ctx = createRenderContext(instance)
   } else {
-    // 其它环境下，则不处理
     instance.ctx = { _: instance }
   }
   instance.root = parent ? parent.root : instance // 绑定 root根组件的实例信息
@@ -537,10 +534,10 @@ export function setupComponent(
   // 组件的vnode，在 createVnode 初始化
   // 传递给组件的props，如：rootProps
   const { props, children } = instance.vnode
-  // 是 组件式：4
+  // 组件式：4
   const isStateful = isStatefulComponent(instance)
 
-  // 进一步处理组件的props（在初始化组件实例时，已经规范了组件的props格式)
+  // 组件vnode节点的props（在初始化组件实例时，已经规范了组件的props格式)
   // 设置组件实际接收的props、attrs，并进行props的类型检查、默认值处理等
   initProps(instance, props, isStateful, isSSR)
 
@@ -584,15 +581,16 @@ function setupStatefulComponent(
     }
   }
 
-  // 初始化组件实例上下文代理: instance.proxy => instance.ctx
-  // 为proxy里的相关属性 设置所访问的属性范围类型，如是props或data或setup属性等类型并缓存，方便直接访问并返回结果
+  // 缓存所访问属性的范围，如：props、data、setup、组件上下文context
   instance.accessCache = Object.create(null) // 属性的所属范围
+
   // 拦截 instance.ctx 的访问get、设置set、判断has
   // get: data、setupState、props、全局属性、组件实例公开属性与方法 等等
   instance.proxy = new Proxy(instance.ctx, PublicInstanceProxyHandlers)
 
+  // 绑定 props
   if (__DEV__) {
-    // 将组件的props属性暴露给 组件实例instance.ctx
+    // 绑定 组件props选项列表，并返回对应在 组件节点vnode的props属性上的值
     exposePropsOnRenderContext(instance)
   }
 
@@ -683,8 +681,9 @@ export function handleSetupResult(
     // 设置组件实例信息的setup返回值的数据
     instance.setupState = proxyRefs(setupResult)
 
+    // 绑定 setupState
     if (__DEV__) {
-      // 暴露 setup的返回值到 组件实例上下文ctx
+      // 暴露 setup的返回值到 组件实例上下文ctx，同时限制属性名开头 '_' 、 '$'
       exposeSetupStateOnRenderContext(instance)
     }
   } else if (__DEV__ && setupResult !== undefined) {
@@ -702,6 +701,7 @@ type CompileFunction = (
   options?: CompilerOptions
 ) => InternalRenderFunction
 
+// Vue 模版源码的编译器，生成渲染函数render
 let compile: CompileFunction | undefined
 
 // dev only
@@ -762,6 +762,7 @@ function finishComponentSetup(
   }
 
   // 针对 vue 2.x 版本的支持
+  // 如设置 组件的 data 属性
   // support for 2.x options
   if (__FEATURE_OPTIONS_API__) {
     // rollup: isBundlerESMBuild ? `__VUE_OPTIONS_API__` : true

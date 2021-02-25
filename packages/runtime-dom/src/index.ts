@@ -65,7 +65,7 @@ export const createApp = ((...args) => {
   // 开发库，如：vue.global.js
   if (__DEV__) {
     // 如：检测组件name属性时，不可使用这些保留name
-    injectNativeTagCheck(app)
+    injectNativeTagCheck(app) // app.config.isNativeTag
     injectCustomElementCheck(app)
   }
 
@@ -90,10 +90,11 @@ export const createApp = ((...args) => {
     container.innerHTML = ''
 
     // 执行 mount
+    // proxy: 组件实例instance的上下文ctx
     const proxy = mount(container)
     if (container instanceof Element) {
-      container.removeAttribute('v-cloak')
-      container.setAttribute('data-v-app', '')
+      container.removeAttribute('v-cloak') // 移除元素标签上的 v-clock 指令属性
+      container.setAttribute('data-v-app', '') // 添加元素标签属性：<div id="app" data-v-app>...</div>
     }
     return proxy
   }
@@ -120,6 +121,7 @@ export const createSSRApp = ((...args) => {
   return app
 }) as CreateAppFunction<Element>
 
+// 检测是否是 原生dom元素标签
 function injectNativeTagCheck(app: App) {
   // Inject `isNativeTag`
   // this is used for component name validation (dev only)
@@ -130,6 +132,7 @@ function injectNativeTagCheck(app: App) {
 }
 
 // dev only
+// 运行环境下，不可以修改 isCustomElement
 function injectCustomElementCheck(app: App) {
   if (isRuntimeOnly()) {
     const value = app.config.isCustomElement
@@ -148,6 +151,7 @@ function injectCustomElementCheck(app: App) {
   }
 }
 
+// 规范 挂载目标dom容器，返回dom实例
 function normalizeContainer(
   container: Element | ShadowRoot | string
 ): Element | null {

@@ -3,6 +3,7 @@ import { isNoUnitNumericStyleProp } from './domAttrConfig'
 
 export type NormalizedStyle = Record<string, string | number>
 
+// 规范style为对象，并合并
 export function normalizeStyle(value: unknown): NormalizedStyle | undefined {
   if (isArray(value)) {
     const res: Record<string, string | number> = {}
@@ -62,11 +63,14 @@ export function stringifyStyle(styles: NormalizedStyle | undefined): string {
   return ret
 }
 
+// 规范节点属性的 class: 字符串、数组、对象
 export function normalizeClass(value: unknown): string {
   let res = ''
   if (isString(value)) {
+    // class属性的值 是字符串，直接返回
     res = value
   } else if (isArray(value)) {
+    // class属性的值 是数组，比如 class属性合并成的数组，需要转换为 dom节点上的属性的格式：空格 隔开
     for (let i = 0; i < value.length; i++) {
       const normalized = normalizeClass(value[i])
       if (normalized) {
@@ -74,6 +78,7 @@ export function normalizeClass(value: unknown): string {
       }
     }
   } else if (isObject(value)) {
+    // class 是对象格式
     for (const name in value) {
       if (value[name]) {
         res += name + ' '

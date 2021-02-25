@@ -48,17 +48,17 @@ export function renderComponentRoot(
   const {
     type: Component,
     vnode,
-    proxy,
-    withProxy,
-    props,
-    propsOptions: [propsOptions], //
+    proxy, // ctx
+    withProxy, // ctx，模版编译
+    props, // 组件节点 props 属性
+    propsOptions: [propsOptions], // 组件 props 选项属性
     slots,
     attrs,
     emit,
-    render,
+    render, // 渲染函数
     renderCache,
     data,
-    setupState,
+    setupState, // setup() 返回值
     ctx
   } = instance
 
@@ -74,6 +74,7 @@ export function renderComponentRoot(
       // runtime-compiled render functions using `with` block.
       const proxyToUse = withProxy || proxy
 
+      // 返回渲染vnode节点
       result = normalizeVNode(
         // 执行渲染函数
         render!.call(
@@ -129,6 +130,7 @@ export function renderComponentRoot(
       ;[root, setRoot] = getChildRoot(result)
     }
 
+    // Component.inheritAttrs 默认 undefined
     if (Component.inheritAttrs !== false && fallthroughAttrs) {
       const keys = Object.keys(fallthroughAttrs)
       const { shapeFlag } = root
@@ -137,6 +139,7 @@ export function renderComponentRoot(
           shapeFlag & ShapeFlags.ELEMENT ||
           shapeFlag & ShapeFlags.COMPONENT
         ) {
+          // attrs属性列表里 是否存在 'onUpdate:' 开头的属性
           if (propsOptions && keys.some(isModelListener)) {
             // If a v-model listener (onUpdate:xxx) has a corresponding declared
             // prop, it indicates this component expects to handle v-model and
@@ -147,6 +150,7 @@ export function renderComponentRoot(
               propsOptions
             )
           }
+
           root = cloneVNode(root, fallthroughAttrs)
         } else if (__DEV__ && !accessedAttrs && root.type !== Comment) {
           const allAttrs = Object.keys(attrs)

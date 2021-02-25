@@ -101,6 +101,8 @@ export function reactive(target: object) {
  * root level).
  */
 export function shallowReactive<T extends object>(target: T): T {
+  // 浅层次的 reactive
+
   return createReactiveObject(
     target,
     false,
@@ -204,26 +206,29 @@ function createReactiveObject(
 
 export function isReactive(value: unknown): boolean {
   if (isReadonly(value)) {
-    return isReactive((value as Target)[ReactiveFlags.RAW])
+    return isReactive((value as Target)[ReactiveFlags.RAW]) // __v_raw
   }
-  return !!(value && (value as Target)[ReactiveFlags.IS_REACTIVE])
+  return !!(value && (value as Target)[ReactiveFlags.IS_REACTIVE]) // __v_isReactive
 }
 
 export function isReadonly(value: unknown): boolean {
-  return !!(value && (value as Target)[ReactiveFlags.IS_READONLY])
+  return !!(value && (value as Target)[ReactiveFlags.IS_READONLY]) // __v_isReadonly
 }
 
 export function isProxy(value: unknown): boolean {
   return isReactive(value) || isReadonly(value)
 }
 
+// 转换为 __v_raw
 export function toRaw<T>(observed: T): T {
   return (
-    (observed && toRaw((observed as Target)[ReactiveFlags.RAW])) || observed
+    (observed && toRaw((observed as Target)[ReactiveFlags.RAW])) || observed // observed.__v_raw = observed
   )
 }
 
+// 标记为 __v_skip
 export function markRaw<T extends object>(value: T): T {
+  // Object.defineProperty =》 value.__v_skip = true
   def(value, ReactiveFlags.SKIP, true)
   return value
 }

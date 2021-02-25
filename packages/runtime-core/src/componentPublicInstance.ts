@@ -249,11 +249,10 @@ export interface ComponentRenderContext {
   _: ComponentInternalInstance
 }
 
-// 代理ctx: 拦截组件实例的上下文：instance.ctx，并返回给instance.proxy
-// ctx 由下方的 xxxRenderContext() 方法创建组合而成的
+// 拦截组件实例的上下文：instance.ctx，并返回给instance.proxy
+// ctx 为组件实例的上下文，包括了实例方法，实例data属性、实例props等
 export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
-  // key 为 instance.ctx的属性
-  // ctx 为组件实例的上下文，包括了实例方法，实例data属性、实例props等
+  // 访问instance.ctx的属性: key
   get({ _: instance }: ComponentRenderContext, key: string) {
     const {
       ctx,
@@ -287,9 +286,9 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
             return setupState[key]
           case AccessTypes.DATA: // 在data 中定义的属性
             return data[key]
-          case AccessTypes.CONTEXT: // ctx中除了setup、data、props访问的剩余属性(包括用户自定义的$xxx ?)
+          case AccessTypes.CONTEXT: // 上下文属性
             return ctx[key]
-          case AccessTypes.PROPS: // 组件接收到的props属性
+          case AccessTypes.PROPS: // 组件接收到的有效props，已经进行类型、默认值处理，同时也赋值了。
             return props![key]
           // default: just fallthrough
         }
@@ -297,6 +296,7 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
         accessCache![key] = AccessTypes.SETUP
         return setupState[key]
       } else if (data !== EMPTY_OBJ && hasOwn(data, key)) {
+        // data 属性有 v2.x 添加
         accessCache![key] = AccessTypes.DATA
         return data[key]
       } else if (
@@ -316,7 +316,7 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
     }
 
     /**
-     * 各种范围的 $xxx：publicPropertiesMap、globalProperties、自定义、
+     * 以 '$' 开头的属性，如 ：publicPropertiesMap、globalProperties、用户自定义
      */
     const publicGetter = publicPropertiesMap[key]
     let cssModule, globalProperties
@@ -336,7 +336,7 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
       // type 即 组件，在createVNode时初始化
       return cssModule
     } else if (ctx !== EMPTY_OBJ && hasOwn(ctx, key)) {
-      // 为用户自定义的$xxx属性，已排除内置
+      // 上下文中 以 $ 开头的
       // user may set custom properties to `this` that start with `$`
       accessCache![key] = AccessTypes.CONTEXT
       return ctx[key]
@@ -359,7 +359,8 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
         (key[0] === '$' || key[0] === '_') &&
         hasOwn(data, key)
       ) {
-        // 如果在data中定义了$xxx，在模板中使用时，则只能通过$data.$xxx访问
+        // 如果在data中定义了 $xxx，在模板中使用时，则只能通过$data.$xxx访问
+        // $id: '001' // 在模版中访问：$data.$id
         warn(
           `Property ${JSON.stringify(
             key
@@ -464,8 +465,10 @@ export const RuntimeCompiledPublicInstanceProxyHandlers = extend(
       }
       return PublicInstanceProxyHandlers.get!(target, key, target)
     },
+    // 执行render函数时，with(ctx) {...}, 访问一个变量时，会先判断这个has，然后 get
     has(_: ComponentRenderContext, key: string) {
       const has = key[0] !== '_' && !isGloballyWhitelisted(key)
+
       if (__DEV__ && !has && PublicInstanceProxyHandlers.has!(_, key)) {
         warn(
           `Property ${JSON.stringify(
@@ -478,6 +481,7 @@ export const RuntimeCompiledPublicInstanceProxyHandlers = extend(
   }
 )
 
+// 创建组件实例的上下文，包含：组件本身实例、组件公开的属性、app上下文的全局属性
 // In dev mode, the proxy target exposes the same properties as seen on `this`
 // for easier console inspection. In prod mode it will be an empty object so
 // these properties definitions can be skipped.
@@ -505,7 +509,7 @@ export function createRenderContext(instance: ComponentInternalInstance) {
   })
 
   // expose global properties
-  // 绑定app上下文的config.globalProperties 信息到 实例的ctx上
+  // 用户自定义的全局信息
   const { globalProperties } = instance.appContext.config
   Object.keys(globalProperties).forEach(key => {
     Object.defineProperty(target, key, {
@@ -519,7 +523,8 @@ export function createRenderContext(instance: ComponentInternalInstance) {
   return target as ComponentRenderContext
 }
 
-// dev only：将组件的props属性暴露给 组件实例instance.ctx
+// dev only
+// 组件props属性列表 绑定到 组件实例上下文 ctx
 export function exposePropsOnRenderContext(
   instance: ComponentInternalInstance
 ) {
@@ -532,7 +537,7 @@ export function exposePropsOnRenderContext(
       Object.defineProperty(ctx, key, {
         enumerable: true,
         configurable: true,
-        get: () => instance.props[key], // 组件实际接收到的props
+        get: () => instance.props[key], // 组件节点vnode的props属性上的值
         set: NOOP
       })
     })
@@ -540,11 +545,14 @@ export function exposePropsOnRenderContext(
 }
 
 // dev only
+// 绑定 组件的setup 返回值到 组件实例上下文ctx
 export function exposeSetupStateOnRenderContext(
   instance: ComponentInternalInstance
 ) {
-  // ctx 渲染
+  // setupState 即 setupResult
   const { ctx, setupState } = instance
+
+  // toRaw: 设置 setupState.__v_raw = setupState
   Object.keys(toRaw(setupState)).forEach(key => {
     if (key[0] === '$' || key[0] === '_') {
       // setup方法的返回值属性里不能以 $、_ 开头，这些是Vue的 内部属性预留前置代表

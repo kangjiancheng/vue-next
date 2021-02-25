@@ -434,14 +434,17 @@ function baseCreateRenderer(
   options: RendererOptions,
   createHydrationFns?: typeof createHydrationFunctions
 ): any {
+  // 打包构建工具
   // compile-time feature flags check
   if (__ESM_BUNDLER__ && !__TEST__) {
     initFeatureFlags()
   }
 
+  // 全局 this
   if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
     const target = getGlobalThis()
     target.__VUE__ = true
+    // devtools = __VUE_DEVTOOLS_GLOBAL_HOOK__
     setDevtoolsHook(target.__VUE_DEVTOOLS_GLOBAL_HOOK__)
   }
 
@@ -469,9 +472,9 @@ function baseCreateRenderer(
   // Note: functions inside this closure should use `const xxx = () => {}`
   // style in order to prevent being inlined by minifiers.
   const patch: PatchFn = (
-    n1, // dom实例上已挂载的VNode
-    n2, // 当前要挂载的VNode
-    container, // dom实例：挂载目标dom节点
+    n1, // 节点渲染后的vnode
+    n2, // 节点初始的vnode
+    container, // dom实例：挂载目标dom实例
     anchor = null,
     parentComponent = null,
     parentSuspense = null,
@@ -494,14 +497,15 @@ function baseCreateRenderer(
       n2.dynamicChildren = null
     }
 
-    // 初次渲染，即：createApp(rootComponent, rootProps).mount('#app')，type 是 rootComponent
-    // shapeFlag = ShapeFlags.STATEFUL_COMPONENT： 4
+    // 根据节点vnode的不同类别，开始解析vnode
     const { type, ref, shapeFlag } = n2
     switch (type) {
       case Text:
+        // 文本节点
         processText(n1, n2, container, anchor)
         break
       case Comment:
+        // 注释节点
         processCommentNode(n1, n2, container, anchor)
         break
       case Static:
@@ -512,6 +516,7 @@ function baseCreateRenderer(
         }
         break
       case Fragment:
+        // fragment节点
         processFragment(
           n1,
           n2,
@@ -524,8 +529,9 @@ function baseCreateRenderer(
         )
         break
       default:
-        // 由于ShapeFlags 值都是通过 1 << xx， 因此通过按位操作：& 如果二进制位都一样，则结果为当前shapeFlag，否则结果为0
+        // 由于ShapeFlags 值都是通过 1 << xx， 因此通过按位操作：& ，判断是否存在此二进制， 如果二进制位存在，则结果为当前shapeFlag，否则结果为0
         if (shapeFlag & ShapeFlags.ELEMENT) {
+          // dom普通元素 节点
           processElement(
             n1,
             n2,
@@ -538,7 +544,7 @@ function baseCreateRenderer(
           )
         } else if (shapeFlag & ShapeFlags.COMPONENT) {
           // ShapeFlags.STATEFUL_COMPONENT | ShapeFlags.FUNCTIONAL_COMPONENT
-          // 当 type 为 组件时，即要渲染当对象是一个组件时：
+          // 组件 节点
           processComponent(
             n1,
             n2,
@@ -550,6 +556,7 @@ function baseCreateRenderer(
             optimized
           )
         } else if (shapeFlag & ShapeFlags.TELEPORT) {
+          // TELEPORT 节点
           ;(type as typeof TeleportImpl).process(
             n1 as TeleportVNode,
             n2 as TeleportVNode,
@@ -562,6 +569,7 @@ function baseCreateRenderer(
             internals
           )
         } else if (__FEATURE_SUSPENSE__ && shapeFlag & ShapeFlags.SUSPENSE) {
+          // SUSPENSE 节点
           ;(type as typeof SuspenseImpl).process(
             n1,
             n2,
@@ -1256,8 +1264,7 @@ function baseCreateRenderer(
     }
   }
 
-  // 实际挂载组件方法
-  // 第一次开始render patch 挂载并渲染组件
+  // 挂载组件：初始化组件实例、解析组件信息（props、setup返回值、render函数）、渲染组件
   const mountComponent: MountComponentFn = (
     initialVNode, // 组件的VNode
     container, // dom实例：挂载目标dom节点
@@ -1272,7 +1279,7 @@ function baseCreateRenderer(
     // 同时也将组件实例绑定到 vnode.component
     // 规范组件的props属性格式
     const instance: ComponentInternalInstance = (initialVNode.component = createComponentInstance(
-      initialVNode,
+      initialVNode, // 组件初始化的vnode
       parentComponent,
       parentSuspense
     ))
@@ -2243,21 +2250,22 @@ function baseCreateRenderer(
 
   /**
    * 执行mount后，执行渲染函数
-   * @param vnode - 根组件对应的vnode
+   * @param vnode - 组件的初始vnode
    * @param container - 挂在dom节点容器
    */
   const render: RootRenderFunction = (vnode, container) => {
     if (vnode == null) {
       if (container._vnode) {
+        // _vnode 组件渲染后的vnode
         // 渲染之前，先卸载掉原先的挂在实例
         unmount(container._vnode, null, null, true)
       }
     } else {
-      // 开始渲染、补丁
+      // 开始挂载、渲染
       patch(container._vnode || null, vnode, container)
     }
     flushPostFlushCbs()
-    container._vnode = vnode
+    container._vnode = vnode // 保存节点渲染后的vnode
   }
 
   const internals: RendererInternals = {

@@ -44,7 +44,7 @@ export const enum PatchFlags {
   // 该标志与CLASS、STYLE和PROPS互斥。
   FULL_PROPS = 1 << 4,
 
-  // 检测到节点在服务段绑定的event listeners
+  // dom添加其它事件绑定 或 prop转换后以on开头的事件(如v-model)： 非组件且以on开头，但不包括click事件，非vue内置的vnodehook事件
   HYDRATE_EVENTS = 1 << 5,
 
   // 检测到节点子元素顺序未改变时，在compiler-core 解析v-for指令时：（为了包裹子内容）

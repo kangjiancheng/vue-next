@@ -14,7 +14,7 @@ if (__DEV__) {
 // 以vue模板源码为key，缓存对应的编译结果：渲染函数render
 const compileCache: Record<string, RenderFunction> = Object.create(null)
 
-// 当执行完setup函数后：编译vue模版源码template得到对应的js渲染函数
+// 当执行完setup函数后：编译vue模版源码template得到对应的js渲染函数，即得到
 function compileToFunction(
   template: string | HTMLElement,
   options?: CompilerOptions
@@ -78,6 +78,7 @@ function compileToFunction(
   )
 
   // 执行渲染源码 生成 渲染函数
+  // 同时也会执行静态节点的vnode
 
   // The wildcard import results in a huge object with every export
   // with keys that cannot be mangled, and can be quite heavy size-wise.

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Vue 3 调试</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+    .red-class {
+      color: red;
+    }
+    .blue-class {
+      color: blue;
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <span class="red" :style="myStyle" :user-info="userName" @click="handleClick">age: {{ age }} {{ $data.$dataA }}</span>
+</div>
+
+<script>console.time('Vue App')</script>
+<!-- 开发模式 -->
+<script src="../packages/vue/dist/vue.global.js"></script>
+<!-- 生产模式-->
+<!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
+<script>
+  console.log('---------- Start Demo ---------')
+
+  const {
+    createApp,
+    ref,
+    reactive,
+    onMounted,
+  } = Vue
+
+
+  const rootComponent = {
+    name: 'root-component',
+    props: {
+      hasDefault: {
+        type: Number,
+        default: 1
+      },
+      typeFunction: {
+        type: Function, // 当 type = Function
+        default: () => '默认值 就是这个函数，即default属性的值'
+      },
+      typeNotFunction: {
+        type: Number,
+        // props 为传入的有效props集合
+        default: props => 123 // 默认值是这个函数的 返回值
+      },
+      strBoolean: {
+        type: Number,
+        // default: '', // todo test 默认值应该返回为 true
+      },
+      strBoolean2: {
+        type: String,
+        default: ''
+      },
+      'a-b': String,
+      age: Number,
+      ageArray: [Number, Boolean, String],
+      ageFn: function(age) {
+        console.log('age: ', age)
+      },
+    },
+    data (){
+      return {
+        myID: '000', // 在模版中访问： myID
+        $id: '001' // 在模版中访问：$data.$id
+      }
+    },
+    // props 不可通过解构来获取对应值
+    setup(props, context ) {
+      const count = ref(0)
+      const state = reactive({ foo: 1 })
+
+      const handleClick = () => {
+        count.value++
+        state.foo++
+      }
+
+      onMounted(() => {
+        console.log(1)
+      })
+
+
+      return {
+        age: props.age,
+        handleClick,
+        myStyle: 'color: blue;',
+        userName: '小明',
+      }
+    }
+  }
+  const rootProps = {
+    key: 1,
+    age: 10,
+    // toAttrs: '这个属性会保存到 attrs，因为组件上没有接收这个属性',
+    // class: [
+    //   'class-0',
+    //   { class1: 'class-1'},
+    // ],
+    // style: [
+    //   'font-size: 12px;',
+    //   {
+    //     backgroundColor: 'blue',
+    //   }
+    // ]
+  }
+  // debugger
+  const app = createApp(rootComponent, rootProps)
+  app.config.performance = true
+  app.mount(document.querySelector('#app'))
+  // app.mount('#app')
+
+  console.log('---------- End Demo ---------')
+</script>
+
+<script>console.timeEnd('Vue App')</script>
+</body>
+</html>

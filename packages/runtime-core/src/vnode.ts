@@ -242,6 +242,8 @@ export function createBlock(
     dynamicProps,
     true /* isBlock: prevent a block from tracking itself */
   )
+
+  // 动态子节点列表
   // save current block children on the block vnode
   vnode.dynamicChildren = currentBlock || (EMPTY_ARR as any)
   // close block
@@ -318,7 +320,7 @@ export const createVNode = (__DEV__
 
 // 创建vdom
 function _createVNode(
-  type: VNodeTypes | ClassComponent | typeof NULL_DYNAMIC_COMPONENT, // type 组件
+  type: VNodeTypes | ClassComponent | typeof NULL_DYNAMIC_COMPONENT, // 节点类型
   props: (Data & VNodeProps) | null = null, // 传递给组件的props 或 组件元素节点上的dom属性列表
   children: unknown = null,
   patchFlag: number = 0,
@@ -333,6 +335,7 @@ function _createVNode(
   }
 
   if (isVNode(type)) {
+    // __v_isVNode
     // createVNode receiving an existing vnode. This happens in cases like
     // <component :is="vnode"/>
     // #2078 make sure to merge refs during the clone instead of overwriting it
@@ -353,6 +356,7 @@ function _createVNode(
   if (props) {
     // for reactive or proxy objects, we need to clone it to enable mutation.
     if (isProxy(props) || InternalObjectKey in props) {
+      // __vInternal
       props = extend({}, props)
     }
     let { class: klass, style } = props
@@ -371,20 +375,23 @@ function _createVNode(
     }
   }
 
+  // vnode 类型 - 以二进制表示
   // encode the vnode type information into a bitmap
   const shapeFlag = isString(type)
-    ? ShapeFlags.ELEMENT // 如 执行render的 createVNode
+    ? ShapeFlags.ELEMENT // 1 - 如 执行render的 createVNode
     : __FEATURE_SUSPENSE__ && isSuspense(type)
-      ? ShapeFlags.SUSPENSE
+      ? ShapeFlags.SUSPENSE // 1 << 7 = 64
       : isTeleport(type)
-        ? ShapeFlags.TELEPORT
+        ? ShapeFlags.TELEPORT // 1 << 6 = 32
         : isObject(type)
-          ? ShapeFlags.STATEFUL_COMPONENT // 当组件为一个对象时，是一个状态式组件：4
+          ? ShapeFlags.STATEFUL_COMPONENT // 1 << 2 = 4  -  vnode 类型
           : isFunction(type)
-            ? ShapeFlags.FUNCTIONAL_COMPONENT
+            ? ShapeFlags.FUNCTIONAL_COMPONENT // 1 << 1 = 2
             : 0
 
+  // 注意：组件节点 被转换为 响应式
   if (__DEV__ && shapeFlag & ShapeFlags.STATEFUL_COMPONENT && isProxy(type)) {
+    // type：reactive/readonly
     type = toRaw(type)
     warn(
       `Vue received a Component which was made a reactive object. This can ` +
@@ -398,14 +405,14 @@ function _createVNode(
 
   const vnode: VNode = {
     __v_isVNode: true,
-    [ReactiveFlags.SKIP]: true,
-    type, // 组件
-    props, // 传递给组件
-    key: props && normalizeKey(props), // 获取 props 中属性名为 key 的属性
-    ref: props && normalizeRef(props), // 获取 props 中属性名为 ref 的属性
+    [ReactiveFlags.SKIP]: true, // __v_skip
+    type, // vnode节点类型：节点 或 节点标签名 或 组件
+    props, // 传递给组件/节点的props属性列表
+    key: props && normalizeKey(props), // 节点的 key 属性
+    ref: props && normalizeRef(props), // 节点的 ref 属性
     scopeId: currentScopeId,
-    children: null,
-    component: null, // 组件的实例信息，由挂载阶段的 createComponentInstance 创建
+    children: null, // vnode 子节点列表
+    component: null, // 组件实例，由挂载阶段的 createComponentInstance 创建
     suspense: null,
     ssContent: null,
     ssFallback: null,
@@ -416,11 +423,11 @@ function _createVNode(
     target: null,
     targetAnchor: null,
     staticCount: 0,
-    shapeFlag,
+    shapeFlag, // vnode 类型
     patchFlag,
-    dynamicProps,
-    dynamicChildren: null,
-    appContext: null
+    dynamicProps, // vnode节点 动态属性列表
+    dynamicChildren: null, // vnode节点 动态子节点列表
+    appContext: null // app上下文
   }
 
   // validate key
@@ -450,7 +457,7 @@ function _createVNode(
     (patchFlag > 0 || shapeFlag & ShapeFlags.COMPONENT) &&
     // the EVENTS flag is only for hydration and if it is the only flag, the
     // vnode should not be considered dynamic due to handler caching.
-    patchFlag !== PatchFlags.HYDRATE_EVENTS
+    patchFlag !== PatchFlags.HYDRATE_EVENTS // vnode 只有这一个 patch flag，则不管
   ) {
     currentBlock.push(vnode)
   }
@@ -466,7 +473,9 @@ export function cloneVNode<T, U>(
   // This is intentionally NOT using spread or extend to avoid the runtime
   // key enumeration cost.
   const { props, ref, patchFlag, children } = vnode
+  // 合并属性
   const mergedProps = extraProps ? mergeProps(props || {}, extraProps) : props
+
   return {
     __v_isVNode: true,
     [ReactiveFlags.SKIP]: true,
@@ -538,6 +547,7 @@ function deepCloneVNode(vnode: VNode): VNode {
  * @private
  */
 export function createTextVNode(text: string = ' ', flag: number = 0): VNode {
+  // Symbol(__DEV__ ? 'Text' : undefined)
   return createVNode(Text, null, text, flag)
 }
 
@@ -597,10 +607,16 @@ export function normalizeChildren(vnode: VNode, children: unknown) {
   if (children == null) {
     children = null
   } else if (isArray(children)) {
-    type = ShapeFlags.ARRAY_CHILDREN
+    // vnode子节点为 数组
+    type = ShapeFlags.ARRAY_CHILDREN // 1 << 4 = 16
   } else if (typeof children === 'object') {
+    // vnode 子节点 只有一个 为对象格式
+
     if (shapeFlag & ShapeFlags.ELEMENT || shapeFlag & ShapeFlags.TELEPORT) {
+      // 是一个dom元素类型 或 teleport 组件
       // Normalize slot to plain children for plain element and Teleport
+
+      // 规范 teleport 组件的slot子元素列表
       const slot = (children as any).default
       if (slot) {
         // _c marker is added by withCtx() indicating this is a compiled slot
@@ -639,33 +655,39 @@ export function normalizeChildren(vnode: VNode, children: unknown) {
       type = ShapeFlags.ARRAY_CHILDREN
       children = [createTextVNode(children as string)]
     } else {
+      // 节点 为 文本
       type = ShapeFlags.TEXT_CHILDREN
     }
   }
   vnode.children = children as VNodeNormalizedChildren
-  vnode.shapeFlag |= type
+  vnode.shapeFlag |= type // 添加节点类型
 }
 
+// 合并属性
 export function mergeProps(...args: (Data & VNodeProps)[]) {
   const ret = extend({}, args[0])
   for (let i = 1; i < args.length; i++) {
     const toMerge = args[i]
     for (const key in toMerge) {
       if (key === 'class') {
+        // 合并 class
         if (ret.class !== toMerge.class) {
           ret.class = normalizeClass([ret.class, toMerge.class])
         }
       } else if (key === 'style') {
+        // 合并 style，相同属性 会被覆盖
         ret.style = normalizeStyle([ret.style, toMerge.style])
       } else if (isOn(key)) {
+        // on 开头，添加或合并事件
         const existing = ret[key]
         const incoming = toMerge[key]
         if (existing !== incoming) {
           ret[key] = existing
-            ? [].concat(existing as any, toMerge[key] as any)
-            : incoming
+            ? [].concat(existing as any, toMerge[key] as any) // 如果事件已经存在，则合并事件
+            : incoming // 事件不存在，添加进来
         }
       } else if (key !== '') {
+        // 其它属性 直接合并且覆盖
         ret[key] = toMerge[key]
       }
     }

@@ -43,6 +43,7 @@ export type EmitFn<
         }[Event]
       >
 
+// 组件实例的emit方法
 export function emit(
   instance: ComponentInternalInstance,
   event: string,

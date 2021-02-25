@@ -100,7 +100,7 @@ export function createAppContext(): AppContext {
     config: {
       isNativeTag: NO,
       performance: false,
-      globalProperties: {},
+      globalProperties: {}, // 用户自定义的全局属性
       optionMergeStrategies: {},
       isCustomElement: NO,
       errorHandler: undefined,
@@ -143,7 +143,7 @@ export function createAppAPI<HostElement>(
       _uid: uid++,
       _component: rootComponent as ConcreteComponent,
       _props: rootProps,
-      _container: null,
+      _container: null, // 挂载目标dom实例，如：#app
       _context: context,
 
       version,
@@ -261,7 +261,8 @@ export function createAppAPI<HostElement>(
             render(vnode, rootContainer)
           }
           isMounted = true
-          app._container = rootContainer
+          app._container = rootContainer // 挂在目标dom实例
+
           // for devtools and telemetry
           ;(rootContainer as any).__vue_app__ = app
 
@@ -269,6 +270,7 @@ export function createAppAPI<HostElement>(
             devtoolsInitApp(app, version)
           }
 
+          // 组件实例的上下文ctx
           return vnode.component!.proxy // ts 类型断言：后缀 '!' 排除null或undefined
         } else if (__DEV__) {
           // 开发环境下，如开发库（非*.prod.js）vue.global.js 或构建构建的 env != production
