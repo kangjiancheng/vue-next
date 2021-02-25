@@ -7,7 +7,8 @@ import {
   Renderer,
   HydrationRenderer,
   App,
-  RootHydrateFunction
+  RootHydrateFunction,
+  isRuntimeOnly
 } from '@vue/runtime-core'
 import { nodeOps } from './nodeOps'
 import { patchProp, forcePatchProp } from './patchProp'
@@ -65,6 +66,7 @@ export const createApp = ((...args) => {
   if (__DEV__) {
     // 如：检测组件name属性时，不可使用这些保留name
     injectNativeTagCheck(app)
+    injectCustomElementCheck(app)
   }
 
   // 针对客户端，增强 mount 功能
@@ -104,6 +106,7 @@ export const createSSRApp = ((...args) => {
 
   if (__DEV__) {
     injectNativeTagCheck(app)
+    injectCustomElementCheck(app)
   }
 
   const { mount } = app
@@ -124,6 +127,25 @@ function injectNativeTagCheck(app: App) {
     value: (tag: string) => isHTMLTag(tag) || isSVGTag(tag),
     writable: false
   })
+}
+
+// dev only
+function injectCustomElementCheck(app: App) {
+  if (isRuntimeOnly()) {
+    const value = app.config.isCustomElement
+    Object.defineProperty(app.config, 'isCustomElement', {
+      get() {
+        return value
+      },
+      set() {
+        warn(
+          `The \`isCustomElement\` config option is only respected when using the runtime compiler.` +
+            `If you are using the runtime-only build, \`isCustomElement\` must be passed to \`@vue/compiler-dom\` in the build setup instead` +
+            `- for example, via the \`compilerOptions\` option in vue-loader: https://vue-loader.vuejs.org/options.html#compileroptions.`
+        )
+      }
+    })
+  }
 }
 
 function normalizeContainer(
