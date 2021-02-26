@@ -481,9 +481,6 @@ function baseCreateRenderer(
     isSVG = false,
     optimized = false
   ) => {
-    // 如果 n1 与 n2 代表不同的组件，则需要卸掉 已挂载的 VNode，并重新挂载 n2
-    // 相同 直接更新 updateComponent
-
     // patching & not same type, unmount old tree
     if (n1 && !isSameVNodeType(n1, n2)) {
       anchor = getNextHostNode(n1)
@@ -1227,8 +1224,8 @@ function baseCreateRenderer(
 
   // render patch 处理 shapeFlag & ShapeFlags.COMPONENT
   const processComponent = (
-    n1: VNode | null, // dom上原先已挂载的VNode
-    n2: VNode, // 当前要挂载的VNode
+    n1: VNode | null, // 节点已挂载的VNode
+    n2: VNode, // 节点初始的VNode
     container: RendererElement, // dom实例：挂载目标dom节点
     anchor: RendererNode | null,
     parentComponent: ComponentInternalInstance | null,
@@ -1266,7 +1263,7 @@ function baseCreateRenderer(
 
   // 挂载组件：初始化组件实例、解析组件信息（props、setup返回值、render函数）、渲染组件
   const mountComponent: MountComponentFn = (
-    initialVNode, // 组件的VNode
+    initialVNode, // 组件初始VNode
     container, // dom实例：挂载目标dom节点
     anchor,
     parentComponent,

@@ -116,11 +116,14 @@ const cacheStringFunction = <T extends (str: string) => string>(fn: T): T => {
 
 const camelizeRE = /-(\w)/g
 /**
- * 转换为小驼峰：camelCase
+ * 短横线 转换为 小驼峰：camelCase
  * @private
  */
 export const camelize = cacheStringFunction(
   (str: string): string => {
+    // _ : 匹配到的字符串
+    // c : 捕获组1
+    // 表示把 捕获组c 进行 首字母大写，返回并替换 匹配到的字符串 _
     return str.replace(camelizeRE, (_, c) => (c ? c.toUpperCase() : ''))
   }
 )

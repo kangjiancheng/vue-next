@@ -131,21 +131,26 @@ export type NormalizedPropsOptions = [NormalizedProps, string[]] | []
 /**
  * 生成有效的props: 结合组件所定义的props属性 和 传进给组件的props
  * 生成有效的props和attrs 即接收传进来的props，并进行类型校验、默认值处理等
+ *
+ * props: 赋值后 的组件对象props属性选项
+ * attrs: 未声明 - 在 vnode props中 但未在 组件对象props、emits属性选项
  */
 export function initProps(
-  instance: ComponentInternalInstance,
-  rawProps: Data | null, // 传给组件的props：rootProps（非组件上的props属性）
+  instance: ComponentInternalInstance, // 组件实例
+  rawProps: Data | null, // 组件vnode的props
   isStateful: number, // result of bitwise flag comparison
   isSSR = false
 ) {
-  const props: Data = {} // 存储传进来的props的值，这些props是在组件上已经声明了
-  const attrs: Data = {} // 存储没有声明的props（虽然确实传递了，当 组件的props属性里 没有声明校验）
+  const props: Data = {} // 保存 在组件props属性选项里的 vnode props属性，即 已经赋值后 的组件prop属性选项
+  const attrs: Data = {} // 不在组件props属性选项里 也不在组件emits属性选项里 的 vnode props属性
+
   // 设定 attrs.__vInternal = 1
   def(attrs, InternalObjectKey, 1)
 
-  // 将传进组件的props 与 组件所定义的props列表 进行对比
+  // 将 vnode的props 与 其所定义的props选项 进行对比
   // 设置组件接收到的 props 和 attrs，并设置props的默认值
   setFullProps(instance, rawProps, props, attrs)
+
   // validation
   if (__DEV__) {
     // 开发环境验证，验证prop的 required、type、validator
@@ -278,49 +283,52 @@ export function updateProps(
   }
 }
 
-// 将传进组件上的 props的值 保存起来到props和attrs，同时设置props的默认值
+// 将 组件vnode的props 划分为：props、attrs，并进行最终赋值和设置默认值
 function setFullProps(
   instance: ComponentInternalInstance,
-  rawProps: Data | null, // 传给组件的props：如rootProps（非组件上的props属性）
-  props: Data, // 存储组件接收到的props，已经进行类型检测、默认值处理、赋值操作等。
-  attrs: Data // 存储 那些传给组件但组件未定义 的props属性
+  rawProps: Data | null, // 组件vnode的props 即组件节点dom元素 上的属性
+  props: Data, // 存储 组件接收到的props，已经进行类型检测、默认值处理、赋值操作等。
+  attrs: Data // 存储 vnode.props中存在 但 组件props属性选项中不存在 的属性
 ) {
-  // options 为规范后的组件所定义的 props 属性
-  // instance.propsOptions 为组件上的 __props
+  // options - 组件 props 属性选项
   const [options, needCastKeys] = instance.propsOptions
+
+  // prop属性赋值
+
   if (rawProps) {
-    // 传入的 props
     for (const key in rawProps) {
-      const value = rawProps[key]
-      // 不处理vue 保留的关键 prop key，如：key、ref、或空字符串key，即不能传入这些到组件
+      const value = rawProps[key] // vnode prop属性值
+
       // key, ref are reserved and never passed down
       if (isReservedProp(key)) {
+        // 不处理vue 保留的关键 prop key，如：key、ref、或空字符串key，即不能传入这些到组件
         continue
       }
+
       // prop option names are camelized during normalization, so to support
       // kebab -> camel conversion here we need to camelize the key.
       let camelKey
       if (options && hasOwn(options, (camelKey = camelize(key)))) {
-        // '传给组件的props' 如果在 '组件定义的props里' 则赋值保存到有效的props
+        // '组件vnode的props' 如果在 '组件定义的props选项里' 则赋值保存到有效的props
         props[camelKey] = value
       } else if (!isEmitListener(instance.emitsOptions, key)) {
-        // '传入给组件的props' 如果不在 '组件的校验props里'，同时也不是一个emit事件， 则赋值保存到attrs
+        // 不在组件props属性选项里 也不在组件emits属性选项里
         attrs[key] = value
       }
     }
   }
 
-  // boolean类型或有默认值
-  if (needCastKeys) {
-    const rawCurrentProps = toRaw(props) // 首次还是不变，即还是当前这个值
+  // 进一步完善prop属性赋值：boolean类型或默认值
 
-    // 针对 可以需要校验为boolean 类型 或有默认值的prop
+  if (needCastKeys) {
+    const rawCurrentProps = toRaw(props)
+
     for (let i = 0; i < needCastKeys.length; i++) {
+      // prop属性的类型 存在 boolean类型或默认值
       const key = needCastKeys[i]
-      // 设置prop的默认值
       props[key] = resolvePropValue(
-        options!, // 排除undefined/null
-        rawCurrentProps,
+        options!, // 组件props属性选项
+        rawCurrentProps, // 存储组件的有效props
         key, // 传入的prop，
         rawCurrentProps[key], // 传入的 prop的值
         instance
@@ -329,47 +337,50 @@ function setFullProps(
   }
 }
 
-// 处理带有默认值的props 或 Boolean类型校验
+// 解析组件props属性选项 - 存在 boolean类型或默认值，并进行校验和赋值
 function resolvePropValue(
-  options: NormalizedProps,
+  options: NormalizedProps, // props属性选项
   props: Data, // 处理后的有效props，带实际值，即传进组件的prop并在组件里声明了
-  key: string, // needCastKeys[i]
-  value: unknown, // 传入的 prop的值
+  key: string, // 存在 boolean类型或默认值 的属性
+  value: unknown, // vnode 的props属性 prop value
   instance: ComponentInternalInstance
 ) {
   const opt = options[key] // 组件上声明的prop
+
+  // 默认值
+
   if (opt != null) {
     const hasDefault = hasOwn(opt, 'default')
-    // default values，设置prop的默认值
+
+    // 有默认值，但vnode上不传递
     if (hasDefault && value === undefined) {
       const defaultValue = opt.default
-      /**
-       * prop的默认值，即当default属性值是函数时，需要根据type 是否是 Function
-       *  是 - prop的默认值是这个 default函数，
-       *  不是 - prop的默认值是这个 default函数的返回值
-       */
+
       if (opt.type !== Function && isFunction(defaultValue)) {
-        // default属性值虽然是一个函数，但prop的默认值实际是这个函数的返回值
+        // 默认属性值 - 函数返回值
         setCurrentInstance(instance)
         value = defaultValue(props)
         setCurrentInstance(null)
       } else {
-        // value 是一个基本类型 或是一个函数（type 需定义为 Function）
+        // 默认属性值
+        // 默认值为一个函数：当 type = Function 时，说明该属性prop的 默认值 就是 一个函数
         value = defaultValue
       }
     }
+
+    // boolean 类型默认值
+
     // boolean casting
-    // 进一步处理默认值，处理boolean类型的默认值
     if (opt[BooleanFlags.shouldCast]) {
+      // 不在 vnode props 中，同时没有默认值
       if (!hasOwn(props, key) && !hasDefault) {
-        // 没有向组件传入这个 Boolean prop，且这个组件也没为这个prop设置默认值
         value = false
       } else if (
         opt[BooleanFlags.shouldCastTrue] &&
-        (value === '' || value === hyphenate(key))
+        (value === '' || value === hyphenate(key)) // 横线分割第一个大写字母
       ) {
         // opt[BooleanFlags.shouldCastTrue] = true 此时：
-        // opt.type 不是String类型 或 或String比Boolean类型 声明偏后
+        // opt.type 不存在String类型 或 或String比Boolean类型 声明偏后
         value = true
       }
     }
@@ -378,9 +389,10 @@ function resolvePropValue(
   return value
 }
 
-// 规范 组件的props属性 格式
+// normalized - 规范 组件的props属性选项，如 转换小驼峰、解析属性类型type
+// needCastKeys - 收集需要 存在boolean类型或默认值 的属性
 export function normalizePropsOptions(
-  comp: ConcreteComponent, // 根组件
+  comp: ConcreteComponent, // 组件对象
   appContext: AppContext, // app 上下文
   asMixin = false
 ): NormalizedPropsOptions {
@@ -388,12 +400,15 @@ export function normalizePropsOptions(
     return comp.__props
   }
 
-  const raw = comp.props // 组件所定义的props
-  const normalized: NormalizedPropsOptions[0] = {}
-  const needCastKeys: NormalizedPropsOptions[1] = []
+  const raw = comp.props // 组件的props选项属性
+  const normalized: NormalizedPropsOptions[0] = {} // 规范后的属性选项列表，如 转换小驼峰、解析属性类型type
+  const needCastKeys: NormalizedPropsOptions[1] = [] // 存在 boolean类型或默认值 的属性选项列表
+
+  // 合并 组件的 mixins属性选项 和 extends属性选项
 
   // apply mixin/extends props
   let hasExtends = false
+  // isBundlerESMBuild ? `__VUE_OPTIONS_API__` : true,
   if (__FEATURE_OPTIONS_API__ && !isFunction(comp)) {
     const extendProps = (raw: ComponentOptions) => {
       hasExtends = true
@@ -422,47 +437,68 @@ export function normalizePropsOptions(
     // 转换为 对象格式：props: { age: {}, name: {} }
     for (let i = 0; i < raw.length; i++) {
       if (__DEV__ && !isString(raw[i])) {
+        // props 为数组格式时，每个属性都必须是 字符串
         warn(`props must be strings when using array syntax.`, raw[i])
       }
+      // 短横线转为小驼峰：'user-name' =》 'userName'
       const normalizedKey = camelize(raw[i])
+      // 禁止 '$' 开头
       if (validatePropName(normalizedKey)) {
+        // 格式化为 对象形式，如 normalized: { userName: {} }
         normalized[normalizedKey] = EMPTY_OBJ
       }
     }
   } else if (raw) {
-    // props 必须是 对象格式，如 props: { age: Number, name: String }
-    // comp.__props: normalized 内部规范: age : {0: false, 1: true, type: Number}
+    // 针对对象形式的props，如 props: { age: Number }
+    // 最终转换结果：comp.__props，即 normalized: { age: {0: false, 1: true, type: Number} }
+
     if (__DEV__ && !isObject(raw)) {
+      // props 必须是 对象格式
       warn(`invalid props options`, raw)
     }
+
+    // 处理props每个属性
     for (const key in raw) {
-      // camelCase 小驼峰
-      const normalizedKey = camelize(key)
-      // props不能已$开头
+      // raw 即 组件的 props 属性选项
+
+      const normalizedKey = camelize(key) // camelCase 小驼峰
+
       if (validatePropName(normalizedKey)) {
-        // 进一步规范prop的值
-        const opt = raw[key] // prop 的类型值
-        // 调整prop格式，赋值type
-        // 正常格式 如 prop: { type: Number, default: 123 }
-        // prop: Boolean => prop: { type: Boolean }
+        // props不能已$开头
+
+        // key - 属性选项名
+        // opt - 属性选项值
+        const opt = raw[key]
+
+        // 规范属性值
+
+        // 解析 属性类型 type，如下
+        // 如 props: { age: { type: Number, default: 123 } }  // 正确的规范格式
+        // 如 props: { age: Number }   规范后为  age: { type: Number }
+        // 如 props: { age: [Number, String] }   规范后为  age: { type: [Number, String] }
         const prop: NormalizedProp = (normalized[normalizedKey] =
           isArray(opt) || isFunction(opt) ? { type: opt } : opt)
 
         if (prop) {
-          // 如果prop值存在（注意正常情况下，prop接收的是一个类型值）
-          // 分3种情况处理：数组、函数、其它
-          // 数组时，返回Boolean类型的索引，函数返回0，其它返回 1
-          const booleanIndex = getTypeIndex(Boolean, prop.type) // 判断是否是Boolean类型（可以函数或是数组） 返回 Boolean 的位置
-          const stringIndex = getTypeIndex(String, prop.type) // 返回 String 在数组中的位置
+          // 获取prop属性类型列表中的 Boolean 类型的位置
+          const booleanIndex = getTypeIndex(Boolean, prop.type)
+
+          // 获取prop属性类型列表中的 String 类型的位置
+          const stringIndex = getTypeIndex(String, prop.type)
 
           // 为了处理 类型为Boolean的默认值
-          prop[BooleanFlags.shouldCast] = booleanIndex > -1 // prop[0]  true，表明有Boolean类型，为了将默认值转换为 false
+
+          // prop[0] true - 表示 存在Boolean类型，为了将 默认值 转换为 false
+          prop[BooleanFlags.shouldCast] = booleanIndex > -1
+
+          // prop[1] true - 表示 不存在 String 类型 或 存在但比 Boolean 靠后
+          // 之后 在解析属性赋值时，将其设置为 true
           prop[BooleanFlags.shouldCastTrue] =
-            stringIndex < 0 || booleanIndex < stringIndex // prop[1] true，String 类型不存在 或 存在且比 Boolean 靠后
+            stringIndex < 0 || booleanIndex < stringIndex
 
           // if the prop needs boolean casting or default value
           if (booleanIndex > -1 || hasOwn(prop, 'default')) {
-            // prop是 boolean 类型 或有默认值
+            // 存在 boolean类型或默认值
             needCastKeys.push(normalizedKey)
           }
         }

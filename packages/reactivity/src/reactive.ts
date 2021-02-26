@@ -50,10 +50,18 @@ function targetTypeMap(rawType: string) {
   }
 }
 
+// 获取目标的类型分类
 function getTargetType(value: Target) {
+  // isExtensible 表示是否可以在对象上 添加新属性，默认 为 true
+  // https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Object/isExtensible
+  // 禁止扩展：
+  //    1、Object.preventExtensions(value)
+  //    2、密封对象 - var sealed = Object.seal(value)，
+  //    3、冻结对象 - var frozen = Object.freeze(value)，
+
   return value[ReactiveFlags.SKIP] || !Object.isExtensible(value)
     ? TargetType.INVALID
-    : targetTypeMap(toRawType(value))
+    : targetTypeMap(toRawType(value)) // 获取value类型, 并对value类型 进行归类：TargetType.COMMON、COLLECTION、INVALID
 }
 
 // only unwrap nested ref
@@ -101,13 +109,12 @@ export function reactive(target: object) {
  * root level).
  */
 export function shallowReactive<T extends object>(target: T): T {
-  // 浅层次的 reactive
-
+  // 创建target 代理proxy响应式d对象
   return createReactiveObject(
     target,
-    false,
-    shallowReactiveHandlers,
-    shallowCollectionHandlers
+    false, // reactiveMap
+    shallowReactiveHandlers, // TargetType.COMMON，即target 类型为：Array、Object
+    shallowCollectionHandlers // TargetType.COLLECTION，即target 类型为：Map、Set、WeakMap、WeakSet
   )
 }
 
@@ -165,11 +172,12 @@ export function shallowReadonly<T extends object>(
   )
 }
 
+// 创建 target 的 代理proxy
 function createReactiveObject(
   target: Target,
   isReadonly: boolean,
-  baseHandlers: ProxyHandler<any>,
-  collectionHandlers: ProxyHandler<any>
+  baseHandlers: ProxyHandler<any>, // TargetType.COMMON，即target 类型为：Array、Object
+  collectionHandlers: ProxyHandler<any> // TargetType.COLLECTION，即target 类型为：Map、Set、WeakMap、WeakSet
 ) {
   if (!isObject(target)) {
     if (__DEV__) {
@@ -186,7 +194,7 @@ function createReactiveObject(
     return target
   }
   // target already has corresponding Proxy
-  const proxyMap = isReadonly ? readonlyMap : reactiveMap
+  const proxyMap = isReadonly ? readonlyMap : reactiveMap // 收集只读、响应式
   const existingProxy = proxyMap.get(target)
   if (existingProxy) {
     return existingProxy
@@ -219,10 +227,9 @@ export function isProxy(value: unknown): boolean {
   return isReactive(value) || isReadonly(value)
 }
 
-// 转换为 __v_raw
 export function toRaw<T>(observed: T): T {
   return (
-    (observed && toRaw((observed as Target)[ReactiveFlags.RAW])) || observed // observed.__v_raw = observed
+    (observed && toRaw((observed as Target)[ReactiveFlags.RAW])) || observed
   )
 }
 

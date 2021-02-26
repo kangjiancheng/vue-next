@@ -415,8 +415,8 @@ export function createComponentInstance(
     (parent ? parent.appContext : vnode.appContext) || emptyAppContext
 
   const instance: ComponentInternalInstance = {
-    uid: uid++,
-    vnode,
+    uid: uid++, // 组件ID
+    vnode, // 组件vnode
     type, // 即组件对象
     parent,
     appContext, // app 上下文
@@ -438,7 +438,7 @@ export function createComponentInstance(
     directives: null,
 
     // resolved props and emits options
-    // 规范 组件的props 属性格式，如转换为小驼峰、props不能已$开头，结果赋值给type.__props
+    // 规范 组件的props选项格式，如转换为小驼峰、props不能已$开头、解析prop属性类型type
     propsOptions: normalizePropsOptions(type, appContext),
     emitsOptions: normalizeEmitsOptions(type, appContext),
 
@@ -537,8 +537,7 @@ export function setupComponent(
   // 组件式：4
   const isStateful = isStatefulComponent(instance)
 
-  // 组件vnode节点的props（在初始化组件实例时，已经规范了组件的props格式)
-  // 设置组件实际接收的props、attrs，并进行props的类型检查、默认值处理等
+  // 初始化组件实例的props，即得到最终真正有效的props、attrs 并进行props的类型检查、默认值处理等
   initProps(instance, props, isStateful, isSSR)
 
   // TODO: analyze - slots

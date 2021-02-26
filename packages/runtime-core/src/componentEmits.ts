@@ -150,6 +150,7 @@ export function emit(
   }
 }
 
+// 规范 组件的 emits 选项
 export function normalizeEmitsOptions(
   comp: ConcreteComponent,
   appContext: AppContext,
@@ -184,7 +185,9 @@ export function normalizeEmitsOptions(
     return (comp.__emits = null)
   }
 
+  // 规范例子：https://v3.cn.vuejs.org/api/options-data.html#emits
   if (isArray(raw)) {
+    // 数组形式转换为对象形式，校验函数默认为null
     raw.forEach(key => (normalized[key] = null))
   } else {
     extend(normalized, raw)
@@ -192,11 +195,12 @@ export function normalizeEmitsOptions(
   return (comp.__emits = normalized)
 }
 
+// 判断是否是组件emits里的事件属性
 // Check if an incoming prop key is a declared emit event listener.
 // e.g. With `emits: { click: null }`, props named `onClick` and `onclick` are
 // both considered matched listeners.
 export function isEmitListener(
-  options: ObjectEmitsOptions | null,
+  options: ObjectEmitsOptions | null, // 组件的emits属性选项
   key: string
 ): boolean {
   if (!options || !isOn(key)) {
