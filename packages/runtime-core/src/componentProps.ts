@@ -159,7 +159,7 @@ export function initProps(
 
   if (isStateful) {
     // stateful：状态式组件 component
-    // 浏览器环境下，对props进行响应式处理
+    // 浏览器环境下，对props进行响应式proxy拦截处理
     instance.props = isSSR ? props : shallowReactive(props)
   } else {
     if (!instance.type.props) {
