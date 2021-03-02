@@ -437,6 +437,7 @@ function baseCreateRenderer(
   // 打包构建工具
   // compile-time feature flags check
   if (__ESM_BUNDLER__ && !__TEST__) {
+    // 向全局环境 注入 当前开发环境标记
     initFeatureFlags()
   }
 
@@ -472,9 +473,9 @@ function baseCreateRenderer(
   // Note: functions inside this closure should use `const xxx = () => {}`
   // style in order to prevent being inlined by minifiers.
   const patch: PatchFn = (
-    n1, // 节点渲染后的vnode
-    n2, // 节点初始的vnode
-    container, // dom实例：挂载目标dom实例
+    n1, // 旧vnode：dom节点已渲染的vnode
+    n2, // 新vnode：dom节点将渲染的vnode
+    container, // dom节点：挂载目标dom实例
     anchor = null,
     parentComponent = null,
     parentSuspense = null,
@@ -483,6 +484,8 @@ function baseCreateRenderer(
   ) => {
     // patching & not same type, unmount old tree
     if (n1 && !isSameVNodeType(n1, n2)) {
+      // 如果新旧vnode不一样，则需要卸载旧节点
+
       anchor = getNextHostNode(n1)
       unmount(n1, parentComponent, parentSuspense, true)
       n1 = null
@@ -494,7 +497,7 @@ function baseCreateRenderer(
       n2.dynamicChildren = null
     }
 
-    // 根据节点vnode的不同类别，开始解析vnode
+    // 要进行patch的dom节点类型
     const { type, ref, shapeFlag } = n2
     switch (type) {
       case Text:
@@ -1222,7 +1225,7 @@ function baseCreateRenderer(
     }
   }
 
-  // render patch 处理 shapeFlag & ShapeFlags.COMPONENT
+  // 挂载/更新 组件dom节点
   const processComponent = (
     n1: VNode | null, // 节点已挂载的VNode
     n2: VNode, // 节点初始的VNode
@@ -1234,6 +1237,8 @@ function baseCreateRenderer(
     optimized: boolean
   ) => {
     if (n1 == null) {
+      // 旧vnode不存在 - 即 当前要patch的dom组件节点为 新节点，初次进行挂载
+
       // shapeFlag = 1 << 9
       if (n2.shapeFlag & ShapeFlags.COMPONENT_KEPT_ALIVE) {
         ;(parentComponent!.ctx as KeepAliveContext).activate(
@@ -1244,7 +1249,7 @@ function baseCreateRenderer(
           optimized
         )
       } else {
-        // 开始 渲染组件
+        // 开始 解析组件信息，并挂载到dom上
         mountComponent(
           n2,
           container,
@@ -1256,14 +1261,14 @@ function baseCreateRenderer(
         )
       }
     } else {
-      // n1 n2 代表同一个组件，更新组件
+      // 旧vnode存在 - 即 当前要patch的dom组件节点 已经挂载着vnode，只需要更新相应变化信息
       updateComponent(n1, n2, optimized)
     }
   }
 
-  // 挂载组件：初始化组件实例、解析组件信息（props、setup返回值、render函数）、渲染组件
+  // 挂载组件节点：初始化组件实例、解析组件信息（props、setup返回值、render函数）、渲染组件
   const mountComponent: MountComponentFn = (
-    initialVNode, // 组件初始VNode
+    initialVNode, // 组件的新VNode
     container, // dom实例：挂载目标dom节点
     anchor,
     parentComponent,

@@ -106,6 +106,7 @@ const normalizeVNodeSlots = (
   instance.slots.default = () => normalized
 }
 
+// 设置组件节点 slots节点列表
 export const initSlots = (
   instance: ComponentInternalInstance,
   children: VNodeNormalizedChildren

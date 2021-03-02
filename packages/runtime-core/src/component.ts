@@ -401,7 +401,7 @@ const emptyAppContext = createAppContext()
 
 let uid = 0
 
-// 挂载前 mountComponent 时，初始化 组件实例信息
+// 挂载前 mountComponent 时，初始化组件实例信息
 export function createComponentInstance(
   vnode: VNode, // 组件初始化的vnode
   parent: ComponentInternalInstance | null,
@@ -438,7 +438,7 @@ export function createComponentInstance(
     directives: null,
 
     // resolved props and emits options
-    // 规范 组件的props选项格式，如转换为小驼峰、props不能已$开头、解析prop属性类型type
+    // 规范 组件的props属性选项格式，如转换为小驼峰、props不能已$开头、解析prop属性类型type、合并mixins里的props属性选项
     propsOptions: normalizePropsOptions(type, appContext),
     emitsOptions: normalizeEmitsOptions(type, appContext),
 
@@ -540,7 +540,7 @@ export function setupComponent(
   // 初始化组件实例的props，即得到最终真正有效的props、attrs 并进行props的类型检查、默认值处理等
   initProps(instance, props, isStateful, isSSR)
 
-  // TODO: analyze - slots
+  // 初始化组件实例的slots列表
   initSlots(instance, children)
 
   // setup 方法的返回值
@@ -551,27 +551,27 @@ export function setupComponent(
   return setupResult
 }
 
-// 设置setup方法的返回到组件实例上，并设置组件实例的render方法
+// 设置组件setup数据，并设置组件的render方法
 function setupStatefulComponent(
   instance: ComponentInternalInstance, // 组件实例信息
   isSSR: boolean
 ) {
-  // 组件对象
   const Component = instance.type as ComponentOptions
 
+  // 组件对象的属性名校验
   if (__DEV__) {
-    // 组件名 不可使用保留的关键字符串命名
+    // 组件名  -  不可使用保留的关键字符串命名
     if (Component.name) {
       validateComponentName(Component.name, instance.appContext.config)
     }
-    // 子组件名 不可使用保留的关键字符串命名
+    // 子组件名  -  不可使用保留的关键字符串命名
     if (Component.components) {
       const names = Object.keys(Component.components)
       for (let i = 0; i < names.length; i++) {
         validateComponentName(names[i], instance.appContext.config)
       }
     }
-    // 自定义指令名不能与官方内置指令一样：v-if、v-show...
+    // 自定义指令名  -  不能与官方内置指令一样：v-if、v-show...
     if (Component.directives) {
       const names = Object.keys(Component.directives)
       for (let i = 0; i < names.length; i++) {
@@ -580,16 +580,16 @@ function setupStatefulComponent(
     }
   }
 
-  // 缓存所访问属性的范围，如：props、data、setup、组件上下文context
+  // 缓存 相关属性归属 的范围  -  props、data、setup、组件上下文context
   instance.accessCache = Object.create(null) // 属性的所属范围
 
   // 拦截 instance.ctx 的访问get、设置set、判断has
   // get: data、setupState、props、全局属性、组件实例公开属性与方法 等等
   instance.proxy = new Proxy(instance.ctx, PublicInstanceProxyHandlers)
 
-  // 绑定 props
+  // 将组件的props选项列表添加到组件实例上下文ctx
   if (__DEV__) {
-    // 绑定 组件props选项列表，并返回对应在 组件节点vnode的props属性上的值
+    // 绑定 组件props选项列表，并返回实际有效的props属性（已规范并赋值）
     exposePropsOnRenderContext(instance)
   }
 
@@ -739,7 +739,7 @@ function finishComponentSetup(
       // 编译vue源码模版template 得到 render函数
       Component.render = compile(Component.template, {
         isCustomElement: instance.appContext.config.isCustomElement, // 用户自定义元素的方法
-        delimiters: Component.delimiters // 用户自定义的插值列表，如： ['{{', '}}']
+        delimiters: Component.delimiters // 用户自定义的插值模版，如： ['{{', '}}']
       })
       if (__DEV__) {
         endMeasure(instance, `compile`)

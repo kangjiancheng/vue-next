@@ -405,7 +405,6 @@ export function normalizePropsOptions(
   const needCastKeys: NormalizedPropsOptions[1] = [] // 存在 boolean类型或默认值 的属性选项列表
 
   // 合并 组件的 mixins属性选项 和 extends属性选项
-
   // apply mixin/extends props
   let hasExtends = false
   // isBundlerESMBuild ? `__VUE_OPTIONS_API__` : true,

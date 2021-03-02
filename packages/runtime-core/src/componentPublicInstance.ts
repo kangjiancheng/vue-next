@@ -286,7 +286,7 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
             return setupState[key]
           case AccessTypes.DATA: // 在data 中定义的属性
             return data[key]
-          case AccessTypes.CONTEXT: // 上下文属性
+          case AccessTypes.CONTEXT: // 上下文属性：如全局属性
             return ctx[key]
           case AccessTypes.PROPS: // 组件接收到的有效props，已经进行类型、默认值处理，同时也赋值了。
             return props![key]
@@ -461,6 +461,7 @@ export const RuntimeCompiledPublicInstanceProxyHandlers = extend(
     get(target: ComponentRenderContext, key: string) {
       // fast path for unscopables when using `with` block
       if ((key as any) === Symbol.unscopables) {
+        // 在with作用域下，排除在原型链上的属性，如 直接读出with里的ctx上属性
         return
       }
       return PublicInstanceProxyHandlers.get!(target, key, target)
@@ -537,7 +538,7 @@ export function exposePropsOnRenderContext(
       Object.defineProperty(ctx, key, {
         enumerable: true,
         configurable: true,
-        get: () => instance.props[key], // 组件节点vnode的props属性上的值
+        get: () => instance.props[key], // 组件节点vnode的props属性上的值（已规范并赋值）
         set: NOOP
       })
     })

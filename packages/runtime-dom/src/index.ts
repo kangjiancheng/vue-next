@@ -89,8 +89,7 @@ export const createApp = ((...args) => {
     // 清空 挂载目标dom 已存在的内容
     container.innerHTML = ''
 
-    // 执行 mount
-    // proxy: 组件实例instance的上下文ctx
+    // 执行 mount，返回组件实例上下文ctx
     const proxy = mount(container)
     if (container instanceof Element) {
       container.removeAttribute('v-cloak') // 移除元素标签上的 v-clock 指令属性
