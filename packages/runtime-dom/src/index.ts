@@ -90,7 +90,7 @@ export const createApp = ((...args) => {
     container.innerHTML = ''
 
     // 执行 mount，返回组件实例上下文ctx
-    const proxy = mount(container)
+    const proxy = mount(container, false, container instanceof SVGElement)
     if (container instanceof Element) {
       container.removeAttribute('v-cloak') // 移除元素标签上的 v-clock 指令属性
       container.setAttribute('data-v-app', '') // 添加元素标签属性：<div id="app" data-v-app>...</div>
@@ -113,7 +113,7 @@ export const createSSRApp = ((...args) => {
   app.mount = (containerOrSelector: Element | ShadowRoot | string): any => {
     const container = normalizeContainer(containerOrSelector)
     if (container) {
-      return mount(container, true)
+      return mount(container, true, container instanceof SVGElement)
     }
   }
 

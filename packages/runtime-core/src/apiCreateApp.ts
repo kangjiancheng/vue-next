@@ -27,7 +27,8 @@ export interface App<HostElement = any> {
   directive(name: string, directive: Directive): this
   mount(
     rootContainer: HostElement | string,
-    isHydrate?: boolean
+    isHydrate?: boolean,
+    isSVG?: boolean
   ): ComponentPublicInstance
   unmount(): void
   provide<T>(key: InjectionKey<T> | string, value: T): this
@@ -230,7 +231,11 @@ export function createAppAPI<HostElement>(
 
       // 基本挂载方法
       // 在不同情景下实现各自的功能：客户端版的mount方法会在入口重新初始化
-      mount(rootContainer: HostElement, isHydrate?: boolean): any {
+      mount(
+        rootContainer: HostElement,
+        isHydrate?: boolean,
+        isSVG?: boolean
+      ): any {
         // isMounted 避免对同一个Vue.createApp()结果, 即同一个app 多次调用mount()
         // 当然 可以重新 createApp 一个app，然后再调用mount
         if (!isMounted) {
@@ -248,7 +253,7 @@ export function createAppAPI<HostElement>(
           // 开发模式下，HMR root reload 热更新，重新渲染
           if (__DEV__) {
             context.reload = () => {
-              render(cloneVNode(vnode), rootContainer)
+              render(cloneVNode(vnode), rootContainer, isSVG)
             }
           }
 
@@ -258,7 +263,7 @@ export function createAppAPI<HostElement>(
             hydrate(vnode as VNode<Node, Element>, rootContainer as any)
           } else {
             // 浏览器
-            render(vnode, rootContainer)
+            render(vnode, rootContainer, isSVG)
           }
           isMounted = true
           app._container = rootContainer // 挂在目标dom实例
