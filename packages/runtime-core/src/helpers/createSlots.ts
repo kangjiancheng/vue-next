@@ -7,15 +7,46 @@ interface CompiledSlotDescriptor {
 }
 
 /**
+ * 创建组件的子元素列表
  * Compiler runtime helper for creating dynamic slots object
  * @private
  */
+// 如：<hello-world user-name="小明">welcome to home! <template v-slot:header v-if="false">111</template></hello-world>
+// render code:
+// const _Vue = Vue
+// const { createVNode: _createVNode, createTextVNode: _createTextVNode } = _Vue
+//
+// const _hoisted_1 = /*#__PURE__*/_createTextVNode("welcome to home! ")
+// const _hoisted_2 = /*#__PURE__*/_createTextVNode("111")
+//
+// return function render(_ctx, _cache) {
+//   with (_ctx) {
+//     const { createTextVNode: _createTextVNode, resolveComponent: _resolveComponent, withCtx: _withCtx, createSlots: _createSlots, createVNode: _createVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
+//
+//     const _component_hello_world = _resolveComponent("hello-world")
+//
+//     return (_openBlock(), _createBlock(_component_hello_world, { "user-name": "小明" }, _createSlots({
+//       default: _withCtx(() => [
+//         _hoisted_1
+//       ]),
+//       _: 2 /* DYNAMIC */
+//     }, [
+//       false
+//         ? {
+//             name: "header",
+//             fn: _withCtx(() => [
+//               _hoisted_2
+//             ])
+//           }
+//         : undefined
+//     ]), 1024 /* DYNAMIC_SLOTS */))
+//   }
+// }
+// 处理动态slot列表
 export function createSlots(
-  slots: Record<string, Slot>,
-  dynamicSlots: (
-    | CompiledSlotDescriptor
-    | CompiledSlotDescriptor[]
-    | undefined)[]
+  slots: Record<string, Slot>, // 静态slots列表对象
+  dynamicSlots: (// 动态slots列表
+  CompiledSlotDescriptor | CompiledSlotDescriptor[] | undefined)[]
 ): Record<string, Slot> {
   for (let i = 0; i < dynamicSlots.length; i++) {
     const slot = dynamicSlots[i]

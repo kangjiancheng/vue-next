@@ -13,7 +13,9 @@
   </style>
 </head>
 <body>
-<div id="app"></div>
+<div id="app">
+  <hello-world user-name="小明">welcome to home! <template v-slot:header v-if="true">111</template></hello-world>
+</div>
 
 <!-- 开发模式 -->
 <script src="../packages/vue/dist/vue.global.js"></script>
@@ -39,11 +41,6 @@
     components: {
       HelloWorld,
     },
-    template: `
-      <hello-world>
-        <template v-slot:default="slotProps">{{ slotProps.text }}</template>
-      </hello-world>
-    `,
     props: {
       age: Number,
       sex: {
@@ -76,19 +73,16 @@
 
       return {
         age: props.age,
-        isHeader: true,
+        fixHeader: 'fix-header',
         handleClick,
-        helloMsg: '你好，小朋友！'
       }
     }
   }
-  var rootModel = '哈哈哈'
   const rootProps = {
     key: 1,
     id: 11,
     age: 10,
     sex: 'boy',
-    "onUpdate:modelValue": $event => (rootModel = $event),
     classProps: {
       red: 'red-bg',
       weight: 'font-weight',

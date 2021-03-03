@@ -186,6 +186,32 @@ let currentBlock: VNode[] | null = null
  * @private
  */
 export function openBlock(disableTracking = false) {
+  // <div id="app">
+  //   <div class="demo-base" :class="fixHeader">
+  //     <button class="btn-click" @click="handleClick">点击</button>
+  //     <component :is="HelloWorld" />
+  //   </div>
+  // </div>
+  //
+  // render code 如下:
+  //
+  // "const _Vue = Vue
+  //
+  // return function render(_ctx, _cache) {
+  //   with (_ctx) {
+  //     const { createVNode: _createVNode, resolveDynamicComponent: _resolveDynamicComponent, openBlock: _openBlock, createBlock: _createBlock } = _Vue
+  //
+  //     return (_openBlock(), _createBlock("div", {
+  //       class: ["demo-base", fixHeader]
+  //     }, [
+  //       _createVNode("button", {
+  //         class: "btn-click",
+  //         onClick: handleClick
+  //       }, "点击", 8 /* PROPS */, ["onClick"]),
+  //       (_openBlock(), _createBlock(_resolveDynamicComponent(HelloWorld)))
+  //     ], 2 /* CLASS */))
+  //   }
+  // }"
   blockStack.push((currentBlock = disableTracking ? null : []))
 }
 
@@ -234,6 +260,7 @@ export function createBlock(
   patchFlag?: number,
   dynamicProps?: string[]
 ): VNode {
+  // 创建一个 根vnode
   const vnode = createVNode(
     type,
     props,
@@ -320,7 +347,7 @@ export const createVNode = (__DEV__
 
 // 创建vdom
 function _createVNode(
-  type: VNodeTypes | ClassComponent | typeof NULL_DYNAMIC_COMPONENT, // 节点类型
+  type: VNodeTypes | ClassComponent | typeof NULL_DYNAMIC_COMPONENT, // 节点类型：节点标签名、组件对象等
   props: (Data & VNodeProps) | null = null, // 传递给组件的props 或 组件元素节点上的dom属性列表
   children: unknown = null,
   patchFlag: number = 0,
@@ -351,6 +378,8 @@ function _createVNode(
   if (isClassComponent(type)) {
     type = type.__vccOpts
   }
+
+  // 节点上的属性列表
 
   // class & style normalization.
   if (props) {
@@ -418,7 +447,7 @@ function _createVNode(
     ssFallback: null,
     dirs: null,
     transition: null,
-    el: null,
+    el: null, // child.el === null ? child : cloneVNode(child)
     anchor: null,
     target: null,
     targetAnchor: null,
@@ -426,7 +455,7 @@ function _createVNode(
     shapeFlag, // vnode 类型
     patchFlag,
     dynamicProps, // vnode节点 动态属性列表
-    dynamicChildren: null, // vnode节点 动态子节点列表
+    dynamicChildren: null, // vnode节点 动态子节点列表 currentBlock
     appContext: null // app上下文
   }
 
@@ -444,10 +473,11 @@ function _createVNode(
     vnode.ssFallback = fallback
   }
 
+  // 保存当前vnode 到 当前vnodes block列表
   if (
     shouldTrack > 0 &&
     // avoid a block node from tracking itself
-    !isBlockNode &&
+    !isBlockNode && // 是否是一个block root节点，只有非block root vnode 才有必要保存
     // has current parent block
     currentBlock &&
     // presence of a patch flag indicates this node needs patching on updates.
@@ -589,6 +619,10 @@ export function normalizeVNode(child: VNodeChild): VNode {
   } else if (typeof child === 'object') {
     // already vnode, this should be the most common since compiled templates
     // always produce all-vnode children arrays
+    // 如：
+    // <div id="app">
+    //   <hello-world user-name="小明">welcome to home! <template v-slot:header v-if="isHeader">111</template></hello-world>
+    // </div>
     return child.el === null ? child : cloneVNode(child)
   } else {
     // strings and numbers
@@ -610,7 +644,7 @@ export function normalizeChildren(vnode: VNode, children: unknown) {
     // vnode子节点为 数组
     type = ShapeFlags.ARRAY_CHILDREN // 1 << 4 = 16
   } else if (typeof children === 'object') {
-    // vnode 子节点 只有一个 为对象格式
+    // 组件的子元素类别 slots: _createSlots({...}, [...])
 
     if (shapeFlag & ShapeFlags.ELEMENT || shapeFlag & ShapeFlags.TELEPORT) {
       // 是一个dom元素类型 或 teleport 组件
@@ -626,13 +660,15 @@ export function normalizeChildren(vnode: VNode, children: unknown) {
       }
       return
     } else {
+      // 组件节点存在slot节点列表
       type = ShapeFlags.SLOTS_CHILDREN
-      const slotFlag = (children as RawSlots)._
+      const slotFlag = (children as RawSlots)._ // packages/compiler-core/src/transforms/vSlot.ts
       if (!slotFlag && !(InternalObjectKey in children!)) {
         // if slots are not normalized, attach context instance
         // (compiled / normalized slots already have context)
         ;(children as RawSlots)._ctx = currentRenderingInstance
       } else if (slotFlag === SlotFlags.FORWARDED && currentRenderingInstance) {
+        // 组件节点的子节点中 存在slot标签子节点
         // a child component receives forwarded slots from the parent.
         // its slot type is determined by its parent's slot type.
         if (

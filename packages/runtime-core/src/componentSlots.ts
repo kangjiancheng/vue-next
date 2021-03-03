@@ -109,10 +109,10 @@ const normalizeVNodeSlots = (
 // 设置组件节点 slots节点列表
 export const initSlots = (
   instance: ComponentInternalInstance,
-  children: VNodeNormalizedChildren
+  children: VNodeNormalizedChildren // vnode 子节点列表
 ) => {
   if (instance.vnode.shapeFlag & ShapeFlags.SLOTS_CHILDREN) {
-    const type = (children as RawSlots)._
+    const type = (children as RawSlots)._ // slotFlag
     if (type) {
       instance.slots = children as InternalSlots
       // make compiler marker non-enumerable
@@ -123,6 +123,7 @@ export const initSlots = (
   } else {
     instance.slots = {}
     if (children) {
+      // 根组件mount时，没有children
       normalizeVNodeSlots(instance, children)
     }
   }

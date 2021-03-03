@@ -561,7 +561,7 @@ export function createVNodeCall(
     // 渲染源码 引入 将要用到的辅助函数的定义，如：'const { openBlock: _openBlock } = _Vue'
     if (isBlock) {
       context.helper(OPEN_BLOCK)
-      context.helper(CREATE_BLOCK)
+      context.helper(CREATE_BLOCK) // 创建一个根vnode
     } else {
       context.helper(CREATE_VNODE)
     }

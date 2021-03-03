@@ -423,7 +423,7 @@ export function buildSlots(
 
   // 创建slot节点列表，静态 + 动态
 
-  // 设置 组件节点的 SlotFlags
+  // 运行阶段 组件节点vnode的 slotFlag
   const slotFlag = hasDynamicSlots // 是否存在动态 slot，如 动态v-slot:[xxx]、或 v-if/v-for、或 嵌套v-if/v-for
     ? SlotFlags.DYNAMIC // 2
     : hasForwardedSlots(node.children) // 组件子孙节点中 是否存在 slot 标签元素
@@ -434,7 +434,7 @@ export function buildSlots(
   let slots = createObjectExpression(
     slotsProperties.concat(
       createObjectProperty(
-        `_`,
+        `_`, // runtime时，创建createVNode的slotFlag
         // 2 = compiled but dynamic = can skip normalization, but must run diff
         // 1 = compiled and static = can skip normalization AND diff as optimized
         createSimpleExpression(

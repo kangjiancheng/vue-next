@@ -31,6 +31,7 @@ export const transformSlotOutlet: NodeTransform = (node, context) => {
 
     // 处理属性列表
     if (slotProps) {
+      // 向父组件传递props
       slotArgs.push(slotProps)
     }
 
@@ -43,6 +44,11 @@ export const transformSlotOutlet: NodeTransform = (node, context) => {
     }
 
     // 返回codegen代码
+    // 如：'<slot name="header" item="hello world" :data-text="'123'"></slot>'
+    // _renderSlot($slots, "header", {
+    //         item: "hello world",
+    //         dataText: '123'
+    //       })
     node.codegenNode = createCallExpression(
       context.helper(RENDER_SLOT), // RENDER_SLOT = Symbol(__DEV__ ? `renderSlot` : ``)
       slotArgs,

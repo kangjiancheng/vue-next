@@ -292,7 +292,7 @@ export const transformElement: NodeTransform = (node, context) => {
       vnodeDynamicProps, // 静态指令prop的属性名(解析过的指令节点)，字符串拼接格式： 如: template: '<input v-model="textInput" :placeholder="'请输入'" />'  对应的结果为： '["onUpdate:modelValue", "placeholder"]'
       vnodeDirectives, // 需要在运行时，重新处理的指令，如：v-model、v-show、用户自定义指令
       !!shouldUseBlock, // 是否使用block，如：动态is组件或TELEPORT或SUSPENSE；或是非组件当是特殊标签如svg，普通元素绑定了动态 :key； 或是 keep-alive组件，注意for节点/if节点(transform vIf)、root节点（transform createRootCodegen）
-      false /* disableTracking */,
+      false /* disableTracking */, // 默认 false
       node.loc
     )
   }

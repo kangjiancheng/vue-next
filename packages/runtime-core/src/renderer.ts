@@ -481,7 +481,7 @@ function baseCreateRenderer(
     n2, // 新vnode：dom节点将渲染的vnode
     container, // dom节点：挂载目标dom实例
     anchor = null,
-    parentComponent = null,
+    parentComponent = null, // 父组件实例
     parentSuspense = null,
     isSVG = false,
     optimized = false
@@ -1283,7 +1283,7 @@ function baseCreateRenderer(
     // 组件实例信息
 
     // 同时也将组件实例绑定到 vnode.component
-    // 规范组件的props属性格式
+    // 规范组件的props选项属性格式
     const instance: ComponentInternalInstance = (initialVNode.component = createComponentInstance(
       initialVNode, // 组件初始化的vnode
       parentComponent,
@@ -1385,7 +1385,7 @@ function baseCreateRenderer(
   // 执行渲染函数
   const setupRenderEffect: SetupRenderEffectFn = (
     instance,
-    initialVNode,
+    initialVNode, // 新vnode
     container,
     anchor,
     parentSuspense,
@@ -1402,11 +1402,11 @@ function baseCreateRenderer(
 
         const { bm, m, parent } = instance
 
-        // beforeMount hook
+        // 执行 beforeMount hook 列表
         if (bm) {
           invokeArrayFns(bm)
         }
-        // 执行 onVnodeBeforeMount
+        // 执行节点上的hook事件属性： onVnodeBeforeMount
         if ((vnodeHook = props && props.onVnodeBeforeMount)) {
           invokeVNodeHook(vnodeHook, parent, initialVNode)
         }
@@ -1415,7 +1415,7 @@ function baseCreateRenderer(
         if (__DEV__) {
           startMeasure(instance, `render`)
         }
-        // 执行 渲染函数 render，返回 vnode
+        // 执行 组件模版template 编译后的渲染函数，得到组件模版template的vnode
         const subTree = (instance.subTree = renderComponentRoot(instance))
         if (__DEV__) {
           endMeasure(instance, `render`)
@@ -1439,9 +1439,10 @@ function baseCreateRenderer(
           if (__DEV__) {
             startMeasure(instance, `patch`)
           }
+          // 解析组件模版下的vnode
           patch(
             null,
-            subTree,
+            subTree, // 组件的渲染模版vnode，即组件内容
             container,
             anchor,
             instance,
@@ -1451,7 +1452,7 @@ function baseCreateRenderer(
           if (__DEV__) {
             endMeasure(instance, `patch`)
           }
-          initialVNode.el = subTree.el
+          initialVNode.el = subTree.el // 渲染根节点vnode
         }
         // mounted hook
         if (m) {
@@ -2303,10 +2304,11 @@ function baseCreateRenderer(
   }
 }
 
+// 执行vnode节点上的hook函数
 export function invokeVNodeHook(
-  hook: VNodeHook, // vnode的钩子函数，如：onVnodeBeforeMount
+  hook: VNodeHook, // vnode节点上的钩子函数，即dom节点上定义的事件属性，如：onVnodeBeforeMount
   instance: ComponentInternalInstance | null, // 组件实例信息
-  vnode: VNode, // vnode 节点
+  vnode: VNode, // 当前节点的新vnode
   prevVNode: VNode | null = null
 ) {
   callWithAsyncErrorHandling(hook, instance, ErrorCodes.VNODE_HOOK, [

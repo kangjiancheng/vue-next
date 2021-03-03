@@ -404,7 +404,7 @@ let uid = 0
 // 挂载前 mountComponent 时，初始化组件实例信息
 export function createComponentInstance(
   vnode: VNode, // 组件初始化的vnode
-  parent: ComponentInternalInstance | null,
+  parent: ComponentInternalInstance | null, // 父组件实例
   suspense: SuspenseBoundary | null
 ) {
   // vnode.type 即组件
@@ -422,7 +422,7 @@ export function createComponentInstance(
     appContext, // app 上下文
     root: null!, // to be immediately set
     next: null,
-    subTree: null!, // will be set synchronously right after creation
+    subTree: null!, // 组件渲染模版的vnode， will be set synchronously right after creation
     update: null!, // will be set synchronously right after creation
     render: null,
     proxy: null, // instance.ctx  =》PublicInstanceProxyHandlers
@@ -451,7 +451,7 @@ export function createComponentInstance(
     data: EMPTY_OBJ, // 2.x 支持
     props: EMPTY_OBJ, // 组件接收到有效props，已经进行类型、默认值处理，同时也赋值了。
     attrs: EMPTY_OBJ, // 存储 那些传给组件但组件未定义 的props属性
-    slots: EMPTY_OBJ,
+    slots: EMPTY_OBJ, // 组件节点 子元素slots列表
     refs: EMPTY_OBJ,
     setupState: EMPTY_OBJ, // 组件 setup 返回值
     setupContext: null,
@@ -556,6 +556,7 @@ function setupStatefulComponent(
   instance: ComponentInternalInstance, // 组件实例信息
   isSSR: boolean
 ) {
+  // 组件对象
   const Component = instance.type as ComponentOptions
 
   // 组件对象的属性名校验
@@ -865,6 +866,7 @@ const classifyRE = /(?:^|[-_])(\w)/g
 const classify = (str: string): string =>
   str.replace(classifyRE, c => c.toUpperCase()).replace(/[-_]/g, '')
 
+// 获取组件名
 export function getComponentName(
   Component: ConcreteComponent
 ): string | undefined {

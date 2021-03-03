@@ -48,8 +48,8 @@ export function renderComponentRoot(
   const {
     type: Component,
     vnode,
-    proxy, // ctx
-    withProxy, // ctx，模版编译
+    proxy, // ctx proxy
+    withProxy, // ctx render with proxy
     props, // 组件节点 props 属性
     propsOptions: [propsOptions], // 组件 props 选项属性
     slots,
@@ -62,7 +62,9 @@ export function renderComponentRoot(
     ctx
   } = instance
 
+  // 返回结果
   let result
+
   currentRenderingInstance = instance
   if (__DEV__) {
     accessedAttrs = false
@@ -74,9 +76,33 @@ export function renderComponentRoot(
       // runtime-compiled render functions using `with` block.
       const proxyToUse = withProxy || proxy
 
-      // 返回渲染vnode节点
+      // 执行组件模版对应的渲染函数，得到组件模版template的vnode
       result = normalizeVNode(
+        // child.el === null ? child : cloneVNode(child)
         // 执行渲染函数
+        // <div id="app">
+        //   <div class="demo-base" :class="fixHeader">
+        //     <button class="btn-click" @click="handleClick">点击</button>
+        //   </div>
+        // </div>
+        // render code:
+        // "const _Vue = Vue
+        //
+        // return function render(_ctx, _cache) {
+        //   with (_ctx) {
+        //     const { createVNode: _createVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
+        //
+        //     return (_openBlock(), _createBlock("div", {
+        //       class: ["demo-base", fixHeader]
+        //     }, [
+        //       _createVNode("button", {
+        //         class: "btn-click",
+        //         onClick: handleClick
+        //       }, "点击", 8 /* PROPS */, ["onClick"])
+        //     ], 2 /* CLASS */))
+        //   }
+        // }"
+        // 返回渲染节点vnode
         render!.call(
           proxyToUse,
           proxyToUse!, // instance.ctx 的代理 proxy： RuntimeCompiledPublicInstanceProxyHandlers
@@ -139,18 +165,21 @@ export function renderComponentRoot(
           shapeFlag & ShapeFlags.ELEMENT ||
           shapeFlag & ShapeFlags.COMPONENT
         ) {
-          // attrs属性列表里 是否存在 'onUpdate:' 开头的属性
+          // vnode节点上有形如："onUpdate:xxx"的属性props，即attrs属性列表里 是否存在 'onUpdate:' 开头的属性
+          // 如 <hello-world v-model="helloMsg"></hello-world>
           if (propsOptions && keys.some(isModelListener)) {
             // If a v-model listener (onUpdate:xxx) has a corresponding declared
             // prop, it indicates this component expects to handle v-model and
             // it should not fallthrough.
             // related: #1543, #1643, #1989
             fallthroughAttrs = filterModelListeners(
+              // 过滤掉onUpdate:modelValue即 v-model属性事件
               fallthroughAttrs,
               propsOptions
             )
           }
 
+          // 传递attrs属性render root vnode的props
           root = cloneVNode(root, fallthroughAttrs)
         } else if (__DEV__ && !accessedAttrs && root.type !== Comment) {
           const allAttrs = Object.keys(attrs)
@@ -223,6 +252,7 @@ export function renderComponentRoot(
   }
   currentRenderingInstance = null
 
+  // 返回渲染函数vnode
   return result
 }
 
@@ -289,9 +319,11 @@ const getFunctionalFallthrough = (attrs: Data): Data | undefined => {
   return res
 }
 
+// 过滤掉onUpdate:modelValue即 v-model属性事件
 const filterModelListeners = (attrs: Data, props: NormalizedProps): Data => {
   const res: Data = {}
   for (const key in attrs) {
+    // 'onUpdate:xxx'
     if (!isModelListener(key) || !(key.slice(9) in props)) {
       res[key] = attrs[key]
     }
