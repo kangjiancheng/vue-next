@@ -120,7 +120,7 @@ export const transformOn: DirectiveTransform = (dir, node, context) => {
    * baseResult: 经过 compiler-core 的transform 处理后，得到指令props对应的codegen js属性节点 createObjectProperty(指令属性名节点（不包含modifiers）, 指令属性值节点)
    */
   return baseTransform(dir, node, context, baseResult => {
-    // 进一步转换处理props指令属性的修饰符modifiers
+    // 事件修饰符modifiers
 
     // 指令修饰符：@click.prevent 中的 'prevent'
     const { modifiers } = dir

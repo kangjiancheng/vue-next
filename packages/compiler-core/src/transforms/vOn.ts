@@ -61,7 +61,7 @@ export const transformOn: DirectiveTransform = (
       // 创建指令名 对应的简单表达式节点
       // 如：eventName.content = 'onClick'
       eventName = createSimpleExpression(
-        toHandlerKey(camelize(rawName)), // 将 kebeb-base 转换为 camelCase， 并添加事件前缀 on，同时大写第一个字母
+        toHandlerKey(camelize(rawName)), // 添加事件前缀 on，同时大写第一个字母，区分之后的原生事件属性
         true,
         arg.loc
       )
@@ -161,14 +161,17 @@ export const transformOn: DirectiveTransform = (
       )
     }
 
-    // 行内可执行的js语句 ，包装成函数格式
+    // 属性值 是可执行的js语句包装成函数格式
     if (isInlineStatement || (shouldCache && isMemberExp)) {
       // wrap inline statement in a function expression
       // 将行内语句转换为等价的函数结构语句
       // 如： <button @click="count ++; foo --">{{ count }}</button> 转换为 ['$event => {', exp, '}']
       // 如： <button @click="obj.handleClick"></button> 转换为 ['(...args) => (', exp, ')']
 
-      // 创建codegen复合表达式节点
+      // 规范属性值节点格式，最终渲染源码
+      // 如：<button @click="[handleClick, handleClick2]" @focus="count++"></button>
+      // onClick: $event => ([handleClick, handleClick2])
+      // onFocus: $event => (count++)
       exp = createCompoundExpression([
         `${
           isInlineStatement

@@ -6,6 +6,8 @@ import { patchEvent } from './modules/events'
 import { isOn, isString, isFunction, isModelListener } from '@vue/shared'
 import { RendererOptions } from '@vue/runtime-core'
 
+// 元素dom事件属性，小写，如：<button onclick="handler(event)"></button>，则prop为 onclick
+// vue事件：<button @click="handleClick"></button>，则prop为 onClick
 const nativeOnRE = /^on[a-z]/
 
 type DOMRendererOptions = RendererOptions<Node, Element>
@@ -13,32 +15,37 @@ type DOMRendererOptions = RendererOptions<Node, Element>
 export const forcePatchProp: DOMRendererOptions['forcePatchProp'] = (_, key) =>
   key === 'value'
 
+// 为 vnode dom实例el添加 vnode的props属性列表
 export const patchProp: DOMRendererOptions['patchProp'] = (
-  el,
-  key,
-  prevValue,
-  nextValue,
+  el, // vnode dom实例
+  key, // prop属性名
+  prevValue, // prop旧属性值
+  nextValue, // prop新属性值
   isSVG = false,
   prevChildren,
-  parentComponent,
+  parentComponent, // vnode 父组件实例
   parentSuspense,
   unmountChildren
 ) => {
   switch (key) {
     // special
-    case 'class':
+    case 'class': // 添加 class属性
       patchClass(el, nextValue, isSVG)
       break
-    case 'style':
+    case 'style': // 添加 style属性
       patchStyle(el, prevValue, nextValue)
       break
     default:
       if (isOn(key)) {
+        // 添加 on开头的vue事件属性
         // ignore v-model listeners
         if (!isModelListener(key)) {
+          // 忽略 onUpdate:xxx 事件
+          // 为el绑定事件及事件处理函数
           patchEvent(el, key, prevValue, nextValue, parentComponent)
         }
       } else if (shouldSetAsProp(el, key, nextValue, isSVG)) {
+        // dom 实例属性，如： innerHTML、id
         patchDOMProp(
           el,
           key,
@@ -49,6 +56,7 @@ export const patchProp: DOMRendererOptions['patchProp'] = (
           unmountChildren
         )
       } else {
+        // dom 标签属性(即一些非dom实例属性)： 即直接添加到标签到属性列表上，如value 或 一些自定义到属性 data-xxx
         // special case for <input v-model type="checkbox"> with
         // :true-value & :false-value
         // store value as dom properties since non-string values will be
@@ -64,10 +72,11 @@ export const patchProp: DOMRendererOptions['patchProp'] = (
   }
 }
 
+// 是否作为dom的实例属性
 function shouldSetAsProp(
-  el: Element,
-  key: string,
-  value: unknown,
+  el: Element, // vnode 的dom实例el
+  key: string, // prop属性名
+  value: unknown, // prop属性值
   isSVG: boolean
 ) {
   if (isSVG) {

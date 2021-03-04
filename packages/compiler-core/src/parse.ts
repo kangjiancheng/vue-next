@@ -653,12 +653,14 @@ function parseTag(
     // 非用户自定义元素： NO = () => false
     // 判断是 v-is 指令，动态组件
     const hasVIs = props.some(
-      p => p.type === NodeTypes.DIRECTIVE && p.name === 'is'
+      p => p.type === NodeTypes.DIRECTIVE && p.name === 'is' // v-bind:is，则 p.name = 'bind'
     )
 
     // 判断 ElementTypes 为是 COMPONENT 元素
-    // 一：不存在v-is指令属性，并且是非原生标签，如：<hello-world />
-    // 二：存在v-is指令属性
+    // 一：
+    //    不存在v-is指令属性，并且是非原生标签，如：<hello-world />
+    // 二：
+    //    存在v-is指令属性
     //    标签为内置元素：Teleport、Suspense、KeepAlive、BaseTransition、Transition、TransitionGroup
     //    大写开头的标签
     //    标签名为 component

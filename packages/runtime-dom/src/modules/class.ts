@@ -1,5 +1,6 @@
 import { ElementWithTransition } from '../components/Transition'
 
+// 添加vnode dom实例的class
 // compiler should normalize class + :class bindings on the same element
 // into a single binding ['staticClass', dynamic]
 export function patchClass(el: Element, value: string | null, isSVG: boolean) {

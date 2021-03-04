@@ -641,7 +641,8 @@ export function normalizeChildren(vnode: VNode, children: unknown) {
   if (children == null) {
     children = null
   } else if (isArray(children)) {
-    // vnode子节点为 数组
+    // vnode子节点列表为 数组
+    // 如 template: '<div><span>...</span><span>...</span></div>
     type = ShapeFlags.ARRAY_CHILDREN // 1 << 4 = 16
   } else if (typeof children === 'object') {
     // 组件的子元素类别 slots: _createSlots({...}, [...])

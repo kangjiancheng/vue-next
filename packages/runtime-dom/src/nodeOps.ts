@@ -19,10 +19,12 @@ export const nodeOps: Omit<RendererOptions<Node, Element>, 'patchProp'> = {
     }
   },
 
+  // 创建一个由标签名称 tag 指定的 HTML 元素
+  // https://developer.mozilla.org/zh-CN/docs/Web/API/Document/createElement
   createElement: (tag, isSVG, is): Element =>
     isSVG
       ? doc.createElementNS(svgNS, tag)
-      : doc.createElement(tag, is ? { is } : undefined),
+      : doc.createElement(tag, is ? { is } : undefined), // is 为官方可选属性
 
   createText: text => doc.createTextNode(text),
 

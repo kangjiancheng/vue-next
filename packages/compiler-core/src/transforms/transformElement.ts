@@ -88,7 +88,7 @@ export const transformElement: NodeTransform = (node, context) => {
     // VNodeCall interface.
     // 该transform插件主要是为了创建 codegenNode 信息，为了在vnode时调用
 
-    // 解析is指令
+    // 解析组件is指令，如果dom标签有v-is指令，则也是组件
 
     // 解析组件类型，返回相关内容，如动态is组件的 vnode patch方法、内置组件名、区分用户自定义组件名
     const vnodeTag = isComponent

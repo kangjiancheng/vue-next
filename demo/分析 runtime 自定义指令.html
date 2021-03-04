@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Vue 3 分析 runtime 自定义指令</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- 开发模式 -->
+<script src="../packages/vue/dist/vue.global.js"></script>
+<!-- 生产模式-->
+<!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
+<script>
+
+  const {
+    createApp,
+    ref,
+    reactive,
+    onMounted,
+  } = Vue
+
+  const rootComponent = {
+    name: 'root-component',
+    template: `
+      <div class="my-directive" v-resize:editor.lazy="handleResizeEditor">自定义指令</div>
+    `,
+    directives: {
+      resize: {
+        // el：为 vnode的 dom实例
+        // binding: 即 resize指令对象
+        // vnode: 即谁使用这个指令的dom节点
+        created(el, binding, vnode, prevVNode) {
+          console.log('directives - hook - created')
+        },
+        mounted () {
+
+        },
+        updated () {
+
+        }
+      }
+    },
+    setup(props, setupContext ) {
+      const handleResizeEditor = () => {
+        console.log(1)
+      }
+
+      onMounted(() => {
+        console.log('hook: onMounted')
+        console.log(setupContext.attrs)
+      })
+
+      return {
+        handleResizeEditor,
+      }
+    }
+  }
+
+  const app = createApp(rootComponent)
+
+  app.config.performance = true
+
+  app.mount('#app')
+
+</script>
+
+</body>
+</html>

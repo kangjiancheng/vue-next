@@ -4,6 +4,7 @@ const systemModifiers = ['ctrl', 'shift', 'alt', 'meta']
 
 type KeyedEvent = KeyboardEvent | MouseEvent | TouchEvent
 
+// 事件修饰符列表
 const modifierGuards: Record<
   string,
   (e: Event, modifiers: string[]) => void | boolean
@@ -25,6 +26,24 @@ const modifierGuards: Record<
 /**
  * @private
  */
+// 如 template:
+// '<button @click.once.prevent="handleClick" @focus.passive="handleFocus" @mousedown.passive.once.capture="handleMousedown"></button>'
+//
+// 则渲染code:
+//const _Vue = Vue
+//
+// return function render(_ctx, _cache) {
+//   with (_ctx) {
+//     const { withModifiers: _withModifiers, createVNode: _createVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
+//
+//     return (_openBlock(), _createBlock("button", {
+//       onClickOnce: _withModifiers(handleClick, ["prevent"]),
+//       onFocusPassive: handleFocus,
+//       onMousedownPassiveOnceCapture: handleMousedown
+//     }, null, 40 /* PROPS, HYDRATE_EVENTS */, ["onClickOnce", "onFocusPassive", "onMousedownPassiveOnceCapture"]))
+//   }
+// }
+//  处理 vue事件的修饰符
 export const withModifiers = (fn: Function, modifiers: string[]) => {
   return (event: Event, ...args: unknown[]) => {
     for (let i = 0; i < modifiers.length; i++) {

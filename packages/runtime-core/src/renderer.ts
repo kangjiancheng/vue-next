@@ -535,13 +535,13 @@ function baseCreateRenderer(
       default:
         // 由于ShapeFlags 值都是通过 1 << xx， 因此通过按位操作：& ，判断是否存在此二进制， 如果二进制位存在，则结果为当前shapeFlag，否则结果为0
         if (shapeFlag & ShapeFlags.ELEMENT) {
-          // dom普通元素 节点
+          // dom普通元素 节点，type 为标签字符串
           processElement(
             n1,
-            n2,
-            container,
+            n2, // 渲染vnode
+            container, // app dom实例
             anchor,
-            parentComponent,
+            parentComponent, // 父组件实例
             parentSuspense,
             isSVG,
             optimized
@@ -722,11 +722,13 @@ function baseCreateRenderer(
     }
   }
 
+  // 挂载element vnode节点：
+  //  创建dom实例 =》 解析并挂载vnode子节点列表到element dom实例 =》执行自定义指令dirs created hook =》 解析vnode props属性列表
   const mountElement = (
-    vnode: VNode,
-    container: RendererElement,
+    vnode: VNode, // 节点vnode
+    container: RendererElement, //  挂载目标dom实例容器
     anchor: RendererNode | null,
-    parentComponent: ComponentInternalInstance | null,
+    parentComponent: ComponentInternalInstance | null, // 父组件实例
     parentSuspense: SuspenseBoundary | null,
     isSVG: boolean,
     optimized: boolean
@@ -754,15 +756,19 @@ function baseCreateRenderer(
       // only do this in production since cloned trees cannot be HMR updated.
       el = vnode.el = hostCloneNode(vnode.el)
     } else {
+      // 创建vnode对应的dom节点实例el
       el = vnode.el = hostCreateElement(
         vnode.type as string,
         isSVG,
-        props && props.is
+        props && props.is // dom官方可选自定义元素属性
       )
+
+      // 优先挂载 vnode 子节点列表 到 vnode dom实例上
 
       // mount children first, since some props may rely on child content
       // being already rendered, e.g. `<select value>`
       if (shapeFlag & ShapeFlags.TEXT_CHILDREN) {
+        // 文本节点
         hostSetElementText(el, vnode.children as string)
       } else if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
         mountChildren(
@@ -776,31 +782,42 @@ function baseCreateRenderer(
         )
       }
 
+      // vnode自定义指令，刚初始化完el实例，和创建el子列表
       if (dirs) {
+        // 执行自定义指令列表中的 created hook方法
         invokeDirectiveHook(vnode, null, parentComponent, 'created')
       }
-      // props
+
+      // vnode节点的props列表，添加到对应的dom实例上
       if (props) {
         for (const key in props) {
+          // 不添加官方保留的关键属性，如：
+          // ',key,ref,' +
+          // 'onVnodeBeforeMount,onVnodeMounted,' +
+          // 'onVnodeBeforeUpdate,onVnodeUpdated,' +
+          // 'onVnodeBeforeUnmount,onVnodeUnmounted'
           if (!isReservedProp(key)) {
+            // 添加el属性：class 属性、style属性、绑定vue事件、dom实例属性、dom标签属性
             hostPatchProp(
               el,
               key,
               null,
               props[key],
               isSVG,
-              vnode.children as VNode[],
+              vnode.children as VNode[], // 对应 v-html、v-text 则需要移除子节点列表
               parentComponent,
               parentSuspense,
               unmountChildren
             )
           }
         }
+
         if ((vnodeHook = props.onVnodeBeforeMount)) {
+          // 完成vnode dom实例信息，开始执行 vnode节点上的onVnodeBeforeMount函数
           invokeVNodeHook(vnodeHook, parentComponent, vnode)
         }
       }
-      // scopeId
+      // TODO: scopeId
       setScopeId(el, scopeId, vnode, parentComponent)
     }
     if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
@@ -809,13 +826,17 @@ function baseCreateRenderer(
         enumerable: false
       })
       Object.defineProperty(el, '__vueParentComponent', {
-        value: parentComponent,
+        value: parentComponent, // vnode el 所在的组件
         enumerable: false
       })
     }
+
+    // vnode el节点属性props 已经添加了
     if (dirs) {
       invokeDirectiveHook(vnode, null, parentComponent, 'beforeMount')
     }
+
+    // TODO - Suspense
     // #1583 For inside suspense + suspense not resolved case, enter hook should call when suspense resolved
     // #1689 For inside suspense + suspense resolved case, just call it
     const needCallTransitionHooks =
@@ -823,17 +844,30 @@ function baseCreateRenderer(
       transition &&
       !transition.persisted
     if (needCallTransitionHooks) {
+      // vnode el 挂载前 - transition  beforeEnter
       transition!.beforeEnter(el)
     }
+
+    // 向html文档插入 vnode el 节点：
+    // container.insertBefore(el, anchor || null)
     hostInsert(el, container, anchor)
+
+    // vnode hook、transition hook、dirs hook
     if (
       (vnodeHook = props && props.onVnodeMounted) ||
       needCallTransitionHooks ||
       dirs
     ) {
+      // TODO - queuePostRenderEffect
+      // __FEATURE_SUSPENSE__? queueEffectWithSuspense : queuePostFlushCb
       queuePostRenderEffect(() => {
+        // vnode el 已挂载， vnode onVnodeMounted 函数
         vnodeHook && invokeVNodeHook(vnodeHook, parentComponent, vnode)
+
+        // vnode el 已挂载， 执行 进入 transition
         needCallTransitionHooks && transition!.enter(el)
+
+        // vnode el 已挂载， 执行自定义指令 的 mounted
         dirs && invokeDirectiveHook(vnode, null, parentComponent, 'mounted')
       }, parentSuspense)
     }
@@ -871,11 +905,12 @@ function baseCreateRenderer(
     }
   }
 
+  // 挂在节点vnode的子节点列表
   const mountChildren: MountChildrenFn = (
-    children,
-    container,
+    children, // vnode节点的子节点列表
+    container, // vnode节点: 即子节点列表的父节点实例
     anchor,
-    parentComponent,
+    parentComponent, // vnode节点 父组件实例
     parentSuspense,
     isSVG,
     optimized,
@@ -1439,7 +1474,8 @@ function baseCreateRenderer(
           if (__DEV__) {
             startMeasure(instance, `patch`)
           }
-          // 解析组件模版下的vnode
+
+          // 挂载组件模版template
           patch(
             null,
             subTree, // 组件的渲染模版vnode，即组件内容
@@ -1449,11 +1485,14 @@ function baseCreateRenderer(
             parentSuspense,
             isSVG
           )
+
           if (__DEV__) {
             endMeasure(instance, `patch`)
           }
-          initialVNode.el = subTree.el // 渲染根节点vnode
+          // 组件节点实际的el 即 组件模版template 的vnode dom实例el
+          initialVNode.el = subTree.el
         }
+
         // mounted hook
         if (m) {
           queuePostRenderEffect(m, parentSuspense)
