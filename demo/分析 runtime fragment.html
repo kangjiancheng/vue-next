@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Vue 3 分析 runtime v-for</title>
+  <title>Vue 3 分析 runtime element</title>
   <style>
     body {
       margin: 0;
@@ -31,11 +31,8 @@
   const HelloWorld = {
     name: 'HelloWorld',
     template: `
-      <div class="hello-world">
-        Hi, {{ userName }}
-        <slot></slot>
-        <slot name="user" user-home="China"></slot>
-      </div>
+      <div>component root 1</div>
+      <div>component root 2</div>
     `,
     props: ['userName']
   }
@@ -46,9 +43,9 @@
       HelloWorld,
     },
     template: `
-      <ul class="item-list">
-        <li class="item" :class="{ active: item.id === 1 }" v-for="(item, index) of items" :key="item.id">{{ item.name }}</li>
-      </ul>
+      <div class="root-1">root1</div>
+      <div class="root-2">root2</div>
+      <hello-world/>
     `,
     props: {
       age: Number,
@@ -79,8 +76,8 @@
       }
 
       onMounted(() => {
-        console.log('hook: onMounted')
-        console.log(setupContext.attrs)
+        // console.log('hook: onMounted')
+        // console.log(setupContext.attrs)
       })
 
 
@@ -89,19 +86,16 @@
         age: props.age,
         isHeader: true,
         handleClick,
-
-        items: [
-          { id: 0, name: '小明' },
-          { id: 1, name: '小红' },
-          { id: 2, name: '小李' },
-        ]
+        handleFocus,
+        helloMsg: '你好，小朋友！',
+        userSlot: 'user',
+        redStyle: { color: 'red' }
       }
     }
   }
   var rootModel = '哈哈哈'
   const rootProps = {
     key: 1,
-    id: 11,
     age: 10,
     sex: 'boy',
     "onUpdate:modelValue": $event => (rootModel = $event),

@@ -126,7 +126,7 @@ function parseName(name: string): [string, EventListenerOptions | undefined] {
   return [hyphenate(name.slice(2)), options]
 }
 
-// 创建vnode节点的一个事件处理监听函数 listener
+// 封装vnode节点的事件处理监听函数listener
 // https://developer.mozilla.org/zh-CN/docs/Web/API/EventTarget/addEventListener
 function createInvoker(
   initialValue: EventValue, // 事件属性值，即事件处理函数，如 handleClick

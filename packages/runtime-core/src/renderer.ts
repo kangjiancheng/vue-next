@@ -696,6 +696,7 @@ function baseCreateRenderer(
     hostRemove(anchor!)
   }
 
+  // 挂载element元素
   const processElement = (
     n1: VNode | null,
     n2: VNode,
@@ -933,6 +934,7 @@ function baseCreateRenderer(
     }
   }
 
+  // 更新element元素
   const patchElement = (
     n1: VNode,
     n2: VNode,
@@ -1122,6 +1124,7 @@ function baseCreateRenderer(
     }
   }
 
+  // 更新节点props属性列表
   const patchProps = (
     el: RendererElement,
     vnode: VNode,
@@ -1174,12 +1177,13 @@ function baseCreateRenderer(
     }
   }
 
+  // 解析Fragment节点
   const processFragment = (
     n1: VNode | null,
-    n2: VNode,
-    container: RendererElement,
+    n2: VNode, // Fragment vnode
+    container: RendererElement, // 父节点dom实例
     anchor: RendererNode | null,
-    parentComponent: ComponentInternalInstance | null,
+    parentComponent: ComponentInternalInstance | null, // 父组件实例
     parentSuspense: SuspenseBoundary | null,
     isSVG: boolean,
     optimized: boolean
@@ -1187,6 +1191,7 @@ function baseCreateRenderer(
     const fragmentStartAnchor = (n2.el = n1 ? n1.el : hostCreateText(''))!
     const fragmentEndAnchor = (n2.anchor = n1 ? n1.anchor : hostCreateText(''))!
 
+    // dynamicChildren 动态子节点列表：currentBlock vnode
     let { patchFlag, dynamicChildren } = n2
     if (patchFlag > 0) {
       optimized = true
@@ -1417,7 +1422,7 @@ function baseCreateRenderer(
     }
   }
 
-  // 执行渲染函数
+  // 执行组件渲染函数，得到组件节点vnode对应的el实例，并挂载el实例到父节点dom上
   const setupRenderEffect: SetupRenderEffectFn = (
     instance,
     initialVNode, // 新vnode
@@ -1475,10 +1480,10 @@ function baseCreateRenderer(
             startMeasure(instance, `patch`)
           }
 
-          // 挂载组件模版template
+          // 解析组件模版template vnode，得到组件节点vnode的dom实例el，并挂载到父节点dom实例container上
           patch(
             null,
-            subTree, // 组件的渲染模版vnode，即组件内容
+            subTree, // 创建subtree的el dom实例，并挂载到父节点container上
             container,
             anchor,
             instance,
@@ -1489,10 +1494,11 @@ function baseCreateRenderer(
           if (__DEV__) {
             endMeasure(instance, `patch`)
           }
-          // 组件节点实际的el 即 组件模版template 的vnode dom实例el
+          // 绑定组件vnode节点的dom实例：即为组件模版template渲染函数vnode的dom实例
           initialVNode.el = subTree.el
         }
 
+        // 解析完组件模版template的vnode，并挂载到父容器dom实例上
         // mounted hook
         if (m) {
           queuePostRenderEffect(m, parentSuspense)
@@ -1520,6 +1526,7 @@ function baseCreateRenderer(
           devtoolsComponentAdded(instance)
         }
 
+        // 最后从内存移除这个临时vnode和容器（注意：并没有移除父节点下的vnode）
         // #2458: deference mount-only object parameters to prevent memleaks
         initialVNode = container = anchor = null as any
       } else {

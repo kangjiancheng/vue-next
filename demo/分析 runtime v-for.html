@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Vue 3 分析 runtime v-for</title>
+  <title>Vue 3 分析 runtime element</title>
   <style>
     body {
       margin: 0;
@@ -46,9 +46,10 @@
       HelloWorld,
     },
     template: `
-      <ul class="item-list">
-        <li class="item" :class="{ active: item.id === 1 }" v-for="(item, index) of items" :key="item.id">{{ item.name }}</li>
-      </ul>
+      <div class="root-component">
+        <span>{{ helloMsg }}</span>
+        <hello-world user-name="小明">欢迎来到中国</hello-world>
+      </div>
     `,
     props: {
       age: Number,
@@ -89,12 +90,10 @@
         age: props.age,
         isHeader: true,
         handleClick,
-
-        items: [
-          { id: 0, name: '小明' },
-          { id: 1, name: '小红' },
-          { id: 2, name: '小李' },
-        ]
+        handleFocus,
+        helloMsg: '你好，小朋友！',
+        userSlot: 'user',
+        redStyle: { color: 'red' }
       }
     }
   }
