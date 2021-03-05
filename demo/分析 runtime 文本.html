@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Vue 3 分析 runtime element</title>
+  <title>Vue 3 分析 runtime 文本</title>
   <style>
     body {
       margin: 0;
@@ -46,7 +46,10 @@
       HelloWorld,
     },
     template: `
-      <div class="root-component" @click="handleClick"></div>
+      <div class="root-component" @click="handleClick">
+        文本内容 或 插值 {{ helloMsg }}
+        <span>createTextVNode：需要混合其它类型的兄弟节点</span>
+      </div>
     `,
     props: {
       age: Number,
@@ -97,7 +100,7 @@
   var rootModel = '哈哈哈'
   const rootProps = {
     key: 1,
-    id: 11,
+    id: 1,
     age: 10,
     sex: 'boy',
     "onUpdate:modelValue": $event => (rootModel = $event),

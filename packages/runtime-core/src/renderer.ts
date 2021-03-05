@@ -596,6 +596,7 @@ function baseCreateRenderer(
     }
   }
 
+  // 解析文本vnode
   const processText: ProcessTextOrCommentFn = (n1, n2, container, anchor) => {
     if (n1 == null) {
       hostInsert(

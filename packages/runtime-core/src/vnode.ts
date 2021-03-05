@@ -576,6 +576,31 @@ function deepCloneVNode(vnode: VNode): VNode {
 /**
  * @private
  */
+// 创建文本节点：带有其它类型的兄弟节点
+// 如：template:
+//       `<div class="root-component" @click="handleClick">
+//         文本内容 或 插值 {{ helloMsg }}
+//         <span>createTextVNode：需要混合其它类型的兄弟节点</span>
+//       </div>`
+// 则渲染 code:
+//       const _Vue = Vue
+//       const { createVNode: _createVNode, createTextVNode: _createTextVNode } = _Vue
+//
+//       const _hoisted_1 = /*#__PURE__*/_createVNode("span", null, "createTextVNode：需要混合其它类型的兄弟节点", -1 /* HOISTED */)
+//
+//       return function render(_ctx, _cache) {
+//         with (_ctx) {
+//           const { toDisplayString: _toDisplayString, createVNode: _createVNode, createTextVNode: _createTextVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
+//
+//           return (_openBlock(), _createBlock("div", {
+//             class: "root-component",
+//             onClick: handleClick
+//           }, [
+//             _createTextVNode(" 文本内容 或 插值 " + _toDisplayString(helloMsg) + " ", 1 /* TEXT */),
+//             _hoisted_1
+//           ], 8 /* PROPS */, ["onClick"]))
+//         }
+//       }
 export function createTextVNode(text: string = ' ', flag: number = 0): VNode {
   // Symbol(__DEV__ ? 'Text' : undefined)
   return createVNode(Text, null, text, flag)
