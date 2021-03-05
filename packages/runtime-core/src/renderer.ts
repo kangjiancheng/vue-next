@@ -848,7 +848,7 @@ function baseCreateRenderer(
       transition!.beforeEnter(el)
     }
 
-    // 向html文档插入 vnode el 节点：
+    // 向父节点dom实例插入 vnode el 节点：
     // container.insertBefore(el, anchor || null)
     hostInsert(el, container, anchor)
 

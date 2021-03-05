@@ -17,6 +17,7 @@ import {
 
 type AssignerFn = (value: any) => void
 
+// 获取vmode指令值
 const getModelAssigner = (vnode: VNode): AssignerFn => {
   const fn = vnode.props!['onUpdate:modelValue']
   return isArray(fn) ? value => invokeArrayFns(fn, value) : fn
@@ -42,11 +43,31 @@ function trigger(el: HTMLElement, type: string) {
 
 type ModelDirective<T> = ObjectDirective<T & { _assign: AssignerFn }>
 
+// 如：template: '<input v-model="inputValue" placeholder="请输入" @change="handleChange" />'
+// 则渲染code:
+// "const _Vue = Vue
+//
+// return function render(_ctx, _cache) {
+//   with (_ctx) {
+//     const { vModelText: _vModelText, createVNode: _createVNode, withDirectives: _withDirectives, openBlock: _openBlock, createBlock: _createBlock } = _Vue
+//
+//     return _withDirectives((_openBlock(), _createBlock("input", {
+//       "onUpdate:modelValue": $event => (inputValue = $event),
+//       placeholder: "请输入",
+//       onChange: handleChange
+//     }, null, 40 /* PROPS, HYDRATE_EVENTS */, ["onUpdate:modelValue", "onChange"])), [
+//       [_vModelText, inputValue]
+//     ])
+//   }
+// }"
+// v-model 指令内容（如同用户自定义指令）
 // We are exporting the v-model runtime directly as vnode hooks so that it can
 // be tree-shaken in case v-model is never used.
 export const vModelText: ModelDirective<
   HTMLInputElement | HTMLTextAreaElement
 > = {
+  // vnode 刚初始化完el实例，和创建el子列表
+  // created(el, binding, vnode, preVNode)
   created(el, { modifiers: { lazy, trim, number } }, vnode) {
     el._assign = getModelAssigner(vnode)
     const castToNumber = number || el.type === 'number'
@@ -75,6 +96,7 @@ export const vModelText: ModelDirective<
       addEventListener(el, 'change', onCompositionEnd)
     }
   },
+  // vnode el实例已挂载到相应父节点dom下
   // set value on mounted so it's after min/max for type="range"
   mounted(el, { value }) {
     el.value = value == null ? '' : value

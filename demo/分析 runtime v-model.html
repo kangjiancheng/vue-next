@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Vue 3 分析 runtime v-model</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- 开发模式 -->
+<script src="../packages/vue/dist/vue.global.js"></script>
+<!-- 生产模式-->
+<!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
+<script>
+
+  const {
+    createApp,
+    ref,
+    reactive,
+    onMounted,
+  } = Vue
+
+  const HelloWorld = {
+    name: 'HelloWorld',
+    template: '<div class="hello-world">Hi, {{ userName }} <slot></slot></div>',
+    props: ['userName']
+  }
+
+  const rootComponent = {
+    name: 'root-component',
+    components: {
+      HelloWorld,
+    },
+    template: `
+      <input v-model="inputValue" placeholder="请输入" @change="handleChange" />
+    `,
+    props: {
+      age: Number,
+      sex: {
+        type: String,
+        default: 'girl'
+      },
+      classProps: [ String, Array, Object ]
+    },
+    data (){
+      return {
+        myID: '000', // 在模版中访问： myID
+        $id: '001' // 在模版中访问：$data.$id
+      }
+    },
+    // props 不可通过解构来获取对应值
+    setup(props, setupContext ) {
+      const count = ref(0)
+      const state = reactive({ foo: 1 })
+
+      const handleClick = () => {
+        count.value++
+        state.foo++
+      }
+      let inputValue = 1
+      const handleChange = (event, value) => {
+        console.log('input value: ', inputValue)
+      }
+
+      onMounted(() => {
+        console.log('hook: onMounted')
+        console.log(setupContext.attrs)
+      })
+
+
+      return {
+        age: props.age,
+        fixHeader: 'fix-header',
+        handleClick,
+        handleChange,
+        inputValue: '',
+      }
+    }
+  }
+  const rootProps = {
+    key: 1,
+    id: 11,
+    age: 10,
+    sex: 'boy',
+    classProps: {
+      red: 'red-bg',
+      weight: 'font-weight',
+    },
+  }
+
+  const app = createApp(rootComponent, rootProps)
+
+  app.config.performance = true
+  app.config.globalProperties.isBoy = true
+
+  app.mount('#app')
+
+</script>
+
+</body>
+</html>

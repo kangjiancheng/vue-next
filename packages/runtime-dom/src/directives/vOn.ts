@@ -43,13 +43,18 @@ const modifierGuards: Record<
 //     }, null, 40 /* PROPS, HYDRATE_EVENTS */, ["onClickOnce", "onFocusPassive", "onMousedownPassiveOnceCapture"]))
 //   }
 // }
-//  处理 vue事件的修饰符
+//  添加vue事件修饰符对应的处理逻辑
 export const withModifiers = (fn: Function, modifiers: string[]) => {
   return (event: Event, ...args: unknown[]) => {
+    // 在执行事件方法前，先执行修饰符对应的逻辑
     for (let i = 0; i < modifiers.length; i++) {
       const guard = modifierGuards[modifiers[i]]
+      // 守卫，即只允许触发相应修饰符的逻辑
+      // 如 如果点击的不是 'shift' 按键，则不处理后续逻辑
       if (guard && guard(event, modifiers)) return
     }
+
+    // 执行完修饰符处理逻辑，在执行最终方法
     return fn(event, ...args)
   }
 }

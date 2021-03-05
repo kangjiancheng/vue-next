@@ -155,8 +155,8 @@ export function invokeDirectiveHook(
     }
     // 自定义指令hook方法：
     // created： vnode 刚创建对应dom实例el包括其子元素列表后，解析vnode指令：在render中的阶段 - mountElement()
-    // beforeMount、
-    // mounted、
+    // beforeMount：vnode el节点属性props已添加完成
+    // mounted：vnode el已挂载到相应父节点dom实例上（如根vnode 挂载到#app dom，子vnode挂载到父vnode的dom实例上）
     // beforeUpdate
     // updated
     // beforeUnmount

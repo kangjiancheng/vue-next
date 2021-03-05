@@ -11,38 +11,32 @@ import { closeBlock, openBlock } from '../vnode'
  * Wrap a slot function to memoize current rendering instance
  * @private
  */
-// 如：<hello-world user-name="小明">welcome to home! <template v-slot:header v-if="false">111</template></hello-world>
-// render code:
-// const _Vue = Vue
-// const { createVNode: _createVNode, createTextVNode: _createTextVNode } = _Vue
+// 组件节点：
+// '<hello-world>
+//    <template v-slot:default="slotProps">{{ slotProps.text }}</template>
+//  </hello-world>'
+// 组件节点 渲染源码code:
+// const _component_hello_world = _resolveComponent("hello-world")
 //
-// const _hoisted_1 = /*#__PURE__*/_createTextVNode("welcome to home! ")
-// const _hoisted_2 = /*#__PURE__*/_createTextVNode("111")
-//
-// return function render(_ctx, _cache) {
-//   with (_ctx) {
-//     const { createTextVNode: _createTextVNode, resolveComponent: _resolveComponent, withCtx: _withCtx, createSlots: _createSlots, createVNode: _createVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue
-//
-//     const _component_hello_world = _resolveComponent("hello-world")
-//
-//     return (_openBlock(), _createBlock(_component_hello_world, { "user-name": "小明" }, _createSlots({
-//       default: _withCtx(() => [
-//         _hoisted_1
+//     return (_openBlock(), _createBlock(_component_hello_world, null, {
+//       default: _withCtx((slotProps) => [
+//         _createTextVNode(_toDisplayString(slotProps.text), 1 /* TEXT */)
 //       ]),
-//       _: 2 /* DYNAMIC */
-//     }, [
-//       false
-//         ? {
-//             name: "header",
-//             fn: _withCtx(() => [
-//               _hoisted_2
-//             ])
-//           }
-//         : undefined
-//     ]), 1024 /* DYNAMIC_SLOTS */))
-//   }
-// }
+//       _: 1 /* STABLE */
+//     }))
+//
+// 组件模版：
+// 如：'<div class="hello-world">
+//       <slot :text="'this is default'"></slot>
+//       <slot name="header"></slot>
+//     </div>'
+// 组件模版 渲染源码code：
+//  _createBlock("div", _hoisted_1, [
+//    _renderSlot($slots, "default", { text: 'this is default' }),
+//    _renderSlot($slots, "header")
+//  ])
 // 封装 fn：保证当执行fn时，fn里的数据能正确访问相应组件中的数据
+// 因为该vnode没有马上创建，而是之后在触发。
 export function withCtx(
   fn: Slot,
   ctx: ComponentInternalInstance | null = currentRenderingInstance // 当前组件实例
