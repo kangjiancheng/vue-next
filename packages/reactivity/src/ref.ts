@@ -27,6 +27,7 @@ export type ToRefs<T = any> = {
   [K in keyof T]: T[K] extends Ref ? T[K] : Ref<UnwrapRef<T[K]>>
 }
 
+// shallow: false
 const convert = <T extends unknown>(val: T): T =>
   isObject(val) ? reactive(val) : val
 
@@ -51,24 +52,38 @@ export function shallowRef(value?: unknown) {
   return createRef(value, true)
 }
 
+// 实现ref：创建一个ref
+// {
+//    _value: T, // 转换后的值
+//    __v_isRef: true,
+//    _rawValue: T, // 原始值
+//    _shallow: false
+//    value: get/set => _value // 拦截 value的读改
+// }
 class RefImpl<T> {
   private _value: T
 
-  public readonly __v_isRef = true
+  public readonly __v_isRef = true // 标记为 ref
 
   constructor(private _rawValue: T, public readonly _shallow = false) {
-    this._value = _shallow ? _rawValue : convert(_rawValue)
+    this._value = _shallow ? _rawValue : convert(_rawValue) // 返回值
   }
 
   get value() {
-    track(toRaw(this), TrackOpTypes.GET, 'value')
+    // 跟踪这个 ref 实例对象数据value 或 __v_raw
+    track(toRaw(this), TrackOpTypes.GET, 'value') // get
     return this._value
   }
 
   set value(newVal) {
     if (hasChanged(toRaw(newVal), this._rawValue)) {
+      // 判断 value值 是否改变
+      // 重新赋值
       this._rawValue = newVal
-      this._value = this._shallow ? newVal : convert(newVal)
+
+      this._value = this._shallow ? newVal : convert(newVal) // convert 转换基本值
+
+      // 触发变更
       trigger(toRaw(this), TriggerOpTypes.SET, 'value', newVal)
     }
   }
@@ -76,6 +91,7 @@ class RefImpl<T> {
 
 function createRef(rawValue: unknown, shallow = false) {
   if (isRef(rawValue)) {
+    // __v_isRef
     return rawValue
   }
   return new RefImpl(rawValue, shallow)

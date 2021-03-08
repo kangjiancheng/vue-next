@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Vue 3 分析 runtime suspense</title>
+  <title>Vue 3 分析 runtime 响应式</title>
   <style>
     body {
       margin: 0;
@@ -31,30 +31,9 @@
   const HelloWorld = {
     name: 'HelloWorld',
     template: `
-      <div class="hello-world" v-test-dir="handleDir">Hi, {{ userName }}</div>
+      <div class="hello-world">Hi, {{ userName }}</div>
     `,
     props: ['userName'],
-    directives: {
-      testDir: {
-        mounted(el, binding) {
-          console.log('hello-world test dir mounted!')
-          if (typeof binding.value === 'function') {
-            binding.value()
-          } else {
-            console.log('bind value: ', binding.value)
-          }
-        }
-      }
-    },
-    setup() {
-      const handleDir = () => {
-        console.log('test-dir handler value')
-      }
-
-      return {
-        handleDir,
-      }
-    }
   }
 
   const rootComponent = {
@@ -63,7 +42,7 @@
       HelloWorld,
     },
     template: `
-      <div class="root-component" @click="handleClick" @vnodeMounted="handleVnodeMounted">你好</div>
+      <button class="btn-click" @click="handleClick">点击 {{ count }}</button>
     `,
     props: {
       age: Number,
@@ -75,14 +54,17 @@
     },
     data (){
       return {
-        myID: '000', // 在模版中访问： myID
-        $id: '001' // 在模版中访问：$data.$id
+
       }
     },
     // props 不可通过解构来获取对应值
     setup(props, setupContext ) {
-      const count = ref(0)
-      const state = reactive({ foo: 1 })
+      const count = ref(1)
+
+      console.log(count.value) // 在setup函数中 读取 - 不触发响应式，需要在渲染函数执行期间
+
+
+      // const state = reactive({ foo: 1 })
 
       const handleClick = () => {
         count.value++
@@ -93,26 +75,14 @@
         state.foo++
       }
 
-      onMounted(() => {
-        console.log('hook: onMounted')
-        console.log(setupContext.attrs)
-      })
-
-      const handleVnodeMounted = () => {
-        console.log('vnode mounted')
-      }
+      let isShow = true
 
 
       return {
         count,
         age: props.age,
-        isHeader: true,
+        isShow: true,
         handleClick,
-        handleVnodeMounted,
-        handleFocus,
-        helloMsg: '你好，小朋友！',
-        userSlot: 'user',
-        redStyle: { color: 'red' }
       }
     }
   }
@@ -121,12 +91,6 @@
     key: 1,
     id: 11,
     age: 10,
-    sex: 'boy',
-    "onUpdate:modelValue": $event => (rootModel = $event),
-    classProps: {
-      red: 'red-bg',
-      weight: 'font-weight',
-    },
   }
 
   const app = createApp(rootComponent, rootProps)

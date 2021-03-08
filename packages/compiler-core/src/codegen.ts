@@ -774,10 +774,13 @@ function genNode(node: CodegenNode | symbol | string, context: CodegenContext) {
     context.push(node)
     return
   }
+
+  // 如 Symbol(Transition) : <transition>..</transition>
   if (isSymbol(node)) {
     context.push(context.helper(node))
     return
   }
+
   switch (node.type) {
     case NodeTypes.ELEMENT:
     case NodeTypes.IF:

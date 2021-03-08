@@ -154,6 +154,7 @@ export const toHandlerKey = cacheStringFunction(
 )
 
 // compare whether a value has changed, accounting for NaN.
+// 特殊值：NaN，如果两个都是NaN，也是 不变 （NaN !== NaN 为 true，NaN === NaN 为 false）
 export const hasChanged = (value: any, oldValue: any): boolean =>
   value !== oldValue && (value === value || oldValue === oldValue)
 

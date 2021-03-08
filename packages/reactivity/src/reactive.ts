@@ -227,9 +227,10 @@ export function isProxy(value: unknown): boolean {
   return isReactive(value) || isReadonly(value)
 }
 
+// 返回__v_raw 或 原先值observed
 export function toRaw<T>(observed: T): T {
   return (
-    (observed && toRaw((observed as Target)[ReactiveFlags.RAW])) || observed
+    (observed && toRaw((observed as Target)[ReactiveFlags.RAW])) || observed // __v_raw
   )
 }
 

@@ -605,7 +605,8 @@ function setupStatefulComponent(
 
     currentInstance = instance // 当前正在挂载的组件实例
 
-    pauseTracking() // 停止对setup()内部错误追踪，由引擎或用户自定义
+    // 在执行setup期间，停止对setup 内部数据变化的跟踪与收集
+    pauseTracking()
 
     // 执行组件的setup方法，并返回结果： setupResult
     const setupResult = callWithErrorHandling(
@@ -678,7 +679,6 @@ export function handleSetupResult(
       instance.devtoolsRawSetupState = setupResult
     }
 
-    // TODO: proxyRefs(setupResult)
     // 设置组件实例信息的setup返回值的数据
     instance.setupState = proxyRefs(setupResult)
 

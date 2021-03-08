@@ -148,9 +148,10 @@ function cleanup(effect: ReactiveEffect) {
 let shouldTrack = true
 const trackStack: boolean[] = []
 
+// 暂停跟踪 vue组件数据状态
 export function pauseTracking() {
-  trackStack.push(shouldTrack)
-  shouldTrack = false
+  trackStack.push(shouldTrack) // 跟踪队列
+  shouldTrack = false // 如执行setup函数时，没必要对内部数据状态变化进行跟踪响应
 }
 
 // 启动跟踪
@@ -159,28 +160,39 @@ export function enableTracking() {
   shouldTrack = true
 }
 
-// 重置 track 状态
+// 重置 跟踪状态
 export function resetTracking() {
-  const last = trackStack.pop()
+  const last = trackStack.pop() // 如执行完setup函数后，回复对组件数据读取的跟踪
   shouldTrack = last === undefined ? true : last
 }
 
+// 跟踪 执行组件渲染函数期间 所调用的数据
 export function track(target: object, type: TrackOpTypes, key: unknown) {
   if (!shouldTrack || activeEffect === undefined) {
+    // 即直接在setup 函数中进行读取时，没必要跟踪
+    // 如 let count = ref(1) 然后直接读：console.log(count.value) 这时候，并不是在渲染期间，所以不需要跟踪
     return
   }
-  let depsMap = targetMap.get(target)
+
+  // ref实例，如 ref(1)
+  let depsMap = targetMap.get(target) // ref 数据，如 ref(1)
   if (!depsMap) {
     targetMap.set(target, (depsMap = new Map()))
   }
+
+  // ref实例中关键属性key， 如 'value'
   let dep = depsMap.get(key)
   if (!dep) {
     depsMap.set(key, (dep = new Set()))
   }
+
+  // 该 关键key 被哪个组件使用
   if (!dep.has(activeEffect)) {
     dep.add(activeEffect)
-    activeEffect.deps.push(dep)
+    activeEffect.deps.push(dep) // 该组件使用了哪个key
+
     if (__DEV__ && activeEffect.options.onTrack) {
+      // onTrack: instance.rtc ? e => invokeArrayFns(instance.rtc!, e) : void 0,
       activeEffect.options.onTrack({
         effect: activeEffect,
         target,

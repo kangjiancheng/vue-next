@@ -31,28 +31,12 @@
   const HelloWorld = {
     name: 'HelloWorld',
     template: `
-      <div class="hello-world" v-test-dir="handleDir">Hi, {{ userName }}</div>
+      <div class="hello-world">Hi, {{ userName }}</div>
     `,
     props: ['userName'],
-    directives: {
-      testDir: {
-        mounted(el, binding) {
-          console.log('hello-world test dir mounted!')
-          if (typeof binding.value === 'function') {
-            binding.value()
-          } else {
-            console.log('bind value: ', binding.value)
-          }
-        }
-      }
-    },
     setup() {
-      const handleDir = () => {
-        console.log('test-dir handler value')
-      }
 
       return {
-        handleDir,
       }
     }
   }
@@ -63,34 +47,22 @@
       HelloWorld,
     },
     template: `
-      <div class="root-component" @click="handleClick" @vnodeMounted="handleVnodeMounted">你好</div>
+      <transition>
+        <div class="root-component" @click="handleClick">组件 transition</div>
+      </transition>
     `,
     props: {
       age: Number,
-      sex: {
-        type: String,
-        default: 'girl'
-      },
-      classProps: [ String, Array, Object ]
-    },
-    data (){
-      return {
-        myID: '000', // 在模版中访问： myID
-        $id: '001' // 在模版中访问：$data.$id
-      }
     },
     // props 不可通过解构来获取对应值
     setup(props, setupContext ) {
       const count = ref(0)
-      const state = reactive({ foo: 1 })
+      let isShow = true
 
       const handleClick = () => {
         count.value++
-        state.foo++
-      }
-      const handleFocus = () => {
-        count.value++
-        state.foo++
+        isShow = !isShow
+
       }
 
       onMounted(() => {
@@ -98,21 +70,11 @@
         console.log(setupContext.attrs)
       })
 
-      const handleVnodeMounted = () => {
-        console.log('vnode mounted')
-      }
-
 
       return {
         count,
-        age: props.age,
-        isHeader: true,
+        isShow,
         handleClick,
-        handleVnodeMounted,
-        handleFocus,
-        helloMsg: '你好，小朋友！',
-        userSlot: 'user',
-        redStyle: { color: 'red' }
       }
     }
   }
@@ -120,13 +82,6 @@
   const rootProps = {
     key: 1,
     id: 11,
-    age: 10,
-    sex: 'boy',
-    "onUpdate:modelValue": $event => (rootModel = $event),
-    classProps: {
-      red: 'red-bg',
-      weight: 'font-weight',
-    },
   }
 
   const app = createApp(rootComponent, rootProps)
