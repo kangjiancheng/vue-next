@@ -84,7 +84,8 @@ let uid = 0
 /**
  *
  * @param fn
- * @param options - dev {
+ * @param options：
+ *  dev {
       scheduler: queueJob,
       allowRecurse: true,
       onTrack: instance.rtc ? e => invokeArrayFns(instance.rtc!, e) : void 0,

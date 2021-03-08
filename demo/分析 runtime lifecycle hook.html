@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Vue 3 分析 runtime lifecycle hook</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- 开发模式 -->
+<script src="../packages/vue/dist/vue.global.js"></script>
+<!-- 生产模式-->
+<!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
+<script>
+
+  const {
+    createApp,
+    ref,
+    reactive,
+    onBeforeMount,
+    onMounted,
+  } = Vue
+
+  const HelloWorld = {
+    name: 'HelloWorld',
+    template: `
+      <div class="hello-world">Hi, {{ userName }}</div>
+    `,
+    props: ['userName'],
+    setup() {
+      const handleDir = () => {
+        console.log('test-dir handler value')
+      }
+
+      return {
+        handleDir,
+      }
+    }
+  }
+
+  const rootComponent = {
+    name: 'root-component',
+    components: {
+      HelloWorld,
+    },
+    template: `
+      <div class="root-component" @click="handleClick">你好</div>
+    `,
+    props: {
+    },
+
+    setup(props, setupContext ) {
+      // 在执行组件模版template的渲染函数前
+      onBeforeMount(() => {
+        console.log('root onBeforeMount')
+      })
+
+      // 挂载完组件节点vnode el（即组件模版template vnode el）后
+      onMounted(() => {
+        console.log('root onMounted')
+      })
+
+      return {
+      }
+    }
+  }
+  var rootModel = '哈哈哈'
+  const rootProps = {
+    key: 1,
+  }
+
+  const app = createApp(rootComponent, rootProps)
+
+  app.config.performance = true
+  app.config.globalProperties.isBoy = true
+
+  app.mount('#app')
+
+  const p = Promise.resolve('a');
+  p.then(function (s) {
+    console.log(s)
+  });
+</script>
+
+</body>
+</html>

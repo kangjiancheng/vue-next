@@ -462,6 +462,7 @@ export function createComponentInstance(
     asyncDep: null,
     asyncResolved: false,
 
+    // 生命周期函数回调事件
     // lifecycle hooks
     // not using enums here because it results in computed properties
     isMounted: false,
@@ -469,8 +470,8 @@ export function createComponentInstance(
     isDeactivated: false,
     bc: null,
     c: null,
-    bm: null,
-    m: null,
+    bm: null, // onBeforeMounted - 生命周期函数
+    m: null, // onMounted - 生命周期函数
     bu: null,
     u: null,
     um: null,

@@ -104,7 +104,7 @@ export function queueJob(job: SchedulerJob) {
 function queueFlush() {
   if (!isFlushing && !isFlushPending) {
     isFlushPending = true
-    currentFlushPromise = resolvedPromise.then(flushJobs)
+    currentFlushPromise = resolvedPromise.then(flushJobs) // 会在当前宏任务最后执行，会导致控制台的微任务最后执行（如 script标签后）
   }
 }
 

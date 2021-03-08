@@ -290,7 +290,7 @@ function createDevEffectOptions(
   }
 }
 
-export const queuePostRenderEffect = __FEATURE_SUSPENSE__
+export const queuePostRenderEffect = __FEATURE_SUSPENSE__ // rollup - true
   ? queueEffectWithSuspense
   : queuePostFlushCb
 
@@ -860,16 +860,14 @@ function baseCreateRenderer(
       needCallTransitionHooks ||
       dirs
     ) {
-      // TODO - queuePostRenderEffect
-      // __FEATURE_SUSPENSE__? queueEffectWithSuspense : queuePostFlushCb
       queuePostRenderEffect(() => {
-        // vnode el 已挂载， vnode onVnodeMounted 函数
+        // vnode onVnodeMounted：vnode el 已挂载，
         vnodeHook && invokeVNodeHook(vnodeHook, parentComponent, vnode)
 
-        // vnode el 已挂载， 执行 进入 transition
+        // 进入 transition enter：vnode el 已挂载
         needCallTransitionHooks && transition!.enter(el)
 
-        // vnode el 已挂载， 执行自定义指令 的 mounted
+        // 自定义指令 mounted：vnode el 已挂载，
         dirs && invokeDirectiveHook(vnode, null, parentComponent, 'mounted')
       }, parentSuspense)
     }
@@ -1502,6 +1500,7 @@ function baseCreateRenderer(
         // 解析完组件模版template的vnode，并挂载到父容器dom实例上
         // mounted hook
         if (m) {
+          // onMounted，在根组件挂载完后执行
           queuePostRenderEffect(m, parentSuspense)
         }
         // onVnodeMounted
