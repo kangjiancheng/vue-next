@@ -32,7 +32,7 @@ const isNonTrackableKeys = /*#__PURE__*/ makeMap(`__proto__,__v_isRef,__isVue`)
 const builtInSymbols = new Set(
   Object.getOwnPropertyNames(Symbol)
     .map(key => (Symbol as any)[key])
-    .filter(isSymbol)
+    .filter(isSymbol) // typeof val === 'symbol'
 )
 
 const get = /*#__PURE__*/ createGetter()
@@ -40,6 +40,7 @@ const shallowGet = /*#__PURE__*/ createGetter(false, true)
 const readonlyGet = /*#__PURE__*/ createGetter(true)
 const shallowReadonlyGet = /*#__PURE__*/ createGetter(true, true)
 
+// 对数组方法和数据进行响应
 const arrayInstrumentations: Record<string, Function> = {}
 // instrument identity-sensitive Array methods to account for possible reactive
 // values
@@ -48,8 +49,11 @@ const arrayInstrumentations: Record<string, Function> = {}
   arrayInstrumentations[key] = function(this: unknown[], ...args: unknown[]) {
     const arr = toRaw(this)
     for (let i = 0, l = this.length; i < l; i++) {
+      // 访问数据时，并进行跟踪数组，指定跟踪索引
       track(arr, TrackOpTypes.GET, i + '')
     }
+
+    // 执行数组方法
     // we run the method using the original args first (which may be reactive)
     const res = method.apply(arr, args)
     if (res === -1 || res === false) {
@@ -65,7 +69,7 @@ const arrayInstrumentations: Record<string, Function> = {}
 ;(['push', 'pop', 'shift', 'unshift', 'splice'] as const).forEach(key => {
   const method = Array.prototype[key] as any
   arrayInstrumentations[key] = function(this: unknown[], ...args: unknown[]) {
-    pauseTracking()
+    pauseTracking() // 停止跟踪数据变化：避免因数组长度变化而导致的无限更新
     const res = method.apply(this, args)
     resetTracking()
     return res
@@ -75,18 +79,23 @@ const arrayInstrumentations: Record<string, Function> = {}
 function createGetter(isReadonly = false, shallow = false) {
   return function get(target: Target, key: string | symbol, receiver: object) {
     if (key === ReactiveFlags.IS_REACTIVE) {
-      return !isReadonly
+      return !isReadonly // 默认 proxy.IS_REACTIVE = true
     } else if (key === ReactiveFlags.IS_READONLY) {
-      return isReadonly
+      return isReadonly // 默认 proxy.IS_READONLY = true
     } else if (
       key === ReactiveFlags.RAW &&
+      // receiver：触发该拦截方法的操作对象（一般为Proxy实例对象，注意原型链）
       receiver === (isReadonly ? readonlyMap : reactiveMap).get(target)
     ) {
+      // 访问 原生对象
       return target
     }
 
+    // 响应对象 为 数组
     const targetIsArray = isArray(target)
 
+    // 如 访问数组某个方法：let list = reactive([1, 2, 3]); list.includes(1)
+    // 注意可以正常访问数组索引（索引也是属性）: list[0]
     if (!isReadonly && targetIsArray && hasOwn(arrayInstrumentations, key)) {
       return Reflect.get(arrayInstrumentations, key, receiver)
     }
@@ -95,26 +104,32 @@ function createGetter(isReadonly = false, shallow = false) {
 
     if (
       isSymbol(key)
-        ? builtInSymbols.has(key as symbol)
-        : isNonTrackableKeys(key)
+        ? builtInSymbols.has(key as symbol) // Symbol对象的内置属性与方法
+        : isNonTrackableKeys(key) // __proto__,__v_isRef,__isVue
     ) {
       return res
     }
 
+    // 访问时，同时保持跟踪收集依赖组件effect
     if (!isReadonly) {
+      // 跟踪不可读对象的某个key，
+      // 不跟踪仅读的属性：如在执行 setup(shallowReadonly(instance.props), setupContext) 时，不对ctx的props进行跟踪
       track(target, TrackOpTypes.GET, key)
     }
 
     if (shallow) {
+      // shallow 直接返回，不进行深层次访问，响应式转换，如 渲染模版直接访问 ctx.props上的属性
       return res
     }
 
     if (isRef(res)) {
+      // key的value 为 通过 ref() 创建的响应式对象
       // ref unwrapping - does not apply for Array + integer key.
-      const shouldUnwrap = !targetIsArray || !isIntegerKey(key)
+      const shouldUnwrap = !targetIsArray || !isIntegerKey(key) // 非数组 或 非整数
       return shouldUnwrap ? res.value : res
     }
 
+    // 对象深层次响应转换：如果key的value 为对象，需要进一步响应转换
     if (isObject(res)) {
       // Convert returned value into a proxy as well. we do the isObject check
       // here to avoid invalid value warning. Also need to lazy access readonly
@@ -187,20 +202,21 @@ function ownKeys(target: object): (string | symbol)[] {
   return Reflect.ownKeys(target)
 }
 
+// 代理普通对象：Array、Object，如 在setup中: reactive({ name: '小明' })
 export const mutableHandlers: ProxyHandler<object> = {
-  get,
-  set,
+  get, // createGetter
+  set, // createSetter
   deleteProperty,
   has,
   ownKeys
 }
 
 export const readonlyHandlers: ProxyHandler<object> = {
-  get: readonlyGet,
+  get: readonlyGet, // createGetter(true)
   set(target, key) {
     if (__DEV__) {
       console.warn(
-        `Set operation on key "${String(key)}" failed: target is readonly.`,
+        `Set operation on key "${String(key)}" failed: target is readonly.`, // 如不可在setup在中修改props属性
         target
       )
     }
@@ -217,14 +233,17 @@ export const readonlyHandlers: ProxyHandler<object> = {
   }
 }
 
+// 如 instance.props，在执行渲染函数期间，渲染函数访问ctx上的props属性
 export const shallowReactiveHandlers: ProxyHandler<object> = extend(
   {},
   mutableHandlers,
   {
-    get: shallowGet,
+    get: shallowGet, // createGetter(false, true)
     set: shallowSet
   }
 )
+
+// 如在执行 setup(shallowReadonly(instance.props), setupContext)
 
 // Props handlers are special in the sense that it should not unwrap top-level
 // refs (in order to allow refs to be explicitly passed down), but should
@@ -233,6 +252,6 @@ export const shallowReadonlyHandlers: ProxyHandler<object> = extend(
   {},
   readonlyHandlers,
   {
-    get: shallowReadonlyGet
+    get: shallowReadonlyGet // createGetter(true, true)
   }
 )

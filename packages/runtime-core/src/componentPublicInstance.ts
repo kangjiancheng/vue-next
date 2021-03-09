@@ -422,9 +422,10 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
     return true
   },
 
-  // 判断所访问属性存在各个范围里
+  // 访问with里的数据时：判断所访问属性存在各个范围里
   has(
     {
+      // ctx.instance
       _: { data, setupState, accessCache, ctx, appContext, propsOptions }
     }: ComponentRenderContext,
     key: string

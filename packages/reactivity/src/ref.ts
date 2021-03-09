@@ -66,11 +66,12 @@ class RefImpl<T> {
   public readonly __v_isRef = true // 标记为 ref
 
   constructor(private _rawValue: T, public readonly _shallow = false) {
-    this._value = _shallow ? _rawValue : convert(_rawValue) // 返回值
+    this._value = _shallow ? _rawValue : convert(_rawValue) // isObject(_rawValue) ? reactive(_rawValue) : _rawValue
   }
 
   get value() {
     // 跟踪这个 ref 实例对象数据value 或 __v_raw
+    // toRaw 获取对象的最原生定义
     track(toRaw(this), TrackOpTypes.GET, 'value') // get
     return this._value
   }
@@ -89,11 +90,13 @@ class RefImpl<T> {
   }
 }
 
+// 创建ref对象
 function createRef(rawValue: unknown, shallow = false) {
   if (isRef(rawValue)) {
     // __v_isRef
     return rawValue
   }
+  // 实现ref对象
   return new RefImpl(rawValue, shallow)
 }
 
@@ -101,16 +104,25 @@ export function triggerRef(ref: Ref) {
   trigger(toRaw(ref), TriggerOpTypes.SET, 'value', __DEV__ ? ref.value : void 0)
 }
 
+// 访问 ref数据的value值 或 原生数据（即非响应数据）
 export function unref<T>(ref: T): T extends Ref<infer V> ? V : T {
   return isRef(ref) ? (ref.value as any) : ref
 }
 
+// 拦截一些可能是ref数据或非ref数据
+// 如 setup () {
+//    const count = ref(1)  // 响应式 - 返回 count.value
+//    let age = 12          // 非响应式  - 直接返回
+//    return { count, age } // setupResult
+// }
 const shallowUnwrapHandlers: ProxyHandler<any> = {
+  // 如 target 为 setupResult
   get: (target, key, receiver) => unref(Reflect.get(target, key, receiver)),
   set: (target, key, value, receiver) => {
     const oldValue = target[key]
     if (isRef(oldValue) && !isRef(value)) {
-      oldValue.value = value
+      // __v_isRef
+      oldValue.value = value // 修改响应式数据时，可以直接修改其结果，如 count = 12
       return true
     } else {
       return Reflect.set(target, key, value, receiver)
@@ -118,10 +130,11 @@ const shallowUnwrapHandlers: ProxyHandler<any> = {
   }
 }
 
+// 拦截ref对象集合，如 instance.setupState = proxyRefs(setupResult)
 export function proxyRefs<T extends object>(
   objectWithRefs: T
 ): ShallowUnwrapRef<T> {
-  return isReactive(objectWithRefs)
+  return isReactive(objectWithRefs) // __v_isReactive
     ? objectWithRefs
     : new Proxy(objectWithRefs, shallowUnwrapHandlers)
 }

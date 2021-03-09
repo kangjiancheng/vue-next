@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Vue 3 分析 runtime 响应式 ref</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- 开发模式 -->
+<script src="../packages/vue/dist/vue.global.js"></script>
+<!-- 生产模式-->
+<!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
+<script>
+
+  const {
+    createApp,
+    ref,
+    reactive,
+    onMounted,
+  } = Vue
+
+  const HelloWorld = {
+    name: 'HelloWorld',
+    template: `
+      <div class="hello-world">Hi, {{ userName }}</div>
+    `,
+    props: ['userName'],
+  }
+
+  const rootComponent = {
+    name: 'root-component',
+    components: {
+      HelloWorld,
+    },
+    template: `
+      <div>
+        <button class="btn-click" @click="handleClick">点击 {{ count }}</button>
+        {{ person.name }}： {{ person.birth.year }}
+        <button @click="handleChange"> {{ list }}： {{ list[1] }}</button>
+      </div>
+    `,
+    props: {
+      // age: Number,
+      // sex: {
+      //   type: String,
+      //   default: 'girl'
+      // },
+    },
+    data (){
+      return {
+
+      }
+    },
+    // props 不可通过解构来获取对应值
+    setup(props, setupContext ) {
+
+      // 创建 响应式引用（对基本类型数据值的引用）
+      const count = ref(1)
+      // console.log(count.value) // 在setup函数中 读取 - 不触发响应式，需要在渲染函数执行期间
+      const handleClick = () => {
+        count.value++
+      }
+
+      // 内部使用 reactive(val) 代理对象，
+      // 且在访问对象属性时，也会对该属性进行响应式转换，即 会递归拦截整个对象属性
+      const person = ref({
+        name: '小明',
+        birth: {
+          year: 2021,
+          time: { // 访问时，会进行代理，并转换为响应式对象，同时跟踪
+            hour: 20,
+          }
+        }
+      })
+      // ref响应式引用数据 需要通过 value访问值，而 reactive响应式对象可以直接访问
+      // console.log('person.value.birth.time: ', person.value.birth.time)
+      // console.log('person.value.birth.time.hour: ', person.value.birth.time.hour)
+      const handleChange = () => {
+        person.value.name = '小红'
+      }
+
+      const list = ref([1, 2, { name: '小明'}])
+
+      console.log((list)) // 在模版中直接访问，需要考虑字符串化，即默认会使用toJSON
+      console.log((list.value[0])) // 模版中访问索引属性，则正常跟踪收集依赖
+      console.log((list.value[2])) // 响应式转换
+      console.log((list.value[2].name))
+
+
+      let isShow = true
+
+
+      return {
+        count,
+        person,
+        list,
+        isShow: true,
+        handleClick,
+        handleChange,
+      }
+    }
+  }
+  const rootProps = {
+    age: 10,
+  }
+
+  const app = createApp(rootComponent, rootProps)
+
+  app.config.performance = true
+  app.config.globalProperties.isBoy = true
+
+  app.mount('#app')
+
+</script>
+
+</body>
+</html>

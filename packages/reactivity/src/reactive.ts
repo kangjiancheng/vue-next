@@ -26,7 +26,7 @@ export interface Target {
   [ReactiveFlags.RAW]?: any
 }
 
-export const reactiveMap = new WeakMap<Target, any>()
+export const reactiveMap = new WeakMap<Target, any>() // 响应式对象集合
 export const readonlyMap = new WeakMap<Target, any>()
 
 const enum TargetType {
@@ -61,7 +61,7 @@ function getTargetType(value: Target) {
 
   return value[ReactiveFlags.SKIP] || !Object.isExtensible(value)
     ? TargetType.INVALID
-    : targetTypeMap(toRawType(value)) // 获取value类型, 并对value类型 进行归类：TargetType.COMMON、COLLECTION、INVALID
+    : targetTypeMap(toRawType(value)) // 获取value原始类型, 并进行归类：COMMON、COLLECTION、INVALID
 }
 
 // only unwrap nested ref
@@ -89,17 +89,19 @@ type UnwrapNestedRefs<T> = T extends Ref ? T : UnwrapRef<T>
  * count.value // -> 1
  * ```
  */
+// 将对象 转换为 响应式对象
 export function reactive<T extends object>(target: T): UnwrapNestedRefs<T>
 export function reactive(target: object) {
   // if trying to observe a readonly proxy, return the readonly version.
   if (target && (target as Target)[ReactiveFlags.IS_READONLY]) {
     return target
   }
+  // 创建响应式对象
   return createReactiveObject(
     target,
     false,
-    mutableHandlers,
-    mutableCollectionHandlers
+    mutableHandlers, // proxy 普通对象 - COMMON： Array、Object
+    mutableCollectionHandlers // proxy 集合对象 - COLLECTION: Map、Set、WeakMap、WeakSet
   )
 }
 
@@ -172,12 +174,12 @@ export function shallowReadonly<T extends object>(
   )
 }
 
-// 创建 target 的 代理proxy
+// 创建响应式对象，并收集该响应式对象
 function createReactiveObject(
   target: Target,
   isReadonly: boolean,
-  baseHandlers: ProxyHandler<any>, // TargetType.COMMON，即target 类型为：Array、Object
-  collectionHandlers: ProxyHandler<any> // TargetType.COLLECTION，即target 类型为：Map、Set、WeakMap、WeakSet
+  baseHandlers: ProxyHandler<any>, // proxy 普通对象 - COMMON： Array、Object
+  collectionHandlers: ProxyHandler<any> // proxy 集合对象 - COLLECTION: Map、Set、WeakMap、WeakSet
 ) {
   if (!isObject(target)) {
     if (__DEV__) {
@@ -194,16 +196,22 @@ function createReactiveObject(
     return target
   }
   // target already has corresponding Proxy
-  const proxyMap = isReadonly ? readonlyMap : reactiveMap // 收集只读、响应式
+  const proxyMap = isReadonly ? readonlyMap : reactiveMap // 收集只读、响应式对象
   const existingProxy = proxyMap.get(target)
   if (existingProxy) {
+    // 如果已转换为响应式对象 则直接返回
     return existingProxy
   }
   // only a whitelist of value types can be observed.
+  // 对目标类型进行分类：COMMON、COLLECTION、INVALID
+  // COMMON： Array、Object
+  // COLLECTION: Map、Set、WeakMap、WeakSet
   const targetType = getTargetType(target)
   if (targetType === TargetType.INVALID) {
     return target
   }
+
+  // 代理响应式对象
   const proxy = new Proxy(
     target,
     targetType === TargetType.COLLECTION ? collectionHandlers : baseHandlers
@@ -214,6 +222,7 @@ function createReactiveObject(
 
 export function isReactive(value: unknown): boolean {
   if (isReadonly(value)) {
+    // __v_isReadonly
     return isReactive((value as Target)[ReactiveFlags.RAW]) // __v_raw
   }
   return !!(value && (value as Target)[ReactiveFlags.IS_REACTIVE]) // __v_isReactive

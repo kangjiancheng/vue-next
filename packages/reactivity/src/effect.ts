@@ -7,7 +7,7 @@ import { EMPTY_OBJ, isArray, isIntegerKey, isMap } from '@vue/shared'
 // raw Sets to reduce memory overhead.
 type Dep = Set<ReactiveEffect>
 type KeyToDepMap = Map<any, Dep>
-const targetMap = new WeakMap<any, KeyToDepMap>()
+const targetMap = new WeakMap<any, KeyToDepMap>() // 保存响应式ref数据对象 -> 响应式数据对象key -> 依赖的组件effect集合
 
 export interface ReactiveEffect<T = any> {
   (): T
@@ -128,8 +128,8 @@ function createReactiveEffect<T = any>(
   effect.allowRecurse = !!options.allowRecurse
   effect._isEffect = true
   effect.active = true
-  effect.raw = fn // 保存原函数
-  effect.deps = []
+  effect.raw = fn // 保存 原来的函数fn
+  effect.deps = [] // 保存 响应式对象属性key 涉及到的组件effect集合
   effect.options = options
   return effect
 }
@@ -145,13 +145,13 @@ function cleanup(effect: ReactiveEffect) {
   }
 }
 
-let shouldTrack = true
+let shouldTrack = true // 默认需要跟踪
 const trackStack: boolean[] = []
 
 // 暂停跟踪 vue组件数据状态
 export function pauseTracking() {
   trackStack.push(shouldTrack) // 跟踪队列
-  shouldTrack = false // 如执行setup函数时，没必要对内部数据状态变化进行跟踪响应
+  shouldTrack = false // 如执行setup函数时，没必要对ctx内部数据状态变化进行跟踪响应
 }
 
 // 启动跟踪
@@ -160,13 +160,14 @@ export function enableTracking() {
   shouldTrack = true
 }
 
-// 重置 跟踪状态
+// 恢复跟踪状态
 export function resetTracking() {
   const last = trackStack.pop() // 如执行完setup函数后，回复对组件数据读取的跟踪
-  shouldTrack = last === undefined ? true : last
+  shouldTrack = last === undefined ? true : last //默认跟踪
 }
 
-// 跟踪 执行组件渲染函数期间 所调用的数据
+// 跟踪某个响应对象的某个属性 所依赖的组件effect（执行组件渲染函数期间）
+// 如 const count = ref(1); track(toRaw(count), TrackOpTypes.GET, 'value')
 export function track(target: object, type: TrackOpTypes, key: unknown) {
   if (!shouldTrack || activeEffect === undefined) {
     // 即直接在setup 函数中进行读取时，没必要跟踪
@@ -174,22 +175,30 @@ export function track(target: object, type: TrackOpTypes, key: unknown) {
     return
   }
 
-  // ref实例，如 ref(1)
+  // targetMap: {
+  //    target - 响应式对象: {
+  //        key - 响应式对象属性: [
+  //          dep - 响应式对象属性 所依赖的组件effect
+  //        ]
+  //    }
+  // }
+
+  // 收集响应式对象，如 响应式ref对象 const = count=ref(1)
   let depsMap = targetMap.get(target) // ref 数据，如 ref(1)
   if (!depsMap) {
     targetMap.set(target, (depsMap = new Map()))
   }
 
-  // ref实例中关键属性key， 如 'value'
+  // 收集响应式对象 实际被依赖的属性（如ref对象的value属性）
   let dep = depsMap.get(key)
   if (!dep) {
     depsMap.set(key, (dep = new Set()))
   }
 
-  // 该 关键key 被哪个组件使用
+  // 收集组件effect - 组件在渲染期间 使用了该响应式ref对象属性value
   if (!dep.has(activeEffect)) {
     dep.add(activeEffect)
-    activeEffect.deps.push(dep) // 该组件使用了哪个key
+    activeEffect.deps.push(dep) // 组件effect依赖此响应式对象的这个属性
 
     if (__DEV__ && activeEffect.options.onTrack) {
       // onTrack: instance.rtc ? e => invokeArrayFns(instance.rtc!, e) : void 0,

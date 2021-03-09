@@ -328,6 +328,7 @@ function createInstrumentationGetter(isReadonly: boolean, shallow: boolean) {
   }
 }
 
+// 代理集合对象：Map、Set、WeakMap、WeakSet，如 在setup中 reactive({ name: '小明' })
 export const mutableCollectionHandlers: ProxyHandler<CollectionTypes> = {
   get: createInstrumentationGetter(false, false)
 }

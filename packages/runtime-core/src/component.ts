@@ -617,6 +617,7 @@ function setupStatefulComponent(
       [__DEV__ ? shallowReadonly(instance.props) : instance.props, setupContext] // setup(props, context) 接收的参数
     )
 
+    // 恢复跟踪
     resetTracking()
     currentInstance = null
 
@@ -679,7 +680,8 @@ export function handleSetupResult(
       instance.devtoolsRawSetupState = setupResult
     }
 
-    // 设置组件实例信息的setup返回值的数据
+    // 拦截 - 对setupResult进行响应式数据读取与访问
+    // 如 读取时：对于响应式数据ref则 返回value值，对于原始数据即非响应式数据则 直接读取并返回
     instance.setupState = proxyRefs(setupResult)
 
     // 绑定 setupState

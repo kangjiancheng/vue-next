@@ -65,6 +65,7 @@ export function renderComponentRoot(
   // 返回结果
   let result
 
+  // 执行渲染期间的组件实例
   currentRenderingInstance = instance
   if (__DEV__) {
     accessedAttrs = false
