@@ -46,9 +46,12 @@
       HelloWorld,
     },
     template: `
-      <ul class="item-list">
-        <li class="item" :class="{ active: item.id === 1 }" v-for="(item, index) of items" :key="item.id">{{ item.name }}</li>
-      </ul>
+      <div class="item-list">
+        <button @click="handleClick">点击{{ count }}</button>
+        <div class="item" :class="{ active: item.id === 1 }" v-for="(item, index) of items" :key="item.id">
+          {{ item.name }}
+        </div>
+      </div>
     `,
     props: {
       age: Number,
@@ -56,13 +59,9 @@
         type: String,
         default: 'girl'
       },
-      classProps: [ String, Array, Object ]
     },
     data (){
-      return {
-        myID: '000', // 在模版中访问： myID
-        $id: '001' // 在模版中访问：$data.$id
-      }
+      return {}
     },
     // props 不可通过解构来获取对应值
     setup(props, setupContext ) {
@@ -73,21 +72,11 @@
         count.value++
         state.foo++
       }
-      const handleFocus = () => {
-        count.value++
-        state.foo++
-      }
-
-      onMounted(() => {
-        console.log('hook: onMounted')
-        console.log(setupContext.attrs)
-      })
 
 
       return {
         count,
         age: props.age,
-        isHeader: true,
         handleClick,
 
         items: [
