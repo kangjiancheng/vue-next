@@ -34,6 +34,7 @@ export const nodeOps: Omit<RendererOptions<Node, Element>, 'patchProp'> = {
     node.nodeValue = text
   },
 
+  // 设置文本内容
   setElementText: (el, text) => {
     el.textContent = text
   },

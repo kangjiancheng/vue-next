@@ -12,10 +12,12 @@ const nativeOnRE = /^on[a-z]/
 
 type DOMRendererOptions = RendererOptions<Node, Element>
 
+// 必须更新的dom节点属性
 export const forcePatchProp: DOMRendererOptions['forcePatchProp'] = (_, key) =>
   key === 'value'
 
-// 为 vnode dom实例el添加 vnode的props属性列表
+// 添加或更新 vnode dom实例el 的prop属性
+// 当属性值发生变化 会触发更新， dom的value属性强制更新
 export const patchProp: DOMRendererOptions['patchProp'] = (
   el, // vnode dom实例
   key, // prop属性名

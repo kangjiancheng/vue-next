@@ -27,7 +27,8 @@ type Style = string | Record<string, string | string[]> | null
 //     ]))
 //   }
 // }
-// 为vnode dom实例添加style属性next
+// 为vnode dom实例添加 或更新 style属性next
+// 更新时：删除style空属性null
 export function patchStyle(el: Element, prev: Style, next: Style) {
   const style = (el as HTMLElement).style // vnode el实例style属性
 
@@ -60,7 +61,8 @@ export function patchStyle(el: Element, prev: Style, next: Style) {
     for (const key in next) {
       setStyle(style, key, next[key])
     }
-    // 原先中需要移除的属性
+
+    // 更新时：删除style空属性null
     if (prev && !isString(prev)) {
       for (const key in prev) {
         if (next[key] == null) {

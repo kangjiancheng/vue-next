@@ -40,6 +40,7 @@ export const enum PatchFlags {
   // 提高 diff 运行效率
   PROPS = 1 << 3,
 
+  // 存在动态指令参数 或 v-on/v-bind（无参数）指令
   // 节点中，对于带有动态key的props，当key发生变化时，总是需要进行完整的差异来删除旧的key
   // 该标志与CLASS、STYLE和PROPS互斥。
   FULL_PROPS = 1 << 4,

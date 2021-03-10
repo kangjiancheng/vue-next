@@ -421,7 +421,7 @@ export function createComponentInstance(
     parent,
     appContext, // app 上下文
     root: null!, // to be immediately set
-    next: null,
+    next: null, // 更新组件时：组件新的渲染模版vnode
     subTree: null!, // 组件渲染模版的vnode， will be set synchronously right after creation
     update: null!, // will be set synchronously right after creation
     render: null,

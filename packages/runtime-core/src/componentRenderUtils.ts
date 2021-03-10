@@ -340,12 +340,13 @@ const isElementRoot = (vnode: VNode) => {
   )
 }
 
+// 判断是否有必要更新组件
 export function shouldUpdateComponent(
-  prevVNode: VNode,
-  nextVNode: VNode,
+  prevVNode: VNode, // 组件渲染模版vnode
+  nextVNode: VNode, // 组件渲染模版vnode
   optimized?: boolean
 ): boolean {
-  const { props: prevProps, children: prevChildren, component } = prevVNode
+  const { props: prevProps, children: prevChildren, component } = prevVNode // 渲染模版vnode
   const { props: nextProps, children: nextChildren, patchFlag } = nextVNode
   const emits = component!.emitsOptions
 
@@ -353,32 +354,41 @@ export function shouldUpdateComponent(
   // caused the child component's slots content to have changed, we need to
   // force the child to update as well.
   if (__DEV__ && (prevChildren || nextChildren) && isHmrUpdating) {
+    // 父组件可能导致子组件的slots内容发生变化，需要前缀更新
     return true
   }
 
   // force child update for runtime directive or transition on component vnode.
   if (nextVNode.dirs || nextVNode.transition) {
+    // 存在指令 或 动画效果
     return true
   }
 
   if (optimized && patchFlag >= 0) {
+    // 存在更新内容
+
     if (patchFlag & PatchFlags.DYNAMIC_SLOTS) {
+      // 动态slot节点： v-for、v-if、动态v-slot等
       // slot content that references values that might have changed,
       // e.g. in a v-for
       return true
     }
     if (patchFlag & PatchFlags.FULL_PROPS) {
+      // 存在动态指令参数 或 v-on/v-bind（无参数）指令
       if (!prevProps) {
-        return !!nextProps
+        return !!nextProps // 如果属性都删了，就不需要更新
       }
       // presence of this flag indicates props are always non-null
-      return hasPropsChanged(prevProps, nextProps!, emits)
+      return hasPropsChanged(prevProps, nextProps!, emits) // vnode props属性列表是否发生变化：属性值变化、属性增减
     } else if (patchFlag & PatchFlags.PROPS) {
-      const dynamicProps = nextVNode.dynamicProps!
+      // 静态指令属性名列表，且存在非 ref、style、class，且该指令没有被设置缓存
+      // 如：v-bind、 v-model、 v-on
+      const dynamicProps = nextVNode.dynamicProps! // 组件渲染模版vnode的动态属性列表
+
       for (let i = 0; i < dynamicProps.length; i++) {
         const key = dynamicProps[i]
         if (
-          nextProps![key] !== prevProps![key] &&
+          nextProps![key] !== prevProps![key] && // 属性值发生变化
           !isEmitListener(emits, key)
         ) {
           return true
@@ -408,6 +418,9 @@ export function shouldUpdateComponent(
   return false
 }
 
+// 判断新旧组件渲染模版vnode的动态指令props属性列表是否发生变化：
+//  1、发生变化，需要更新数据
+//  2、某个属性值（非emit事件）发生变化
 function hasPropsChanged(
   prevProps: Data,
   nextProps: Data,
@@ -415,12 +428,13 @@ function hasPropsChanged(
 ): boolean {
   const nextKeys = Object.keys(nextProps)
   if (nextKeys.length !== Object.keys(prevProps).length) {
+    // 组件props选项发生变化，需要更新数据
     return true
   }
   for (let i = 0; i < nextKeys.length; i++) {
     const key = nextKeys[i]
     if (
-      nextProps[key] !== prevProps[key] &&
+      nextProps[key] !== prevProps[key] && // 组件props选项下，某个属性值（非emit事件）发生变化
       !isEmitListener(emitsOptions, key)
     ) {
       return true

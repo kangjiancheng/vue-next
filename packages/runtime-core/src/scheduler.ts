@@ -77,6 +77,7 @@ function findInsertionIndex(job: SchedulerJob) {
 }
 
 export function queueJob(job: SchedulerJob) {
+  // 组件effect
   // the dedupe search uses the startIndex argument of Array.includes()
   // by default the search index includes the current job that is being run
   // so it cannot recursively trigger itself again.
@@ -93,21 +94,28 @@ export function queueJob(job: SchedulerJob) {
   ) {
     const pos = findInsertionIndex(job)
     if (pos > -1) {
-      queue.splice(pos, 0, job)
+      queue.splice(pos, 0, job) // 插入任务组件effect
     } else {
+      // 收集待执行的任务 - 组件effect
       queue.push(job)
     }
+    // 执行任务队列
     queueFlush()
   }
 }
 
 function queueFlush() {
   if (!isFlushing && !isFlushPending) {
-    isFlushPending = true
-    currentFlushPromise = resolvedPromise.then(flushJobs) // 会在当前宏任务最后执行，会导致控制台的微任务最后执行（如 script标签后）
+    // !false && !false
+    isFlushPending = true // promise pending 中
+
+    // 会在当前宏任务最后执行，会导致控制台的微任务最后执行（如 script标签后）
+    // 统一收集所有任务，最后一起执行，如组件数据响应式依赖更新 组件effect
+    currentFlushPromise = resolvedPromise.then(flushJobs)
   }
 }
 
+// 开始执行更新组件时，从任务队列中移除此组件effect
 export function invalidateJob(job: SchedulerJob) {
   const i = queue.indexOf(job)
   if (i > -1) {
@@ -214,8 +222,8 @@ const getId = (job: SchedulerJob | SchedulerCb) =>
   job.id == null ? Infinity : job.id
 
 function flushJobs(seen?: CountMap) {
-  isFlushPending = false
-  isFlushing = true
+  isFlushPending = false // promise pending 结束
+  isFlushing = true // 开始冲刷任务队列
   if (__DEV__) {
     seen = seen || new Map()
   }
@@ -229,13 +237,15 @@ function flushJobs(seen?: CountMap) {
   //    priority number)
   // 2. If a component is unmounted during a parent component's update,
   //    its update can be skipped.
-  queue.sort((a, b) => getId(a) - getId(b))
+  queue.sort((a, b) => getId(a) - getId(b)) // 响应依赖更新：从小到大，先创建的组件先执行
 
   try {
     for (flushIndex = 0; flushIndex < queue.length; flushIndex++) {
       const job = queue[flushIndex]
       if (job) {
+        // 组件 - effect
         if (__DEV__) {
+          // 检测无限递归
           checkRecursiveUpdates(seen!, job)
         }
         callWithErrorHandling(job, null, ErrorCodes.SCHEDULER)

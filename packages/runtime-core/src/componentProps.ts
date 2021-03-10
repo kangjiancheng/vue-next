@@ -147,8 +147,9 @@ export function initProps(
   // 设定 attrs.__vInternal = 1
   def(attrs, InternalObjectKey, 1)
 
-  // 将 vnode的props 与 其所定义的props选项 进行对比
-  // 设置组件接收到的 props 和 attrs，并设置props的默认值
+  // 完成组件props的赋值：
+  //    将 vnode的props 与 其所定义的props选项 进行对比
+  //    设置组件接收到的 props 和 attrs，并设置props的默认值
   setFullProps(instance, rawProps, props, attrs)
 
   // validation
@@ -174,19 +175,20 @@ export function initProps(
   instance.attrs = attrs
 }
 
+// 更新组件时，在执行渲染函数前 - updateComponentPreRender：更新props - updateProps
 export function updateProps(
   instance: ComponentInternalInstance,
-  rawProps: Data | null,
-  rawPrevProps: Data | null,
+  rawProps: Data | null, // 组件渲染模版template vnode props
+  rawPrevProps: Data | null, // 组件节点 vnode props
   optimized: boolean
 ) {
   const {
-    props,
-    attrs,
+    props, // 组件props选项（已赋值）
+    attrs, //
     vnode: { patchFlag }
   } = instance
   const rawCurrentProps = toRaw(props)
-  const [options] = instance.propsOptions
+  const [options] = instance.propsOptions // 组件props选项列表
 
   if (
     // always force full diff in dev
@@ -198,7 +200,7 @@ export function updateProps(
         (instance.parent && instance.parent.type.__hmrId))
     ) &&
     (optimized || patchFlag > 0) &&
-    !(patchFlag & PatchFlags.FULL_PROPS)
+    !(patchFlag & PatchFlags.FULL_PROPS) // 不 存在动态指令参数 或 v-on/v-bind（无参数）指令
   ) {
     if (patchFlag & PatchFlags.PROPS) {
       // Compiler-generated props & no keys change, just set the updated

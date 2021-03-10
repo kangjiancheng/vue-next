@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Vue 3 分析 runtime 响应式 ref</title>
+  <title>Vue 3 分析 runtime 响应式 ref 读</title>
   <style>
     body {
       margin: 0;
@@ -46,6 +46,7 @@
         <button class="btn-click" @click="handleClick">点击 {{ count }}</button>
         {{ person.name }}： {{ person.birth.year }}
         <button @click="handleChange"> {{ list }}： {{ list[1] }}</button>
+        <span v-show="isShow">{{ isShow }}</span>
       </div>
     `,
     props: {
@@ -96,14 +97,14 @@
       console.log((list.value[2].name))
 
 
-      let isShow = true
+      const isShow = ref(true)
 
 
       return {
         count,
         person,
         list,
-        isShow: true,
+        isShow,
         handleClick,
         handleChange,
       }

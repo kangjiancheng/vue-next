@@ -47,8 +47,9 @@
     },
     template: `
       <div class="root-component" @click="handleClick">
-        文本内容 或 插值 {{ helloMsg }}
+        {{ helloMsg }}
         <span>createTextVNode：需要混合其它类型的兄弟节点</span>
+        <span>{{ helloMsg }}</span>
       </div>
     `,
     props: {

@@ -65,6 +65,7 @@ class RefImpl<T> {
 
   public readonly __v_isRef = true // 标记为 ref
 
+  // _shallow: 则不对对象类型进行深层次的响应转换与跟踪依赖收集
   constructor(private _rawValue: T, public readonly _shallow = false) {
     this._value = _shallow ? _rawValue : convert(_rawValue) // isObject(_rawValue) ? reactive(_rawValue) : _rawValue
   }
@@ -82,9 +83,9 @@ class RefImpl<T> {
       // 重新赋值
       this._rawValue = newVal
 
-      this._value = this._shallow ? newVal : convert(newVal) // convert 转换基本值
+      this._value = this._shallow ? newVal : convert(newVal) //  isObject(newVal) ? reactive(newVal) : newVal
 
-      // 触发变更
+      // 触发 响应式依赖更新组件
       trigger(toRaw(this), TriggerOpTypes.SET, 'value', newVal)
     }
   }

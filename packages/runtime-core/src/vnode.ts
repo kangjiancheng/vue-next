@@ -473,7 +473,7 @@ function _createVNode(
     vnode.ssFallback = fallback
   }
 
-  // 保存当前vnode 到 当前vnodes block列表
+  // 在某个根vnode下，保存当前vnode到 当前vnodes block列表 - block下的动态子节点
   if (
     shouldTrack > 0 &&
     // avoid a block node from tracking itself

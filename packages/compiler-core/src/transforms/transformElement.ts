@@ -748,8 +748,8 @@ export function buildProps(
       patchFlag |= PatchFlags.STYLE
     }
     if (dynamicPropNames.length) {
-      // 静态指令属性名列表，且非 ref、style、class，且该指令没有被设置缓存
-      // 如：v-bind、 v-model、 v-on
+      // 动态属性：静态指令属性名列表，且非 ref、style、class，且该指令没有被设置缓存
+      // 如：v-bind、 v-model （onUpdate:modelValue）、 v-on
       patchFlag |= PatchFlags.PROPS
     }
     if (hasHydrationEventBinding) {

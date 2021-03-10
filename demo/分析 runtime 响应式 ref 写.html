@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Vue 3 分析 runtime 响应式 ref 写</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- 开发模式 -->
+<script src="../packages/vue/dist/vue.global.js"></script>
+<!-- 生产模式-->
+<!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
+<script>
+
+  const {
+    createApp,
+    ref,
+    reactive,
+    onMounted,
+  } = Vue
+
+  const HelloWorld = {
+    name: 'HelloWorld',
+    template: `
+      <div class="hello-world">Hi, {{ userName }}</div>
+    `,
+    props: ['userName'],
+  }
+
+  const rootComponent = {
+    name: 'root-component',
+    components: {
+      HelloWorld,
+    },
+    template: `
+      <div>
+        <button class="btn-click" @click="handleClick">点击 {{ count }}</button>
+      </div>
+    `,
+    props: {
+      age: Number,
+    },
+    // props 不可通过解构来获取对应值
+    setup(props, setupContext ) {
+
+      const count = ref(1)
+      const handleClick = () => {
+        count.value++
+      }
+
+      return {
+        count,
+        handleClick,
+      }
+    }
+  }
+  const rootProps = {
+    age: 10,
+  }
+
+  const app = createApp(rootComponent, rootProps)
+
+  app.config.performance = true
+  app.config.globalProperties.isBoy = true
+
+  app.mount('#app')
+
+</script>
+
+</body>
+</html>

@@ -62,11 +62,13 @@ export function effect<T = any>(
     // fn._isEffect === true
     fn = fn.raw // 原函数
   }
+
+  // queueJob - Job
   const effect = createReactiveEffect(fn, options)
   if (!options.lazy) {
     effect() // 立刻执行
   }
-  return effect //
+  return effect
 }
 
 export function stop(effect: ReactiveEffect) {
@@ -101,6 +103,7 @@ function createReactiveEffect<T = any>(
   fn: () => T,
   options: ReactiveEffectOptions
 ): ReactiveEffect<T> {
+  // 组件更新数据时，也会重新执行这个effect，即 SchedulerJob
   const effect = function reactiveEffect(): unknown {
     if (!effect.active) {
       // 执行 fn
@@ -108,11 +111,11 @@ function createReactiveEffect<T = any>(
     }
 
     if (!effectStack.includes(effect)) {
-      cleanup(effect)
+      cleanup(effect) // 删除已经存在的effect，避免之后重复添加，如更新组件响应式依赖数据时 更新组件effect
       try {
         enableTracking()
         effectStack.push(effect)
-        activeEffect = effect
+        activeEffect = effect // 当前正在渲染的组件 - effect
 
         // 执行fn，并返回结果
         return fn()
@@ -125,20 +128,21 @@ function createReactiveEffect<T = any>(
     }
   } as ReactiveEffect
   effect.id = uid++
-  effect.allowRecurse = !!options.allowRecurse
+  effect.allowRecurse = !!options.allowRecurse // true
   effect._isEffect = true
   effect.active = true
-  effect.raw = fn // 保存 原来的函数fn
-  effect.deps = [] // 保存 响应式对象属性key 涉及到的组件effect集合
+  effect.raw = fn // 当前正在执行渲染函数
+  effect.deps = [] // 组件每个响应式数据 所依赖到的组件effect集合
   effect.options = options
   return effect
 }
 
-// 删除列表中的 effect
+// 删除已经存在的effect，避免之后重复添加，如更新组件响应式依赖数据时 发生的执行更新组件effect期间
 function cleanup(effect: ReactiveEffect) {
   const { deps } = effect
   if (deps.length) {
     for (let i = 0; i < deps.length; i++) {
+      // 遍历删除当前组件所有属性 对当前组件的依赖，为了之后执行渲染函数时重新添加响应依赖
       deps[i].delete(effect)
     }
     deps.length = 0
@@ -212,25 +216,31 @@ export function track(target: object, type: TrackOpTypes, key: unknown) {
   }
 }
 
+// 触发key 对应的 依赖的组件effect列表更新 deps
 export function trigger(
-  target: object,
-  type: TriggerOpTypes,
-  key?: unknown,
-  newValue?: unknown,
+  target: object, // 修改的对象
+  type: TriggerOpTypes, // 触发方式 如 set 改值
+  key?: unknown, // 修改的对象的key
+  newValue?: unknown, // key: value
   oldValue?: unknown,
   oldTarget?: Map<unknown, unknown> | Set<unknown>
 ) {
-  const depsMap = targetMap.get(target)
+  // depsMap: 响应式对象 所有被依赖收集的属性集合
+  const depsMap = targetMap.get(target) // 响应式依赖
   if (!depsMap) {
     // never been tracked
+    // target 没有被响应式依赖收集
     return
   }
 
+  // 收集当前key 所依赖的组件effects
   const effects = new Set<ReactiveEffect>()
   const add = (effectsToAdd: Set<ReactiveEffect> | undefined) => {
+    // effectsToAdd - key 所对应的组件effects列表
     if (effectsToAdd) {
       effectsToAdd.forEach(effect => {
         if (effect !== activeEffect || effect.allowRecurse) {
+          // allowRecurse: true
           effects.add(effect)
         }
       })
@@ -238,10 +248,12 @@ export function trigger(
   }
 
   if (type === TriggerOpTypes.CLEAR) {
+    // 集合清空
     // collection being cleared
     // trigger all effects for target
     depsMap.forEach(add)
   } else if (key === 'length' && isArray(target)) {
+    // 数组清空
     depsMap.forEach((dep, key) => {
       if (key === 'length' || key >= (newValue as number)) {
         add(dep)
@@ -250,6 +262,7 @@ export function trigger(
   } else {
     // schedule runs for SET | ADD | DELETE
     if (key !== void 0) {
+      // deps: 属性key 所依赖的组件effect列表
       add(depsMap.get(key))
     }
 
@@ -276,12 +289,14 @@ export function trigger(
         break
       case TriggerOpTypes.SET:
         if (isMap(target)) {
+          // 集合
           add(depsMap.get(ITERATE_KEY))
         }
         break
     }
   }
 
+  // 依次触发key所依赖组件effect列表更新
   const run = (effect: ReactiveEffect) => {
     if (__DEV__ && effect.options.onTrigger) {
       effect.options.onTrigger({
@@ -295,7 +310,8 @@ export function trigger(
       })
     }
     if (effect.options.scheduler) {
-      effect.options.scheduler(effect)
+      // queueJob
+      effect.options.scheduler(effect) // 执行组件effect
     } else {
       effect()
     }
