@@ -14,11 +14,10 @@
 </head>
 <body>
 <div id="app">
-  <div class="test-span" :class="classRed" style="color: blue;" @click="handleClick">
-    age: {{ age }} - {{ isBoy }}
-    <i>123</i>
-    <hello-world user-name="小明">welcome to home!</hello-world>
-  </div>
+  <template v-for="item of items" :key="item.id">
+    <div>{{ item.name }}</div>
+    <div>{{ item.value }}</div>
+  </template>
 </div>
 
 <!-- 开发模式 -->
@@ -77,12 +76,12 @@
         age: props.age,
         classRed: 'red',
         handleClick,
+        items: [{id:1, name: '小明', value: '123'}]
       }
     }
   }
   const rootProps = {
     key: 1,
-    id: 11,
     age: 10,
     sex: 'boy',
   }

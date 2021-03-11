@@ -46,10 +46,10 @@
       HelloWorld,
     },
     template: `
-      <div class="item-list">
+      <div class="user-list">
         <button @click="handleClick">点击{{ count }}</button>
-        <div class="item" :class="{ active: item.id === 1 }" v-for="(item, index) of items" :key="item.id">
-          {{ item.name }}
+        <div class="user" :class="{ active: user.id === 1 }" v-for="(user, index) of userList" :key="user.id">
+          {{ user.name }}
         </div>
       </div>
     `,
@@ -66,24 +66,24 @@
     // props 不可通过解构来获取对应值
     setup(props, setupContext ) {
       const count = ref(0)
-      const state = reactive({ foo: 1 })
 
       const handleClick = () => {
         count.value++
-        state.foo++
       }
+
+      const userList = [
+        { id: 0, name: '小明' },
+        { id: 1, name: '小红' },
+        { id: 2, name: '小李' },
+      ]
 
 
       return {
         count,
-        age: props.age,
+        // age: props.age,
         handleClick,
 
-        items: [
-          { id: 0, name: '小明' },
-          { id: 1, name: '小红' },
-          { id: 2, name: '小李' },
-        ]
+        userList,
       }
     }
   }

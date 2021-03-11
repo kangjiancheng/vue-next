@@ -172,6 +172,7 @@ export const transformFor = createStructuralDirectiveTransform(
           }
         } else if (needFragmentWrapper) {
           // 多个子节点：如多个标签节点 或 多个文本节点（文本/插值/注释）
+          // <template v-for>...</template>
 
           // should generate a fragment block for each loop
           childBlock = createVNodeCall(

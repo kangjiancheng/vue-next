@@ -87,6 +87,7 @@ export function renderList(
 
     ret = new Array(source.length)
     for (let i = 0, l = source.length; i < l; i++) {
+      // 开始执行渲染
       ret[i] = renderItem(source[i], i)
     }
   } else if (typeof source === 'number') {

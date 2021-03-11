@@ -373,13 +373,12 @@ function _createVNode(
     return cloned
   }
 
-  // class 格式的组件
   // class component normalization.
   if (isClassComponent(type)) {
     type = type.__vccOpts
   }
 
-  // 节点上的属性列表
+  // vnode节点上的属性列表： class 、 style
 
   // class & style normalization.
   if (props) {
@@ -536,6 +535,7 @@ export function cloneVNode<T, U>(
     // existing patch flag to be reliable and need to add the FULL_PROPS flag.
     // note: perserve flag for fragments since they use the flag for children
     // fast paths only.
+    // 如果存在合并属性，因为无法确定合并属性内容，所以需要全部更新vnode属性，如 组件模版根vnode合并组件节点vnode，在更新时，需要全部更新。
     patchFlag:
       extraProps && vnode.type !== Fragment
         ? patchFlag === -1 // hoisted node
