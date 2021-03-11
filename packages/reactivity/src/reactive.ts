@@ -110,6 +110,7 @@ export function reactive(target: object) {
  * level properties are reactive. It also does not auto-unwrap refs (even at the
  * root level).
  */
+// 不进行深层次代理响应：即如果访问该对象的属性时，如果属性值为对象，则直接返回结果，而不是进行响应转换该属性值，但会进行跟踪并收集依赖
 export function shallowReactive<T extends object>(target: T): T {
   // 创建target 代理proxy响应式d对象
   return createReactiveObject(
@@ -163,9 +164,11 @@ export function readonly<T extends object>(
  * returned properties.
  * This is used for creating the props proxy object for stateful components.
  */
+// 不进行深层次代理响应：即如果访问该对象的属性时，不会进行跟踪并收集依赖
 export function shallowReadonly<T extends object>(
   target: T
 ): Readonly<{ [K in keyof T]: UnwrapNestedRefs<T[K]> }> {
+  // setup (props = shallowReadonly(instance.props))
   return createReactiveObject(
     target,
     true,

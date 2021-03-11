@@ -226,7 +226,7 @@ export function trigger(
   oldTarget?: Map<unknown, unknown> | Set<unknown>
 ) {
   // depsMap: 响应式对象 所有被依赖收集的属性集合
-  const depsMap = targetMap.get(target) // 响应式依赖
+  const depsMap = targetMap.get(target) // 响应式对象的依赖收集
   if (!depsMap) {
     // never been tracked
     // target 没有被响应式依赖收集
@@ -268,13 +268,14 @@ export function trigger(
 
     // also run for iteration key on ADD | DELETE | Map.SET
     switch (type) {
-      case TriggerOpTypes.ADD:
+      case TriggerOpTypes.ADD: // 添加新属性
         if (!isArray(target)) {
-          add(depsMap.get(ITERATE_KEY))
+          add(depsMap.get(ITERATE_KEY)) // iterate
           if (isMap(target)) {
             add(depsMap.get(MAP_KEY_ITERATE_KEY))
           }
         } else if (isIntegerKey(key)) {
+          // 属性key 为数字
           // new index added to array -> length changes
           add(depsMap.get('length'))
         }

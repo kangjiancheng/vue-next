@@ -155,6 +155,8 @@ function createSetter(shallow = false) {
     if (!shallow) {
       value = toRaw(value)
       if (!isArray(target) && isRef(oldValue) && !isRef(value)) {
+        // 针对属性为ref对象
+        // 非数组，且之前为ref对象，但是新值不是ref对象 - 目的：方便不用通过调用ref value属性来设置 新值
         oldValue.value = value
         return true
       }
@@ -162,16 +164,21 @@ function createSetter(shallow = false) {
       // in shallow mode, objects are set as-is regardless of reactive or not
     }
 
+    // 修改属性值
     const hadKey =
       isArray(target) && isIntegerKey(key)
         ? Number(key) < target.length
         : hasOwn(target, key)
     const result = Reflect.set(target, key, value, receiver)
+
+    // 触发依赖更新 - 必须是定义时的响应式对象访问该属性，不可以通过原型链来访问该响应式对象的属性
     // don't trigger if target is something up in the prototype chain of original
     if (target === toRaw(receiver)) {
       if (!hadKey) {
+        // 添加新值
         trigger(target, TriggerOpTypes.ADD, key, value)
       } else if (hasChanged(value, oldValue)) {
+        // 修改值
         trigger(target, TriggerOpTypes.SET, key, value, oldValue)
       }
     }
