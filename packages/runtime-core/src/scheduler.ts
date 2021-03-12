@@ -49,6 +49,7 @@ let currentPreFlushParentJob: SchedulerJob | null = null
 const RECURSION_LIMIT = 100
 type CountMap = Map<SchedulerJob | SchedulerCb, number>
 
+// 缓冲队列执行完后，在执行nextTick函数
 export function nextTick(
   this: ComponentPublicInstance | void,
   fn?: () => void
