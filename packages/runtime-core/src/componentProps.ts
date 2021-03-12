@@ -314,6 +314,7 @@ function setFullProps(
         // '组件vnode的props' 如果在 '组件定义的props选项里' 则赋值保存到有效的props
         props[camelKey] = value
       } else if (!isEmitListener(instance.emitsOptions, key)) {
+        // 'onUpdate:user-name'
         // 不在组件props属性选项里 也不在组件emits属性选项里
         attrs[key] = value
       }

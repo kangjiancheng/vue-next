@@ -225,6 +225,8 @@ export function trigger(
   oldValue?: unknown,
   oldTarget?: Map<unknown, unknown> | Set<unknown>
 ) {
+  // 依赖属性
+
   // depsMap: 响应式对象 所有被依赖收集的属性集合
   const depsMap = targetMap.get(target) // 响应式对象的依赖收集
   if (!depsMap) {
@@ -232,6 +234,8 @@ export function trigger(
     // target 没有被响应式依赖收集
     return
   }
+
+  // 依赖组件
 
   // 收集当前key 所依赖的组件effects
   const effects = new Set<ReactiveEffect>()

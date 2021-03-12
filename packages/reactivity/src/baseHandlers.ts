@@ -88,6 +88,7 @@ function createGetter(isReadonly = false, shallow = false) {
       receiver === (isReadonly ? readonlyMap : reactiveMap).get(target)
     ) {
       // 访问 原生对象
+      // toRaw(target)
       return target
     }
 

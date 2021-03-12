@@ -44,13 +44,23 @@ export type EmitFn<
       >
 
 // 组件实例的emit方法
+// 调用组件实例instance.ctx的emit方法，其中事件直接从vnode.props里匹配，非instance.props里
 export function emit(
   instance: ComponentInternalInstance,
   event: string,
-  ...rawArgs: any[]
+  ...rawArgs: any[] // $emit('update:user-name', '小明')
 ) {
+  // vnode props
+  //
+  // <hello-world v-model:user-name.trim="user.name" />
+  // 则：  _createVNode(_component_hello_world, {
+  //         "user-name": user.name,
+  //         "onUpdate:user-name": $event => (user.name = $event),
+  //         "user-nameModifiers": { trim: true }
+  //       }, null, 8 /* PROPS */, ["user-name", "onUpdate:user-name"])
   const props = instance.vnode.props || EMPTY_OBJ
 
+  // 在 组件emits/props选项中定义事件
   if (__DEV__) {
     const {
       emitsOptions,
@@ -58,6 +68,7 @@ export function emit(
     } = instance
     if (emitsOptions) {
       if (!(event in emitsOptions)) {
+        // 未定义事件：未在组件 emits或props选项里 定义事件
         if (!propsOptions || !(toHandlerKey(event) in propsOptions)) {
           warn(
             `Component emitted event "${event}" but it is neither declared in ` +
@@ -78,19 +89,24 @@ export function emit(
     }
   }
 
+  // 传递参数
   let args = rawArgs
+  // v-model相关的自定义事件
   const isModelListener = event.startsWith('update:')
 
+  // 处理修饰符
   // for v-model update:xxx events, apply modifiers on args
-  const modelArg = isModelListener && event.slice(7)
+  const modelArg = isModelListener && event.slice(7) // update:modelValue
   if (modelArg && modelArg in props) {
     const modifiersKey = `${
       modelArg === 'modelValue' ? 'model' : modelArg
     }Modifiers`
     const { number, trim } = props[modifiersKey] || EMPTY_OBJ
     if (trim) {
+      // <hello-world v-model:user-name.trim="user.name" />
       args = rawArgs.map(a => a.trim())
     } else if (number) {
+      // <hello-world v-model:user-name.number="user.name" />
       args = rawArgs.map(toNumber)
     }
   }
@@ -99,9 +115,12 @@ export function emit(
     devtoolsComponentEmit(instance, event, args)
   }
 
+  // 推荐调用时小写：$emit('update:user-name', '小明')
   if (__DEV__) {
     const lowerCaseEvent = event.toLowerCase()
     if (lowerCaseEvent !== event && props[toHandlerKey(lowerCaseEvent)]) {
+      // onUpdate:user-name
+      // 大小写，不用大写事件
       warn(
         `Event "${lowerCaseEvent}" is emitted in component ` +
           `${formatComponentName(
@@ -116,15 +135,22 @@ export function emit(
   }
 
   // convert handler name to camelCase. See issue #2249
-  let handlerName = toHandlerKey(camelize(event))
-  let handler = props[handlerName]
+  // <hello-world v-model:userName.trim="user.name" />，则：props: { 'onUpdate:userName': ..., ...}
+  // 调用：$emit('update:user-name', '小明') 则：'onUpdate:userName'
+  let handlerName = toHandlerKey(camelize(event)) // 'on' + 事件名转换小驼峰
+  let handler = props[handlerName] // 事件处理函数
+
+  // 传递连字符事件属性 v-model:user-name
   // for v-model update:xxx events, also trigger kebab-case equivalent
   // for props passed via kebab-case
   if (!handler && isModelListener) {
-    handlerName = toHandlerKey(hyphenate(event))
+    // 连字符传递属性prop
+    // <hello-world v-model:user-name.trim="user.name" />
+    handlerName = toHandlerKey(hyphenate(event)) // 传递props {'onUpdate:user-name' ...}
     handler = props[handlerName]
   }
 
+  // 执行事件
   if (handler) {
     callWithAsyncErrorHandling(
       handler,
@@ -150,7 +176,7 @@ export function emit(
   }
 }
 
-// 规范 组件的 emits 选项
+// 规范 组件的 emits 选项事件属性
 export function normalizeEmitsOptions(
   comp: ConcreteComponent,
   appContext: AppContext,

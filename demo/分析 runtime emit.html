@@ -31,14 +31,15 @@
   const HelloWorld = {
     name: 'HelloWorld',
     template: `
-      <div class="hello-world">hi {{ userName }} ! <button @click="handleClick">修改名字</button></div>
+      <button class="hello-world" @click="handleClick">点击</button>
     `,
-    props: ['userName'],
-    emits: ['update:userName'],
+    emits: ['change-name'], // 定义事件名
     setup (props, context) {
       const handleClick = () => {
-        context.emit('update:userName', '小明')
+        // 调用组件 vnode props事件： { onChangeName: handleClick }
+        context.emit('change-name', { name: '小明'})
       }
+
       return {
         handleClick
       }
@@ -51,34 +52,18 @@
       HelloWorld,
     },
     template: `
-      <div>
-        <button class="btn-click" @click="handleClick">点击 {{ user.age  }}</button>
-        <hello-world v-model:user-name="user.name" />
+      <div class="app">
+        <hello-world @changeName="handleClick"/>
+        <span>{{ user.name }}</span>
       </div>
     `,
-    props: {
-      // age: Number,
-      // sex: {
-      //   type: String,
-      //   default: 'girl'
-      // },
-    },
-    data (){
-      return {
-
-      }
-    },
     setup(props, setupContext ) {
-      const age = ref(12)
       const user = reactive({
         name: '小李',
-        age,
       })
-      const handleClick = () => {
-        user.name = '小王'
-        user.age ++   // reactive 拦截响应修改： set - 修改了ref对象的value
+      const handleClick = ($event) => {
+        user.name = $event.name
       }
-
 
       return {
         user,
