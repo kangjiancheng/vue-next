@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Vue 3 分析 runtime 响应式 reactive 读</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- 开发模式 -->
+<script src="../packages/vue/dist/vue.global.js"></script>
+<!-- 生产模式-->
+<!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
+<script>
+
+  const {
+    createApp,
+    ref,
+    reactive,
+    onMounted,
+  } = Vue
+
+  const HelloWorld = {
+    name: 'HelloWorld',
+    template: `
+      <div class="hello-world">hi {{ userName }} ! <button @click="handleClick">修改名字</button></div>
+    `,
+    props: ['userName'],
+    emits: ['update:userName'],
+    setup (props, context) {
+      const handleClick = () => {
+        context.emit('update:userName', '小明')
+      }
+      return {
+        handleClick
+      }
+    }
+  }
+
+  const rootComponent = {
+    name: 'root-component',
+    components: {
+      HelloWorld,
+    },
+    template: `
+      <div>
+        <button class="btn-click" @click="handleClick">点击 {{ userList.length  }}</button>
+      </div>
+    `,
+    props: {
+      // age: Number,
+      // sex: {
+      //   type: String,
+      //   default: 'girl'
+      // },
+    },
+    data (){
+      return {
+
+      }
+    },
+    setup(props, setupContext ) {
+      const userList = reactive([
+        { name: '小明', age: 21 },
+        { name: '小李', age: 32 },
+        { name: '小王', age: 43 },
+      ])
+
+      const handleClick = () => {
+        // 1、触发数组proxy，获取push方法；
+        // 2、开始执行push时：会触发数组对象proxy，先触发get获取操作索引；再触发set进行设值，并触发依赖更新trigger（类型ADD)
+        // userList.push({
+        //   name: '小红',
+        //   age: 18
+        // })
+
+        // userList.slice(1, 2) // 正常代理
+
+        // has判断要操作的索引目标是否在，delete删除操作目标索引并触发依赖更新，set添加新值并触发依赖更新。
+        userList.splice(0, 2, { name: '小红', age: 18})
+      }
+
+
+      return {
+        userList,
+        handleClick,
+      }
+    }
+  }
+  const rootProps = {
+    age: 10,
+  }
+
+  const app = createApp(rootComponent, rootProps)
+
+  app.config.performance = true
+  app.config.globalProperties.isBoy = true
+
+  app.mount('#app')
+
+</script>
+
+</body>
+</html>

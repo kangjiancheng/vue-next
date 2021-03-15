@@ -68,8 +68,11 @@ const arrayInstrumentations: Record<string, Function> = {}
 // which leads to infinite loops in some cases (#2137)
 ;(['push', 'pop', 'shift', 'unshift', 'splice'] as const).forEach(key => {
   const method = Array.prototype[key] as any
+  // 重新封装array这些方法
   arrayInstrumentations[key] = function(this: unknown[], ...args: unknown[]) {
-    pauseTracking() // 停止跟踪数据变化：避免因数组长度变化而导致的无限更新
+    // 开始执行这些方法时：停止跟踪数据变化，避免因数组长度变化而导致的无限更新
+    pauseTracking()
+    // 会触发数组对象proxy: 先触发get获取操作索引；再触发set进行设值，并触发依赖更新（类型ADD)
     const res = method.apply(this, args)
     resetTracking()
     return res
@@ -98,6 +101,7 @@ function createGetter(isReadonly = false, shallow = false) {
     // 如 访问数组某个方法：let list = reactive([1, 2, 3]); list.includes(1)
     // 注意可以正常访问数组索引（索引也是属性）: list[0]
     if (!isReadonly && targetIsArray && hasOwn(arrayInstrumentations, key)) {
+      // 返回数组这些方法
       return Reflect.get(arrayInstrumentations, key, receiver)
     }
 
