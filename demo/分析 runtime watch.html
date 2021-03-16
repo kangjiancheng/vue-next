@@ -107,7 +107,7 @@
       // 简单的进行依赖项跟踪
       const stopWatchEffect = watchEffect(
         () => {
-          // 进行响应式数据依赖收集
+          // 进行响应式数据依赖收集，会马上执行（该函数非回调函数）
           console.log(user.name)
         },
         {
