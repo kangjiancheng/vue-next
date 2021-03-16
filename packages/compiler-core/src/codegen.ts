@@ -43,9 +43,7 @@ import {
   SET_BLOCK_TRACKING,
   CREATE_COMMENT,
   CREATE_TEXT,
-  PUSH_SCOPE_ID,
-  POP_SCOPE_ID,
-  WITH_SCOPE_ID,
+  SET_SCOPE_ID,
   WITH_DIRECTIVES,
   CREATE_BLOCK,
   OPEN_BLOCK,
@@ -219,7 +217,6 @@ export function generate(
     indent,
     deindent,
     newline,
-    scopeId, // null
     ssr
   } = context
 
@@ -227,7 +224,6 @@ export function generate(
   const hasHelpers = ast.helpers.length > 0
   // 使用关键字 with，调整当前作用域的 this 指向，变量默认指向 with的指定
   const useWithBlock = !prefixIdentifiers && mode !== 'module' // true
-  const genScopeId = !__BROWSER__ && scopeId != null && mode === 'module'
   const isSetupInlined = !__BROWSER__ && !!options.inline
 
   // 生成 前置变量、静态节点
@@ -240,7 +236,7 @@ export function generate(
     : context
   if (!__BROWSER__ && mode === 'module') {
     // TODO: cfs - analyze
-    genModulePreamble(ast, preambleContext, genScopeId, isSetupInlined)
+    genModulePreamble(ast, preambleContext, isSetupInlined)
   } else {
     // 针对存在静态提升节点，如：<div><i :class="red">1</i>abc</div>
     // 解析其中静态提升文本节点abc
@@ -271,16 +267,7 @@ export function generate(
       ? args.map(arg => `${arg}: any`).join(',')
       : args.join(', ') // '_ctx, _cache'，即 'function render('_ctx, _catch') { ... }'
 
-  if (genScopeId) {
-    // TODO: cfs - analyze
-    if (isSetupInlined) {
-      push(`${PURE_ANNOTATION}_withId(`)
-    } else {
-      push(`const ${functionName} = ${PURE_ANNOTATION}_withId(`)
-    }
-  }
-
-  if (isSetupInlined || genScopeId) {
+  if (isSetupInlined) {
     // TODO: cfs - analyze
     push(`(${signature}) => {`)
   } else {
@@ -414,10 +401,6 @@ export function generate(
   deindent()
   push(`}`)
 
-  if (genScopeId) {
-    push(`)`)
-  }
-
   return {
     ast,
     code: context.code,
@@ -538,23 +521,20 @@ function genFunctionPreamble(ast: RootNode, context: CodegenContext) {
 function genModulePreamble(
   ast: RootNode,
   context: CodegenContext,
-  genScopeId: boolean,
   inline?: boolean
 ) {
   const {
     push,
-    helper,
     newline,
-    scopeId,
     optimizeImports,
-    runtimeModuleName
+    runtimeModuleName,
+    scopeId,
+    mode
   } = context
 
-  if (genScopeId) {
-    ast.helpers.push(WITH_SCOPE_ID)
-    if (ast.hoists.length) {
-      ast.helpers.push(PUSH_SCOPE_ID, POP_SCOPE_ID)
-    }
+  const genScopeId = !__BROWSER__ && scopeId != null && mode === 'module'
+  if (genScopeId && ast.hoists.length) {
+    ast.helpers.push(SET_SCOPE_ID)
   }
 
   // generate import statements for helpers
@@ -594,13 +574,6 @@ function genModulePreamble(
 
   if (ast.imports.length) {
     genImports(ast.imports, context)
-    newline()
-  }
-
-  if (genScopeId) {
-    push(
-      `const _withId = ${PURE_ANNOTATION}${helper(WITH_SCOPE_ID)}("${scopeId}")`
-    )
     newline()
   }
 
@@ -655,7 +628,7 @@ function genHoists(hoists: (JSChildNode | null)[], context: CodegenContext) {
   // push scope Id before initializing hoisted vnodes so that these vnodes
   // get the proper scopeId as well.
   if (genScopeId) {
-    push(`${helper(PUSH_SCOPE_ID)}("${scopeId}")`)
+    push(`${helper(SET_SCOPE_ID)}("${scopeId}")`)
     newline()
   }
 
@@ -673,7 +646,7 @@ function genHoists(hoists: (JSChildNode | null)[], context: CodegenContext) {
 
   // TODO: analyze cfs - !__BROWSER__
   if (genScopeId) {
-    push(`${helper(POP_SCOPE_ID)}()`)
+    push(`${helper(SET_SCOPE_ID)}(null)`)
     newline()
   }
   context.pure = false
@@ -1162,16 +1135,12 @@ function genFunctionExpression(
   node: FunctionExpression,
   context: CodegenContext
 ) {
-  const { push, indent, deindent, scopeId, mode } = context
+  const { push, indent, deindent } = context
   const { params, returns, body, newline, isSlot } = node
-  // slot functions also need to push scopeId before rendering its content
-  const genScopeId =
-    !__BROWSER__ && isSlot && scopeId != null && mode !== 'function'
 
-  if (genScopeId) {
-    push(`_withId(`)
-  } else if (isSlot) {
+  if (isSlot) {
     // _withCtx
+    // wrap slot functions with owner context
     push(`_${helperNameMap[WITH_CTX]}(`)
   }
 
@@ -1207,7 +1176,7 @@ function genFunctionExpression(
     deindent()
     push(`}`)
   }
-  if (genScopeId || isSlot) {
+  if (isSlot) {
     push(`)`)
   }
 }
