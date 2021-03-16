@@ -264,6 +264,7 @@ function doWatch(
   // 执行runner
   const job: SchedulerJob = () => {
     if (!runner.active) {
+      // 当执行stop后
       return
     }
     if (cb) {
@@ -305,8 +306,7 @@ function doWatch(
     scheduler = () => {
       if (!instance || instance.isMounted) {
         // 组件已挂载，更新监听目标依赖项
-        // 放到promise.then里前边执行
-        queuePreFlushCb(job)
+        queuePreFlushCb(job) // 渲染函数之前
       } else {
         // 首次挂载组件时，默认先执行该组件setup中watch目标的effect函数，之后在执行组件渲染函数的effect函数
         // with 'pre' option, the first call must happen before
@@ -336,8 +336,10 @@ function doWatch(
       oldValue = runner() // 一开始只记录旧值：在之后 触发更新值时，执行job时，会进行比较
     }
   } else if (flush === 'post') {
+    // 初次运行时，渲染函数后即挂载组件之后 执行
     queuePostRenderEffect(runner, instance && instance.suspense)
   } else {
+    // watchEffect，会立刻执行getter，同时会进行依赖收集
     runner()
   }
 

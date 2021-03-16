@@ -26,7 +26,8 @@
     ref,
     reactive,
     onMounted,
-    watch
+    watch,
+    watchEffect,
   } = Vue
 
   const HelloWorld = {
@@ -72,7 +73,7 @@
       // ref 引用 - 监听目标封装成函数 getter
       // 开始时：会进行响应式依赖跟踪 count.value
       // 更新时：会触发监听目标count.value的effect任务
-      const watchStop = watch (count, (count, preCount, onInvalidate) => {
+      const stopWatch = watch (count, (count, preCount, onInvalidate) => {
         console.log('ref 引用：', count, preCount)
 
         // 1、在之后的更新中，每次都会触发该回调stop
@@ -81,13 +82,12 @@
           console.log('stop: onInvalidate!')
         })
       }, {
-        // immediate: true, // true - 依赖收集后，执行回调函数；false - 只进行依赖收集
-        // deep: true, // 遍历访问该响应对象的所有依赖项property，进行依赖收集与跟踪
-        // flush: 'pre', // 默认 'pre' - 更新渲染函数前 | 'post' -更新渲染函数后 | 'sync' - 同步主线程：改变数据时，立刻执行
-        // onTrack: () => {}, // 开始跟踪时：跟踪 count.value
-        // onTrigger: () => {}, // 开始更新时：更新 count.value 的订阅者：watch effect、组件渲染函数 effect
+        immediate: false, // true - 依赖收集后，执行回调函数；false - 只进行依赖收集
+        deep: false, // 遍历访问该响应对象的所有依赖项property，进行依赖收集与跟踪
+        flush: 'pre', // 默认 'pre' - 更新渲染函数前 | 'post' -更新渲染函数后 | 'sync' - 同步主线程：改变数据时，立刻执行
+        onTrack: () => {}, // 开始跟踪时：跟踪 count.value
+        onTrigger: () => {}, // 开始更新时：更新 count.value 的订阅者：watch effect、组件渲染函数 effect
       })
-
 
       // // reactive 对象
       // watch(user, (user, preUser) => {
@@ -104,7 +104,16 @@
       //   console.log('array：', count, user, preUser, preCount)
       // })
 
-
+      // 简单的进行依赖项跟踪
+      const stopWatchEffect = watchEffect(
+        () => {
+          // 进行响应式数据依赖收集
+          console.log(user.name)
+        },
+        {
+          flush: 'pre', // 组件更新前
+        }
+      )
 
       // count.value++ // 触发watch 更新trigger
 
@@ -114,7 +123,7 @@
       }
       const handleStop = () => {
         // 停止 对目标的监听
-        watchStop()
+        stopWatch()
       }
 
       return {

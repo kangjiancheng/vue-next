@@ -113,7 +113,7 @@ function createReactiveEffect<T = any>(
     }
 
     if (!effectStack.includes(effect)) {
-      cleanup(effect) // 删除已经存在的effect，避免之后重复添加，如更新组件响应式依赖数据时 更新组件effect
+      cleanup(effect) // 删除已经存在的effect，避免之后重复添加与更新该effect，如更新组件响应式依赖数据时 更新组件effect
       try {
         enableTracking()
         effectStack.push(effect)
