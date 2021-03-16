@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Vue 3 分析 runtime 响应式 reactive 读</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- 开发模式 -->
+<script src="../packages/vue/dist/vue.global.js"></script>
+<!-- 生产模式-->
+<!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
+<script>
+
+  const {
+    createApp,
+    ref,
+    reactive,
+    onMounted,
+    watch,
+    watchEffect,
+  } = Vue
+
+  const HelloWorld = {
+    name: 'HelloWorld',
+    template: `
+      <div class="hello-world">hi {{ userName }} ! <button @click="handleClick">修改名字</button></div>
+    `,
+    props: ['userName'],
+    emits: ['update:userName'],
+    setup (props, context) {
+      const handleClick = () => {
+        context.emit('update:userName', '小明')
+      }
+      return {
+        handleClick
+      }
+    }
+  }
+
+  const rootComponent = {
+    name: 'root-component',
+    components: {
+      HelloWorld,
+    },
+    template: `
+      <button class="btn-click" @click="handleClick">点击 {{ count }}</button>
+      <button class="btn-click" @click="handleStop">stop watch</button>
+    `,
+    props: {
+      age: Number,
+    },
+    data (){
+      return {
+
+      }
+    },
+    setup(props, setupContext ) {
+      const count = ref(1)
+      const user = reactive({
+        name: '小李',
+      })
+
+      // ref 引用 - 监听目标封装成函数 getter
+      // 开始时：会进行响应式依赖跟踪 count.value
+      // 更新时：会触发监听目标count.value的effect任务
+      const stopWatch = watch (count, (count, preCount, onInvalidate) => {
+        console.log('ref 引用：', count, preCount)
+
+        // 1、在之后的更新中，每次都会触发该回调stop
+        // 2、当调用watchStop，也会触发该回调stop
+        onInvalidate(() => { //
+          console.log('stop: onInvalidate!')
+        })
+      }, {
+        immediate: false, // true - 依赖收集后，执行回调函数；false - 只进行依赖收集
+        deep: false, // 遍历访问该响应对象的所有依赖项property，进行依赖收集与跟踪
+        flush: 'pre', // 默认 'pre' - 更新渲染函数前 | 'post' -更新渲染函数后 | 'sync' - 同步主线程：改变数据时，立刻执行
+        onTrack: () => {}, // 开始跟踪时：跟踪 count.value
+        onTrigger: () => {}, // 开始更新时：更新 count.value 的订阅者：watch effect、组件渲染函数 effect
+      })
+
+      // // reactive 对象
+      // watch(user, (user, preUser) => {
+      //   console.log('reactive 对象：', user, preUser)
+      // })
+      //
+      // // getter函数
+      // watch(() => count, (count, preCount) => {
+      //   console.log('getter函数：', count, preCount)
+      // })
+      //
+      // // 数组
+      // watch([count, user], ([count, user], [preCount, preUser]) => {
+      //   console.log('array：', count, user, preUser, preCount)
+      // })
+
+      // 简单的进行依赖项跟踪
+      const stopWatchEffect = watchEffect(
+        () => {
+          // 进行响应式数据依赖收集，会马上执行（该函数非回调函数）
+          console.log(user.name)
+        },
+        {
+          flush: 'pre', // 组件更新前
+        }
+      )
+
+      // count.value++ // 触发watch 更新trigger
+
+      const handleClick = () => {
+        // user.name = '小王'
+        count.value ++
+      }
+      const handleStop = () => {
+        // 停止 对目标的监听
+        stopWatch()
+      }
+
+      return {
+        count,
+        user,
+        handleStop,
+        handleClick,
+      }
+    }
+  }
+  const rootProps = {
+    age: 10,
+  }
+
+  const app = createApp(rootComponent, rootProps)
+
+  app.config.performance = true
+  app.config.globalProperties.isBoy = true
+
+  app.mount('#app')
+
+</script>
+
+</body>
+</html>
