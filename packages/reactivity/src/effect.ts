@@ -54,6 +54,7 @@ export function isEffect(fn: any): fn is ReactiveEffect {
   return fn && fn._isEffect === true
 }
 
+// 组件或watch
 export function effect<T = any>(
   fn: () => T,
   options: ReactiveEffectOptions = EMPTY_OBJ
@@ -71,6 +72,7 @@ export function effect<T = any>(
   return effect
 }
 
+// 停止effect函数，如停止watch监听目标
 export function stop(effect: ReactiveEffect) {
   if (effect.active) {
     cleanup(effect)
@@ -132,7 +134,7 @@ function createReactiveEffect<T = any>(
   effect._isEffect = true
   effect.active = true
   effect.raw = fn // 当前正在执行渲染函数
-  effect.deps = [] // 组件每个响应式数据 所依赖到的组件effect集合
+  effect.deps = [] // 组件/watch 每个响应式依赖项 被订阅的组件effect 的集合 （即记录该effect 依赖的数据 的effect列表）
   effect.options = options
   return effect
 }
@@ -170,7 +172,7 @@ export function resetTracking() {
   shouldTrack = last === undefined ? true : last //默认跟踪
 }
 
-// 跟踪某个响应对象的某个属性 所依赖的组件effect（执行组件渲染函数期间）
+// 跟踪某个响应对象的某个属性 所依赖的组件effect（执行组件渲染函数期间、或执行watch期间）
 // 如 const count = ref(1); track(toRaw(count), TrackOpTypes.GET, 'value')
 export function track(target: object, type: TrackOpTypes, key: unknown) {
   if (!shouldTrack || activeEffect === undefined) {
@@ -202,7 +204,7 @@ export function track(target: object, type: TrackOpTypes, key: unknown) {
   // 收集组件effect - 组件在渲染期间 使用了该响应式ref对象属性value
   if (!dep.has(activeEffect)) {
     dep.add(activeEffect)
-    activeEffect.deps.push(dep) // 组件effect依赖此响应式对象的这个属性
+    activeEffect.deps.push(dep) // 组件effect函数（或watch监听目标）依赖此响应式对象的这个属性
 
     if (__DEV__ && activeEffect.options.onTrack) {
       // onTrack: instance.rtc ? e => invokeArrayFns(instance.rtc!, e) : void 0,
@@ -304,6 +306,7 @@ export function trigger(
   // 依次触发key所依赖组件effect列表更新
   const run = (effect: ReactiveEffect) => {
     if (__DEV__ && effect.options.onTrigger) {
+      // 触发跟踪响应事件（用户自定义，如watch）
       effect.options.onTrigger({
         effect,
         target,

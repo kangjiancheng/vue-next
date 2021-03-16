@@ -77,6 +77,7 @@ function findInsertionIndex(job: SchedulerJob) {
   return start
 }
 
+// 如组件数据更新时，触发组件effect
 export function queueJob(job: SchedulerJob) {
   // 组件effect
   // the dedupe search uses the startIndex argument of Array.includes()
@@ -95,7 +96,7 @@ export function queueJob(job: SchedulerJob) {
   ) {
     const pos = findInsertionIndex(job)
     if (pos > -1) {
-      queue.splice(pos, 0, job) // 插入任务组件effect
+      queue.splice(pos, 0, job) // 添加组件effect的任务
     } else {
       // 收集待执行的任务 - 组件effect
       queue.push(job)
@@ -182,7 +183,7 @@ export function flushPreFlushCbs(
     preFlushIndex = 0
     currentPreFlushParentJob = null
     // recursively flush until it drains
-    flushPreFlushCbs(seen, parentJob)
+    flushPreFlushCbs(seen, parentJob) // 在执行期间，可能有产生了
   }
 }
 
@@ -229,7 +230,7 @@ function flushJobs(seen?: CountMap) {
     seen = seen || new Map()
   }
 
-  flushPreFlushCbs(seen)
+  flushPreFlushCbs(seen) // 先执行的任务列表：如 watch 监听目标设置 'pre' (默认 'pre'), 则会触发该任务列表
 
   // Sort queue before flush.
   // This ensures that:

@@ -858,6 +858,7 @@ export function recordInstanceBoundEffect(
   effect: ReactiveEffect,
   instance = currentInstance
 ) {
+  // 如 在setup中执行watch()，记录 监听目标getter的effect函数
   if (instance) {
     ;(instance.effects || (instance.effects = [])).push(effect)
   }

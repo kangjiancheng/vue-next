@@ -65,7 +65,7 @@ class RefImpl<T> {
 
   public readonly __v_isRef = true // 标记为 ref
 
-  // _shallow: 则不对对象类型进行深层次的响应转换与跟踪依赖收集
+  // _shallow: 转换对象时，只考虑value值，不进行其它属性响应转换
   constructor(private _rawValue: T, public readonly _shallow = false) {
     this._value = _shallow ? _rawValue : convert(_rawValue) // isObject(_rawValue) ? reactive(_rawValue) : _rawValue
   }
@@ -73,7 +73,7 @@ class RefImpl<T> {
   get value() {
     // 跟踪这个 ref 实例对象数据value 或 __v_raw
     // toRaw 获取对象的最原生定义
-    track(toRaw(this), TrackOpTypes.GET, 'value') // get
+    track(toRaw(this), TrackOpTypes.GET, 'value') // get - 在渲染期间或执行setup watch期间
     return this._value
   }
 

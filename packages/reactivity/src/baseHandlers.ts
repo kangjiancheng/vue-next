@@ -82,11 +82,13 @@ const arrayInstrumentations: Record<string, Function> = {}
 function createGetter(isReadonly = false, shallow = false) {
   return function get(target: Target, key: string | symbol, receiver: object) {
     if (key === ReactiveFlags.IS_REACTIVE) {
-      return !isReadonly // 默认 proxy.IS_REACTIVE = true
+      // 判断对象是否响应 - isReactive(proxy)
+      return !isReadonly
     } else if (key === ReactiveFlags.IS_READONLY) {
-      return isReadonly // 默认 proxy.IS_READONLY = true
+      // 判断对象是否只读 - isReadonly(proxy)
+      return isReadonly
     } else if (
-      key === ReactiveFlags.RAW &&
+      key === ReactiveFlags.RAW && // 访问对象当原始对象 - toRaw(proxy)
       // receiver：触发该拦截方法的操作对象（一般为Proxy实例对象，注意原型链）
       receiver === (isReadonly ? readonlyMap : reactiveMap).get(target)
     ) {
