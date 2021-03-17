@@ -67,7 +67,9 @@ export function effect<T = any>(
   // queueJob - Job
   const effect = createReactiveEffect(fn, options)
   if (!options.lazy) {
-    effect() // 立刻执行
+    // 渲染函数：立刻执行，在创建的同时，并执行渲染函数fn
+    // watch、computed：延迟执行，即没有在创建的时候同时返回fn值
+    effect()
   }
   return effect
 }
@@ -172,7 +174,7 @@ export function resetTracking() {
   shouldTrack = last === undefined ? true : last //默认跟踪
 }
 
-// 跟踪某个响应对象的某个属性 所依赖的组件effect（执行组件渲染函数期间、或执行watch期间）
+// 跟踪某个响应对象的某个属性 所依赖的组件effect（执行组件渲染函数期间、或执行watch/computed期间）
 // 如 const count = ref(1); track(toRaw(count), TrackOpTypes.GET, 'value')
 export function track(target: object, type: TrackOpTypes, key: unknown) {
   if (!shouldTrack || activeEffect === undefined) {
