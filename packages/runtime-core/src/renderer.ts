@@ -2121,9 +2121,9 @@ function baseCreateRenderer(
 
       // 5.3 move and mount  - 添加新节点 、 移到旧节点位置
       // generate longest stable subsequence only when nodes have moved
-      // 旧：[c,d,e] 新：[e,d,c,h]，则：[3,2,1,0] 结果为 [2]
+      // 旧：[c,d,e] 新：[e,d,c,h]，则：[3,2,1,0] 结果为 [2]，说明只需要移动第2个位置dom，就可以了
       const increasingNewIndexSequence = moved
-        ? getSequence(newIndexToOldIndexMap) // 获取最长递增子序列，如：[3,2,1,0] 结果为 [2]
+        ? getSequence(newIndexToOldIndexMap) // 获取最长递增子序列
         : EMPTY_ARR
       j = increasingNewIndexSequence.length - 1
 
