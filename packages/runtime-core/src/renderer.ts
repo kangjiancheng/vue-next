@@ -2494,9 +2494,11 @@ export function traverseStaticChildren(n1: VNode, n2: VNode, shallow = false) {
   }
 }
 
+// v-for更新后，从变化的dom列表中，寻找最长不需要移动dom序列，进而找出只需要移动最少dom的位置。
 // 最长递增子序列：在一个给定的数值序列中，找到一个子序列，使得这个子序列元素的数值依次递增，并且这个子序列的长度尽可能地大
 // v-for更新列表时：arr记录 旧节点vnode 在 新节点列表中的位置 与 旧节点列表中的位置，如：[1,0,3,2] 结果为 [0, 3]
 // https://en.wikipedia.org/wiki/Longest_increasing_subsequence
+// 中文：https://zh.wikipedia.org/wiki/%E6%9C%80%E9%95%BF%E9%80%92%E5%A2%9E%E5%AD%90%E5%BA%8F%E5%88%97
 function getSequence(arr: number[]): number[] {
   const p = arr.slice()
   const result = [0]
