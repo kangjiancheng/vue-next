@@ -51,10 +51,8 @@ import {
 } from '@vue/shared'
 import { SuspenseBoundary } from './components/Suspense'
 import { CompilerOptions } from '@vue/compiler-core'
-import {
-  currentRenderingInstance,
-  markAttrsAccessed
-} from './componentRenderUtils'
+import { markAttrsAccessed } from './componentRenderUtils'
+import { currentRenderingInstance } from './componentRenderContext'
 import { startMeasure, endMeasure } from './profiling'
 
 export type Data = Record<string, unknown>
@@ -860,6 +858,7 @@ export function recordInstanceBoundEffect(
   effect: ReactiveEffect,
   instance = currentInstance
 ) {
+  // 如 在setup中执行watch()，记录 监听目标getter的effect函数
   if (instance) {
     ;(instance.effects || (instance.effects = [])).push(effect)
   }

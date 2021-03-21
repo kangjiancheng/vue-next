@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Vue 3 分析 runtime 响应式 reactive 读</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- 开发模式 -->
+<script src="../packages/vue/dist/vue.global.js"></script>
+<!-- 生产模式-->
+<!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
+<script>
+
+  const {
+    createApp,
+    ref,
+    reactive,
+    onMounted,
+    nextTick,
+    computed
+  } = Vue
+
+  const HelloWorld = {
+    name: 'HelloWorld',
+    template: `
+      <div class="hello-world">hi {{ userName }} ! <button @click="handleClick">修改名字</button></div>
+    `,
+    props: ['userName'],
+    emits: ['update:userName'],
+    setup (props, context) {
+      const handleClick = () => {
+        context.emit('update:userName', '小明')
+      }
+      return {
+        handleClick
+      }
+    }
+  }
+
+  const rootComponent = {
+    name: 'root-component',
+    components: {
+      HelloWorld,
+    },
+    template: `
+      <button class="btn-click" @click="handleClick">点击: {{ total }} </button>
+    `,
+    props: {
+      age: Number,
+    },
+    data (){
+      return {
+
+      }
+    },
+    setup(props, setupContext ) {
+      const count = ref(1)
+
+      // 类型 ComputedRefImpl - 返回一个ref对象
+      const total = computed(() => {
+        // 只有当total被访问时，才会执行这个函数，同时对count.value进行依赖跟踪
+        // 如 在渲染函数中访问 total，此时：total.value 被渲染模版订阅，count.value 被 total 订阅
+        return count.value * 100
+      })
+
+      const handleClick = () => {
+        // 触发订阅者total的effect任务调度程序scheduler执行，进一步触发渲染函数effect scheduler执行，即执行重新渲染组件
+        count.value ++
+      }
+
+      return {
+        count,
+        total,
+        handleClick,
+      }
+    }
+  }
+  const rootProps = {
+    age: 10,
+  }
+
+  const app = createApp(rootComponent, rootProps)
+
+  app.config.performance = true
+  app.config.globalProperties.isBoy = true
+
+  app.mount('#app')
+
+</script>
+
+</body>
+</html>

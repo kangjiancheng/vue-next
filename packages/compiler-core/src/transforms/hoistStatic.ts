@@ -168,7 +168,16 @@ function walk(
     // walk further
     if (child.type === NodeTypes.ELEMENT) {
       // 标签元素
+      const isComponent = child.tagType === ElementTypes.COMPONENT
+      if (isComponent) {
+        context.scopes.vSlot++
+      }
+
       walk(child, context)
+
+      if (isComponent) {
+        context.scopes.vSlot--
+      }
     } else if (child.type === NodeTypes.FOR) {
       // for节点，对于只有一个for子节点，不需要hoist
       // Do not hoist v-for single child because it has to be a block
