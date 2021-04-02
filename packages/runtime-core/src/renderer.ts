@@ -11,7 +11,8 @@ import {
   Static,
   VNodeNormalizedRef,
   VNodeHook,
-  VNodeNormalizedRefAtom
+  VNodeNormalizedRefAtom,
+  VNodeProps
 } from './vnode'
 import {
   ComponentInternalInstance,
@@ -47,7 +48,14 @@ import {
   flushPreFlushCbs,
   SchedulerCb
 } from './scheduler'
-import { effect, stop, ReactiveEffectOptions, isRef } from '@vue/reactivity'
+import {
+  effect,
+  stop,
+  ReactiveEffectOptions,
+  isRef,
+  pauseTracking,
+  resetTracking
+} from '@vue/reactivity'
 import { updateProps } from './componentProps'
 import { updateSlots } from './componentSlots'
 import { pushWarningContext, popWarningContext, warn } from './warning'
@@ -57,11 +65,7 @@ import {
   queueEffectWithSuspense,
   SuspenseImpl
 } from './components/Suspense'
-import {
-  isTeleportDisabled,
-  TeleportImpl,
-  TeleportVNode
-} from './components/Teleport'
+import { TeleportImpl, TeleportVNode } from './components/Teleport'
 import { isKeepAlive, KeepAliveContext } from './components/KeepAlive'
 import { registerHMR, unregisterHMR, isHmrUpdating } from './hmr'
 import {
@@ -118,7 +122,8 @@ export interface RendererOptions<
   createElement(
     type: string,
     isSVG?: boolean,
-    isCustomizedBuiltIn?: string
+    isCustomizedBuiltIn?: string,
+    vnodeProps?: (VNodeProps & { [key: string]: any }) | null
   ): HostElement
   createText(text: string): HostNode
   createComment(text: string): HostNode
@@ -776,7 +781,8 @@ function baseCreateRenderer(
       el = vnode.el = hostCreateElement(
         vnode.type as string,
         isSVG,
-        props && props.is // dom官方可选自定义元素属性
+        props && props.is, // dom官方可选自定义元素属性
+        props
       )
 
       // 优先挂载 vnode 子节点列表 到 vnode dom实例上
@@ -906,7 +912,11 @@ function baseCreateRenderer(
     }
     if (parentComponent) {
       let subTree = parentComponent.subTree
-      if (__DEV__ && subTree.patchFlag & PatchFlags.DEV_ROOT_FRAGMENT) {
+      if (
+        __DEV__ &&
+        subTree.patchFlag > 0 &&
+        subTree.patchFlag & PatchFlags.DEV_ROOT_FRAGMENT
+      ) {
         subTree =
           filterSingleRoot(subTree.children as VNodeArrayChildren) || subTree
       }
@@ -1718,12 +1728,15 @@ function baseCreateRenderer(
     const prevProps = instance.vnode.props // 组件节点vnode的props属性
     instance.vnode = nextVNode // 组件节点新vnode：即组件渲染模版vnode 替换组件节点vnode
     instance.next = null
-    updateProps(instance, nextVNode.props, prevProps, optimized) // 更新组件节点上的props
-    updateSlots(instance, nextVNode.children) // 更新组件节点上的slots
 
+    updateProps(instance, nextVNode.props, prevProps, optimized) // 更新组件节点上的props
+    updateSlots(instance, nextVNode.children, optimized) // 更新组件节点上的slots
+
+    pauseTracking()
     // props update may have triggered pre-flush watchers.
     // flush them before the render update.
     flushPreFlushCbs(undefined, instance.update)
+    resetTracking()
   }
 
   // 更新所有子节点：不需要优化，且没有动态子节点时
@@ -2279,7 +2292,16 @@ function baseCreateRenderer(
         invokeDirectiveHook(vnode, null, parentComponent, 'beforeUnmount')
       }
 
-      if (
+      if (shapeFlag & ShapeFlags.TELEPORT) {
+        ;(vnode.type as typeof TeleportImpl).remove(
+          vnode,
+          parentComponent,
+          parentSuspense,
+          optimized,
+          internals,
+          doRemove
+        )
+      } else if (
         dynamicChildren &&
         // #1153: fast path should not be taken for non-stable (v-for) fragments
         (type !== Fragment ||
@@ -2300,14 +2322,6 @@ function baseCreateRenderer(
         (!optimized && shapeFlag & ShapeFlags.ARRAY_CHILDREN)
       ) {
         unmountChildren(children as VNode[], parentComponent, parentSuspense)
-      }
-
-      // an unmounted teleport should always remove its children if not disabled
-      if (
-        shapeFlag & ShapeFlags.TELEPORT &&
-        (doRemove || !isTeleportDisabled(vnode.props))
-      ) {
-        ;(vnode.type as typeof TeleportImpl).remove(vnode, internals)
       }
 
       if (doRemove) {

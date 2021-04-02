@@ -274,7 +274,7 @@ function parseChildren(
   let removedWhitespace = false
 
   // 排除 TextModes.RAWTEXT，即标签为：style,iframe,script,noscript
-  if (mode !== TextModes.RAWTEXT) {
+  if (mode !== TextModes.RAWTEXT && mode !== TextModes.RCDATA) {
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i]
       if (!context.inPre && node.type === NodeTypes.TEXT) {
@@ -875,7 +875,7 @@ function parseAttribute(
     // 如 <span v-bind="{}"></span> 则此时 match2 = undefined
     if (match[2]) {
       const isSlot = dirName === 'slot' // 如：template: '<span #header="nav"></span>' 或 'v-slot'，则 name = '#header'，match[2] = 'header'，dirName = 'slot'
-      const startOffset = name.indexOf(match[2]) // 指令内容开始位置
+      const startOffset = name.lastIndexOf(match[2]) // 指令内容开始位置
 
       // 解析指令内容的开始位置与结束位置，解析的内容为  ' :、@、# ' 后的指令内容
       const loc = getSelection(

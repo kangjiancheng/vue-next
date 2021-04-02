@@ -49,7 +49,7 @@ export const transformSlotOutlet: NodeTransform = (node, context) => {
     //         item: "hello world",
     //         dataText: '123'
     //       })
-    if (context.slotted) {
+    if (context.slotted && !context.slotted) {
       if (!slotProps) {
         slotArgs.push(`{}`)
       }

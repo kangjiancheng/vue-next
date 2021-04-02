@@ -51,7 +51,7 @@ export const transformFor = createStructuralDirectiveTransform(
   // 添加阶段，会执行这个回调方法，返回 onExit
   (node, dir, context) => {
     // dir： v-for 指令属性节点
-    const { helper } = context
+    const { helper, removeHelper } = context
 
     // transform for 添加阶段，返回 transform for onExit
     // processFor: 解析v-for指令节点，创建新的forNode节点并替换原先节点
@@ -200,6 +200,16 @@ export const transformFor = createStructuralDirectiveTransform(
             // 如 <template v-for="..." :key="ddd"><div>...</div></template>
             // childBlock，即子节点： <div>...</div> 的codegenNode 在 transformElement节点生成 createVNodeCall
             injectProp(childBlock, keyProperty, context)
+          }
+          if (childBlock.isBlock !== !isStableFragment) {
+            if (childBlock.isBlock) {
+              // switch from block to vnode
+              removeHelper(OPEN_BLOCK)
+              removeHelper(CREATE_BLOCK)
+            } else {
+              // switch from vnode to block
+              removeHelper(CREATE_VNODE)
+            }
           }
           childBlock.isBlock = !isStableFragment // v-for 元素 默认使用 block
           if (childBlock.isBlock) {

@@ -482,14 +482,25 @@ function buildDynamicSlot(
 function hasForwardedSlots(children: TemplateChildNode[]): boolean {
   for (let i = 0; i < children.length; i++) {
     const child = children[i]
-    if (child.type === NodeTypes.ELEMENT) {
-      if (
-        child.tagType === ElementTypes.SLOT || // slot标签元素
-        (child.tagType === ElementTypes.ELEMENT && // 继续递归
-          hasForwardedSlots(child.children))
-      ) {
-        return true
-      }
+    switch (child.type) {
+      case NodeTypes.ELEMENT:
+        if (
+          child.tagType === ElementTypes.SLOT || // slot标签元素
+          (child.tagType === ElementTypes.ELEMENT && // 继续递归
+            hasForwardedSlots(child.children))
+        ) {
+          return true
+        }
+        break
+      case NodeTypes.IF:
+        if (hasForwardedSlots(child.branches)) return true
+        break
+      case NodeTypes.IF_BRANCH:
+      case NodeTypes.FOR:
+        if (hasForwardedSlots(child.children)) return true
+        break
+      default:
+        break
     }
   }
   return false

@@ -64,23 +64,23 @@ const directiveImportMap = new WeakMap<DirectiveNode, symbol>()
 // generate a JavaScript AST for this element's codegen
 // 解析元素节点的prop属性列表、v-slot指令、patchFlag信息、用户定义的指令等，为当前节点的ast生成对应的codegen vnode执行函数节点
 export const transformElement: NodeTransform = (node, context) => {
-  if (
-    !(
-      node.type === NodeTypes.ELEMENT && // 是一个标签元素节点
-      (node.tagType === ElementTypes.ELEMENT || // html元素
-        node.tagType === ElementTypes.COMPONENT)
-    ) // 组件元素
-  ) {
-    // 排除 SLOT元素、 TEMPLATE元素
-    return
-  }
-
-  // 分析标签元素：html标签元素、组件标签元素
-
   // perform the work on exit, after all child expressions have been
   // processed and merged.
   // 由于当前节点的transform插件列表是先添加后执行，所以会在当前节点的子节点经过 transformText即文本内容合并后，再执行这个插件
   return function postTransformElement() {
+    node = context.currentNode!
+
+    if (
+      !(
+        node.type === NodeTypes.ELEMENT &&
+        (node.tagType === ElementTypes.ELEMENT ||
+          node.tagType === ElementTypes.COMPONENT)
+      )
+    ) {
+      return
+    }
+
+    // 分析标签元素：html标签元素、组件标签元素
     const { tag, props } = node // node.type ELEMENT 类型节点: dom元素、 组件节点
     const isComponent = node.tagType === ElementTypes.COMPONENT //  当前节点为组件类型
 
@@ -308,8 +308,9 @@ export function resolveComponentType(
 
   // 1. dynamic component
   // 存在is属性（动态组件）
-  const isProp =
-    node.tag === 'component' ? findProp(node, 'is') : findDir(node, 'is')
+  const isProp = isComponentTag(tag)
+    ? findProp(node, 'is')
+    : findDir(node, 'is')
   if (isProp) {
     // 如 存在属性is：'<component is="HelloWorld" />' 或 '<component :is="HelloWorld" />'
     // 或 存在指令is：'<hello-world v-is="Welcome" />'
@@ -350,12 +351,17 @@ export function resolveComponentType(
   }
   // TODO: analyze cfs
   // 4. Self referencing component (inferred from filename)
-  if (!__BROWSER__ && context.selfName) {
-    if (capitalize(camelize(tag)) === context.selfName) {
-      context.helper(RESOLVE_COMPONENT)
-      context.components.add(`_self`)
-      return toValidAssetId(`_self`, `component`)
-    }
+  if (
+    !__BROWSER__ &&
+    context.selfName &&
+    capitalize(camelize(tag)) === context.selfName
+  ) {
+    context.helper(RESOLVE_COMPONENT)
+    // codegen.ts has special check for __self postfix when generating
+    // component imports, which will pass additional `maybeSelfReference` flag
+    // to `resolveComponent`.
+    context.components.add(tag + `__self`)
+    return toValidAssetId(tag, `component`)
   }
 
   // 5. user component (resolve)
@@ -368,7 +374,7 @@ export function resolveComponentType(
 // TODO: analyze cfs
 function resolveSetupReference(name: string, context: TransformContext) {
   const bindings = context.bindingMetadata
-  if (!bindings) {
+  if (!bindings || bindings.__isScriptSetup === false) {
     return
   }
 
@@ -529,7 +535,7 @@ export function buildProps(
         }
       }
       // skip :is on <component>
-      if (name === 'is' && tag === 'component') {
+      if (name === 'is' && isComponentTag(tag)) {
         // 不处理静态is组件属性: <component is="HelloWorld" />
         continue
       }
@@ -579,8 +585,8 @@ export function buildProps(
       // skip v-is and :is on <component>
       // 跳过is指令，如 template: <component :is='HelloWold' />，is 指令在resolveComponentType中解析
       if (
-        name === 'is' || // v-is
-        (isBind && tag === 'component' && isBindKey(arg, 'is')) // 绑定静态is属性，如 <component :is='HelloWold' />
+        name === 'is' ||
+        (isBind && isComponentTag(tag) && isBindKey(arg, 'is')) // 绑定静态is属性，如 <component :is='HelloWold' />
       ) {
         continue
       }
@@ -929,4 +935,8 @@ function stringifyDynamicPropNames(props: string[]): string {
     if (i < l - 1) propsNamesString += ', '
   }
   return propsNamesString + `]`
+}
+
+function isComponentTag(tag: string) {
+  return tag[0].toLowerCase() + tag.slice(1) === 'component'
 }

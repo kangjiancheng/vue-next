@@ -23,7 +23,7 @@ import {
 } from './componentProps'
 import { Slots, initSlots, InternalSlots } from './componentSlots'
 import { warn } from './warning'
-import { ErrorCodes, callWithErrorHandling } from './errorHandling'
+import { ErrorCodes, callWithErrorHandling, handleError } from './errorHandling'
 import { AppContext, createAppContext, AppConfig } from './apiCreateApp'
 import { Directive, validateDirectiveName } from './directives'
 import {
@@ -302,7 +302,12 @@ export interface ComponentInternalInstance {
    * @internal
    */
   emitted: Record<string, boolean> | null
-
+  /**
+   * used for caching the value returned from props default factory functions to
+   * avoid unnecessary watcher trigger
+   * @internal
+   */
+  propsDefaults: Data
   /**
    * setup related
    * @internal
@@ -443,6 +448,9 @@ export function createComponentInstance(
     // emit
     emit: null as any, // to be set immediately
     emitted: null,
+
+    // props default value
+    propsDefaults: EMPTY_OBJ,
 
     // state
     ctx: EMPTY_OBJ, // 组件实例的上下文
@@ -623,9 +631,13 @@ function setupStatefulComponent(
     if (isPromise(setupResult)) {
       if (isSSR) {
         // return the promise so server-renderer can wait on it
-        return setupResult.then((resolvedResult: unknown) => {
-          handleSetupResult(instance, resolvedResult, isSSR)
-        })
+        return setupResult
+          .then((resolvedResult: unknown) => {
+            handleSetupResult(instance, resolvedResult, isSSR)
+          })
+          .catch(e => {
+            handleError(e, instance, ErrorCodes.SETUP_FUNCTION)
+          })
       } else if (__FEATURE_SUSPENSE__) {
         // async setup returned Promise.
         // bail here and wait for re-entry.
@@ -726,9 +738,14 @@ function finishComponentSetup(
 
   // template / render function normalization
   if (__NODE_JS__ && isSSR) {
-    if (Component.render) {
-      instance.render = Component.render as InternalRenderFunction
-    }
+    // 1. the render function may already exist, returned by `setup`
+    // 2. otherwise try to use the `Component.render`
+    // 3. if the component doesn't have a render function,
+    //    set `instance.render` to NOOP so that it can inherit the render
+    //    function from mixins/extend
+    instance.render = (instance.render ||
+      Component.render ||
+      NOOP) as InternalRenderFunction
   } else if (!instance.render) {
     // setup不存在； 或如果setup存在，且 setup 返回一个对象
     // 如果setup 返回的是一个 函数，则赋值为render，否则render不存在
@@ -775,7 +792,8 @@ function finishComponentSetup(
   }
 
   // warn missing template/render
-  if (__DEV__ && !Component.render && instance.render === NOOP) {
+  // the runtime compilation of template in SSR is done by server-render
+  if (__DEV__ && !Component.render && instance.render === NOOP && !isSSR) {
     /* istanbul ignore if */
     if (!compile && Component.template) {
       // 当compile不存在，但存在template时，提示需要带有编译器版本的vue
@@ -828,9 +846,6 @@ export function createSetupContext(
     // We use getters in dev in case libs like test-utils overwrite instance
     // properties (overwrites should not be done in prod)
     return Object.freeze({
-      get props() {
-        return instance.props
-      },
       get attrs() {
         return new Proxy(instance.attrs, attrHandlers)
       },

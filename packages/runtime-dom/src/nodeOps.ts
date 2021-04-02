@@ -21,10 +21,17 @@ export const nodeOps: Omit<RendererOptions<Node, Element>, 'patchProp'> = {
 
   // 创建一个由标签名称 tag 指定的 HTML 元素
   // https://developer.mozilla.org/zh-CN/docs/Web/API/Document/createElement
-  createElement: (tag, isSVG, is): Element =>
-    isSVG
+  createElement: (tag, isSVG, is, props): Element => {
+    const el = isSVG
       ? doc.createElementNS(svgNS, tag)
-      : doc.createElement(tag, is ? { is } : undefined), // is 为官方可选属性
+      : doc.createElement(tag, is ? { is } : undefined) // is 为官方可选属性
+
+    if (tag === 'select' && props && props.multiple != null) {
+      ;(el as HTMLSelectElement).setAttribute('multiple', props.multiple)
+    }
+
+    return el
+  },
 
   createText: text => doc.createTextNode(text),
 
@@ -50,7 +57,20 @@ export const nodeOps: Omit<RendererOptions<Node, Element>, 'patchProp'> = {
   },
 
   cloneNode(el) {
-    return el.cloneNode(true)
+    const cloned = el.cloneNode(true)
+    // #3072
+    // - in `patchDOMProp`, we store the actual value in the `el._value` property.
+    // - normally, elements using `:value` bindings will not be hoisted, but if
+    //   the bound value is a constant, e.g. `:value="true"` - they do get
+    //   hoisted.
+    // - in production, hoisted nodes are cloned when subsequent inserts, but
+    //   cloneNode() does not copy the custom property we attached.
+    // - This may need to account for other custom DOM properties we attach to
+    //   elements in addition to `_value` in the future.
+    if (`_value` in el) {
+      ;(cloned as any)._value = (el as any)._value
+    }
+    return cloned
   },
 
   // __UNSAFE__

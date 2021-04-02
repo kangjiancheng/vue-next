@@ -8,7 +8,8 @@ import {
 import {
   mutableCollectionHandlers,
   readonlyCollectionHandlers,
-  shallowCollectionHandlers
+  shallowCollectionHandlers,
+  shallowReadonlyCollectionHandlers
 } from './collectionHandlers'
 import { UnwrapRef, Ref } from './ref'
 
@@ -26,8 +27,10 @@ export interface Target {
   [ReactiveFlags.RAW]?: any
 }
 
-export const reactiveMap = new WeakMap<Target, any>() // 响应式对象集合
+export const reactiveMap = new WeakMap<Target, any>()
+export const shallowReactiveMap = new WeakMap<Target, any>() // 响应式对象集合
 export const readonlyMap = new WeakMap<Target, any>()
+export const shallowReadonlyMap = new WeakMap<Target, any>()
 
 const enum TargetType {
   INVALID = 0,
@@ -65,7 +68,7 @@ function getTargetType(value: Target) {
 }
 
 // only unwrap nested ref
-type UnwrapNestedRefs<T> = T extends Ref ? T : UnwrapRef<T>
+export type UnwrapNestedRefs<T> = T extends Ref ? T : UnwrapRef<T>
 
 /**
  * Creates a reactive copy of the original object.
@@ -101,7 +104,8 @@ export function reactive(target: object) {
     target,
     false,
     mutableHandlers, // proxy 普通对象 - COMMON： Array、Object
-    mutableCollectionHandlers // proxy 集合对象 - COLLECTION: Map、Set、WeakMap、WeakSet
+    mutableCollectionHandlers, // proxy 集合对象 - COLLECTION: Map、Set、WeakMap、WeakSet
+    reactiveMap
   )
 }
 
@@ -117,7 +121,8 @@ export function shallowReactive<T extends object>(target: T): T {
     target,
     false, // reactiveMap
     shallowReactiveHandlers, // TargetType.COMMON，即target 类型为：Array、Object
-    shallowCollectionHandlers // TargetType.COLLECTION，即target 类型为：Map、Set、WeakMap、WeakSet
+    shallowCollectionHandlers, // TargetType.COLLECTION，即target 类型为：Map、Set、WeakMap、WeakSet
+    shallowReactiveMap
   )
 }
 
@@ -154,7 +159,8 @@ export function readonly<T extends object>(
     target,
     true,
     readonlyHandlers,
-    readonlyCollectionHandlers
+    readonlyCollectionHandlers,
+    readonlyMap
   )
 }
 
@@ -173,7 +179,8 @@ export function shallowReadonly<T extends object>(
     target,
     true,
     shallowReadonlyHandlers,
-    readonlyCollectionHandlers
+    shallowReadonlyCollectionHandlers,
+    shallowReadonlyMap
   )
 }
 
@@ -182,7 +189,8 @@ function createReactiveObject(
   target: Target,
   isReadonly: boolean,
   baseHandlers: ProxyHandler<any>, // proxy 普通对象 - COMMON： Array、Object
-  collectionHandlers: ProxyHandler<any> // proxy 集合对象 - COLLECTION: Map、Set、WeakMap、WeakSet
+  collectionHandlers: ProxyHandler<any>, // proxy 集合对象 - COLLECTION: Map、Set、WeakMap、WeakSet
+  proxyMap: WeakMap<Target, any> // 收集只读、响应式对象
 ) {
   if (!isObject(target)) {
     if (__DEV__) {
@@ -199,7 +207,6 @@ function createReactiveObject(
     return target
   }
   // target already has corresponding Proxy
-  const proxyMap = isReadonly ? readonlyMap : reactiveMap // 收集只读、响应式对象
   const existingProxy = proxyMap.get(target)
   if (existingProxy) {
     // 如果已转换为响应式对象 则直接返回

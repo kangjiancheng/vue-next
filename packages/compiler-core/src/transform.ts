@@ -35,7 +35,8 @@ import {
   helperNameMap,
   CREATE_BLOCK,
   CREATE_COMMENT,
-  OPEN_BLOCK
+  OPEN_BLOCK,
+  CREATE_VNODE
 } from './runtimeHelpers'
 import { isVSlot } from './utils'
 import { hoistStatic, isSingleElementRoot } from './transforms/hoistStatic'
@@ -85,7 +86,7 @@ export interface TransformContext
   extends Required<Omit<TransformOptions, 'filename'>> {
   selfName: string | null
   root: RootNode
-  helpers: Set<symbol>
+  helpers: Map<symbol, number>
   components: Set<string>
   directives: Set<string>
   hoists: (JSChildNode | null)[]
@@ -103,6 +104,7 @@ export interface TransformContext
   childIndex: number
   currentNode: RootNode | TemplateChildNode | null
   helper<T extends symbol>(name: T): T
+  removeHelper<T extends symbol>(name: T): void
   helperString(name: symbol): string
   replaceNode(node: TemplateChildNode): void
   removeNode(node?: TemplateChildNode): void
@@ -161,7 +163,7 @@ export function createTransformContext(
 
     // state
     root,
-    helpers: new Set(), // 收集 在创建vnode时要用到的函数，为了在渲染阶段可以调用这些的函数去创建对应的虚拟节点，如：openBlock、createBlock、createVNode等
+    helpers: new Map(), // 收集 在创建vnode时要用到的函数，为了在渲染阶段可以调用这些的函数去创建对应的虚拟节点，如：openBlock、createBlock、createVNode等
     components: new Set(), // 保存用户自定义的组件标签名
     directives: new Set(),
     hoists: [],
@@ -182,8 +184,20 @@ export function createTransformContext(
 
     // methods
     helper(name) {
-      context.helpers.add(name)
+      const count = context.helpers.get(name) || 0
+      context.helpers.set(name, count + 1)
       return name
+    },
+    removeHelper(name) {
+      const count = context.helpers.get(name)
+      if (count) {
+        const currentCount = count - 1
+        if (!currentCount) {
+          context.helpers.delete(name)
+        } else {
+          context.helpers.set(name, currentCount)
+        }
+      }
     },
     helperString(name) {
       // 获取对应的运行时函数名
@@ -318,7 +332,7 @@ export function transform(root: RootNode, options: TransformOptions) {
 
   // 补充设置root的相关信息
   // finalize meta information
-  root.helpers = [...context.helpers] // 此root的helper 列表
+  root.helpers = [...context.helpers.keys()] // 此root的helper 列表
   root.components = [...context.components] // 保存用户自定义的组件标签名，transformElement
   root.directives = [...context.directives] // 用户自定义的指令名，transformElement - buildDirectiveArgs
   root.imports = context.imports
@@ -332,7 +346,7 @@ export function transform(root: RootNode, options: TransformOptions) {
 // 1、 vue模版只有一个根元素：（1）element 类型，则选其codegenNode；（2）除 element类型外，如，IfNode、forNode则选其child
 // 2、 vue模版有多个根元素：创建一个fragment节点，作为其codegenNode
 function createRootCodegen(root: RootNode, context: TransformContext) {
-  const { helper } = context
+  const { helper, removeHelper } = context
   const { children } = root
   if (children.length === 1) {
     // vue模版只有一个根元素
@@ -348,11 +362,14 @@ function createRootCodegen(root: RootNode, context: TransformContext) {
       // SimpleExpressionNode
       const codegenNode = child.codegenNode
       if (codegenNode.type === NodeTypes.VNODE_CALL) {
-        // 如 template: '<div>hello {{ "world" }} !</div>'
-        // 如 组件 - template: '<component-demo>...</component-demo>'
-        codegenNode.isBlock = true
-        helper(OPEN_BLOCK)
-        helper(CREATE_BLOCK)
+        if (!codegenNode.isBlock) {
+          removeHelper(CREATE_VNODE)
+          // 如 template: '<div>hello {{ "world" }} !</div>'
+          // 如 组件 - template: '<component-demo>...</component-demo>'
+          codegenNode.isBlock = true
+          helper(OPEN_BLOCK)
+          helper(CREATE_BLOCK)
+        }
       }
       root.codegenNode = codegenNode
     } else {

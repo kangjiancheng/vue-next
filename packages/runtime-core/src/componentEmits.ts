@@ -134,20 +134,20 @@ export function emit(
     }
   }
 
-  // convert handler name to camelCase. See issue #2249
   // <hello-world v-model:userName.trim="user.name" />，则：props: { 'onUpdate:userName': ..., ...}
   // 调用：$emit('update:user-name', '小明') 则：'onUpdate:userName'
-  let handlerName = toHandlerKey(camelize(event)) // 'on' + 事件名转换小驼峰
-  let handler = props[handlerName] // 事件处理函数
-
-  // 传递连字符事件属性 v-model:user-name
+  let handlerName
+  let handler =
+    props[(handlerName = toHandlerKey(event))] ||
+    // also try camelCase event handler (#2249)
+    props[(handlerName = toHandlerKey(camelize(event)))]
   // for v-model update:xxx events, also trigger kebab-case equivalent
   // for props passed via kebab-case
   if (!handler && isModelListener) {
+    // 传递连字符事件属性 v-model:user-name
     // 连字符传递属性prop
     // <hello-world v-model:user-name.trim="user.name" />
-    handlerName = toHandlerKey(hyphenate(event)) // 传递props {'onUpdate:user-name' ...}
-    handler = props[handlerName]
+    handler = props[(handlerName = toHandlerKey(hyphenate(event)))] // 传递props {'onUpdate:user-name' ...}
   }
 
   // 执行事件
@@ -193,8 +193,11 @@ export function normalizeEmitsOptions(
   let hasExtends = false
   if (__FEATURE_OPTIONS_API__ && !isFunction(comp)) {
     const extendEmits = (raw: ComponentOptions) => {
-      hasExtends = true
-      extend(normalized, normalizeEmitsOptions(raw, appContext, true))
+      const normalizedFromExtend = normalizeEmitsOptions(raw, appContext, true)
+      if (normalizedFromExtend) {
+        hasExtends = true
+        extend(normalized, normalizedFromExtend)
+      }
     }
     if (!asMixin && appContext.mixins.length) {
       appContext.mixins.forEach(extendEmits)

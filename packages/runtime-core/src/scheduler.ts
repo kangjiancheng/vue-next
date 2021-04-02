@@ -120,7 +120,7 @@ function queueFlush() {
 // 开始执行更新组件时，从任务队列中移除此组件effect
 export function invalidateJob(job: SchedulerJob) {
   const i = queue.indexOf(job)
-  if (i > -1) {
+  if (i > flushIndex) {
     queue.splice(i, 1)
   }
 }

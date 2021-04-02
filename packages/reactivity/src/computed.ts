@@ -52,15 +52,17 @@ class ComputedRefImpl<T> {
   }
 
   get value() {
-    if (this._dirty) {
+    // the computed ref may get wrapped by other proxies e.g. readonly() #3376
+    const self = toRaw(this)
+    if (self._dirty) {
       // 避免每次访问都需要重新执行getter，只有在依赖数据发生变化时，才重新执行getter
-      this._value = this.effect() // 在访问的时候，获取getter里的结果
-      this._dirty = false // 脏数据
+      self._value = this.effect() // 在访问的时候，获取getter里的结果
+      self._dirty = false
     }
     // 需要在effect函数里访问，才会跟踪：渲染函数、watch、computed
     // 如果直接在setup函数里访问这个computed ref数据，不会触发依赖跟踪
-    track(toRaw(this), TrackOpTypes.GET, 'value')
-    return this._value
+    track(self, TrackOpTypes.GET, 'value')
+    return self._value
   }
 
   // 不是直接修改当前computed的值，而是修改getter里的依赖数据，如此在下一次访问getter value的值使，可以获取最新依赖值。

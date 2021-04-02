@@ -10,7 +10,8 @@ import {
   Comment,
   cloneVNode,
   VNodeArrayChildren,
-  isVNode
+  isVNode,
+  blockStack
 } from './vnode'
 import { handleError, ErrorCodes } from './errorHandling'
 import { PatchFlags, ShapeFlags, isOn, isModelListener } from '@vue/shared'
@@ -53,10 +54,8 @@ export function renderComponentRoot(
 
   // 返回结果
   let result
-
   // 执行渲染生成vnode期间的组件实例
-  setCurrentRenderingInstance(instance)
-
+  const prev = setCurrentRenderingInstance(instance)
   if (__DEV__) {
     accessedAttrs = false
   }
@@ -238,12 +237,13 @@ export function renderComponentRoot(
       result = root
     }
   } catch (err) {
+    blockStack.length = 0
     handleError(err, instance, ErrorCodes.RENDER_FUNCTION)
     result = createVNode(Comment)
   }
 
   // 移除渲染生成vnode结束的组件实例
-  setCurrentRenderingInstance(null)
+  setCurrentRenderingInstance(prev)
 
   // 返回渲染函数vnode
   return result

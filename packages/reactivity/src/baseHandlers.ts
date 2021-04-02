@@ -5,7 +5,9 @@ import {
   ReactiveFlags,
   Target,
   readonlyMap,
-  reactiveMap
+  reactiveMap,
+  shallowReactiveMap,
+  shallowReadonlyMap
 } from './reactive'
 import { TrackOpTypes, TriggerOpTypes } from './operations'
 import {
@@ -89,8 +91,15 @@ function createGetter(isReadonly = false, shallow = false) {
       return isReadonly
     } else if (
       key === ReactiveFlags.RAW && // 访问对象当原始对象 - toRaw(proxy)
-      // receiver：触发该拦截方法的操作对象（一般为Proxy实例对象，注意原型链）
-      receiver === (isReadonly ? readonlyMap : reactiveMap).get(target)
+      receiver === // receiver：触发该拦截方法的操作对象（一般为Proxy实例对象，注意原型链）
+        (isReadonly
+          ? shallow
+            ? shallowReadonlyMap
+            : readonlyMap
+          : shallow
+            ? shallowReactiveMap
+            : reactiveMap
+        ).get(target)
     ) {
       // 访问 原生对象
       // toRaw(target)
@@ -158,9 +167,10 @@ function createSetter(shallow = false) {
     value: unknown,
     receiver: object
   ): boolean {
-    const oldValue = (target as any)[key]
+    let oldValue = (target as any)[key]
     if (!shallow) {
       value = toRaw(value)
+      oldValue = toRaw(oldValue)
       if (!isArray(target) && isRef(oldValue) && !isRef(value)) {
         // 针对属性为ref对象
         // 非数组，且之前为ref对象，但是新值不是ref对象 - 目的：方便不用通过调用ref value属性来设置 新值

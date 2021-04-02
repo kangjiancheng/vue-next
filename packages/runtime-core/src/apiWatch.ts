@@ -216,7 +216,7 @@ function doWatch(
         if (cleanup) {
           cleanup()
         }
-        return callWithErrorHandling(
+        return callWithAsyncErrorHandling(
           source, // getter
           instance,
           ErrorCodes.WATCH_CALLBACK,
@@ -237,7 +237,7 @@ function doWatch(
   }
 
   let cleanup: () => void
-  const onInvalidate: InvalidateCbRegistrator = (fn: () => void) => {
+  let onInvalidate: InvalidateCbRegistrator = (fn: () => void) => {
     cleanup = runner.options.onStop = () => {
       callWithErrorHandling(fn, instance, ErrorCodes.WATCH_CLEANUP)
     }
@@ -246,6 +246,8 @@ function doWatch(
   // in SSR there is no need to setup an actual effect, and it should be noop
   // unless it's eager
   if (__NODE_JS__ && isInSSRComponentSetup) {
+    // we will also not call the invalidate callback (+ runner is not set up)
+    onInvalidate = NOOP
     if (!cb) {
       getter()
     } else if (immediate) {
