@@ -986,7 +986,7 @@ function baseCreateRenderer(
       invokeVNodeHook(vnodeHook, parentComponent, n2, n1)
     }
 
-    // 更新 vnode dir - 渲染函数已执行
+    // 更新 vnode dir - 更新渲染函数 - 开始更新比较element vnode节点
     if (dirs) {
       invokeDirectiveHook(n2, n1, parentComponent, 'beforeUpdate')
     }
@@ -1135,6 +1135,7 @@ function baseCreateRenderer(
       )
     }
 
+    // vnode props、children 已更新完成
     if ((vnodeHook = newProps.onVnodeUpdated) || dirs) {
       queuePostRenderEffect(() => {
         vnodeHook && invokeVNodeHook(vnodeHook, parentComponent, n2, n1)

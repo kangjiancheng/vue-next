@@ -127,7 +127,7 @@ export function withDirectives<T extends VNode>(
       } as ObjectDirective
     }
     bindings.push({
-      dir, // 指令内容
+      dir, // 指令内容 - 即组件指令属性列表里的 指令对象
       instance, // （父）组件实例
       value, // 指令属性值
       oldValue: void 0, // vnode的旧指令
@@ -157,17 +157,17 @@ export function invokeDirectiveHook(
     // created： vnode 刚创建对应dom实例el包括其子元素列表后，解析vnode指令：在render中的阶段 - mountElement()
     // beforeMount：vnode el节点属性props已添加完成
     // mounted：vnode el已挂载到相应父节点dom实例上（如根vnode 挂载到#app dom，子vnode挂载到父vnode的dom实例上）
-    // beforeUpdate
-    // updated
+    // beforeUpdate： vnode 更新之前 - props 更新之前
+    // updated： vnode 更新后 - props、children 更新完后
     // beforeUnmount
     // unmounted
     const hook = binding.dir[name] as DirectiveHook | undefined
     if (hook) {
       callWithAsyncErrorHandling(hook, instance, ErrorCodes.DIRECTIVE_HOOK, [
-        vnode.el,
-        binding,
-        vnode,
-        prevVNode
+        vnode.el, // vnode el 实例
+        binding, // vnode 指令节点（包括：指令对象、指令属性值、指令属性参数、指令属性修饰符）
+        vnode, // vnode 节点
+        prevVNode // 旧vnode
       ])
     }
   }
