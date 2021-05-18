@@ -111,6 +111,9 @@ export interface RootNode extends Node {
   temps: number
   ssrHelpers?: symbol[]
   codegenNode?: TemplateChildNode | JSChildNode | BlockStatement
+
+  // v2 compat only
+  filters?: string[]
 }
 
 export type ElementNode =
@@ -351,6 +354,11 @@ export interface FunctionExpression extends Node {
    * withScopeId() wrapper
    */
   isSlot: boolean
+  /**
+   * __COMPAT__ only, indicates a slot function that should be excluded from
+   * the legacy $scopedSlots instance property.
+   */
+  isNonScopedSlot?: boolean
 }
 
 export interface ConditionalExpression extends Node {

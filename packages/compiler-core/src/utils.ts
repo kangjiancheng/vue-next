@@ -363,7 +363,7 @@ export function injectProp(
 
 export function toValidAssetId(
   name: string,
-  type: 'component' | 'directive'
+  type: 'component' | 'directive' | 'filter'
 ): string {
   // 非[A-Za-z0-9_]， 如 tag name = 'hello-world' 转换为 '_component_hello__world'
   return `_${type}_${name.replace(/[^\w]/g, '_')}`

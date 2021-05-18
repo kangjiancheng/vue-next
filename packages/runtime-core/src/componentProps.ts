@@ -20,7 +20,8 @@ import {
   isReservedProp,
   EMPTY_ARR,
   def,
-  extend
+  extend,
+  isOn
 } from '@vue/shared'
 import { warn } from './warning'
 import {
@@ -33,6 +34,10 @@ import {
 import { isEmitListener } from './componentEmits'
 import { InternalObjectKey } from './vnode'
 import { AppContext } from './apiCreateApp'
+import { createPropsDefaultThis } from './compat/props'
+import { isCompatEnabled, softAssertCompatEnabled } from './compat/compatConfig'
+import { DeprecationTypes } from './compat/compatConfig'
+import { shouldSkipAttr } from './compat/attrsFallthrough'
 
 export type ComponentPropsOptions<P = Data> =
   | ComponentObjectPropsOptions<P>
@@ -71,7 +76,7 @@ type RequiredKeys<T> = {
     // don't mark Boolean props as undefined
     | BooleanConstructor
     | { type: BooleanConstructor }
-    ? K
+    ? T[K] extends { default: undefined | (() => undefined) } ? never : K
     : never
 }[keyof T]
 
@@ -200,6 +205,7 @@ export function updateProps(
   } = instance
   const rawCurrentProps = toRaw(props)
   const [options] = instance.propsOptions // 组件props选项列表
+  let hasAttrsChanged = false
 
   if (
     // always force full diff in dev
@@ -218,14 +224,17 @@ export function updateProps(
       // the props.
       const propsToUpdate = instance.vnode.dynamicProps!
       for (let i = 0; i < propsToUpdate.length; i++) {
-        const key = propsToUpdate[i]
+        let key = propsToUpdate[i]
         // PROPS flag guarantees rawProps to be non-null
         const value = rawProps![key]
         if (options) {
           // attr / props separation was done on init and will be consistent
           // in this code path, so just check if attrs have it.
           if (hasOwn(attrs, key)) {
-            attrs[key] = value
+            if (value !== attrs[key]) {
+              attrs[key] = value
+              hasAttrsChanged = true
+            }
           } else {
             const camelizedKey = camelize(key)
             props[camelizedKey] = resolvePropValue(
@@ -237,13 +246,25 @@ export function updateProps(
             )
           }
         } else {
-          attrs[key] = value
+          if (__COMPAT__) {
+            if (isOn(key) && key.endsWith('Native')) {
+              key = key.slice(0, -6) // remove Native postfix
+            } else if (shouldSkipAttr(key, instance)) {
+              continue
+            }
+          }
+          if (value !== attrs[key]) {
+            attrs[key] = value
+            hasAttrsChanged = true
+          }
         }
       }
     }
   } else {
     // full props update.
-    setFullProps(instance, rawProps, props, attrs)
+    if (setFullProps(instance, rawProps, props, attrs)) {
+      hasAttrsChanged = true
+    }
     // in case of dynamic props, check if we need to delete keys from
     // the props object
     let kebabKey: string
@@ -283,13 +304,16 @@ export function updateProps(
       for (const key in attrs) {
         if (!rawProps || !hasOwn(rawProps, key)) {
           delete attrs[key]
+          hasAttrsChanged = true
         }
       }
     }
   }
 
   // trigger updates for $attrs in case it's used in component slots
-  trigger(instance, TriggerOpTypes.SET, '$attrs')
+  if (hasAttrsChanged) {
+    trigger(instance, TriggerOpTypes.SET, '$attrs')
+  }
 
   if (__DEV__) {
     validateProps(rawProps || {}, props, instance)
@@ -307,13 +331,26 @@ function setFullProps(
   const [options, needCastKeys] = instance.propsOptions
 
   // prop属性赋值
-
+  let hasAttrsChanged = false
   if (rawProps) {
-    for (const key in rawProps) {
+    for (let key in rawProps) {
       // key, ref are reserved and never passed down
       if (isReservedProp(key)) {
         // 不处理vue 保留的关键 prop key，如：key、ref、或空字符串key，即不能传入这些到组件
         continue
+      }
+
+      if (__COMPAT__) {
+        if (key.startsWith('onHook:')) {
+          softAssertCompatEnabled(
+            DeprecationTypes.INSTANCE_EVENT_HOOKS,
+            instance,
+            key.slice(2).toLowerCase()
+          )
+        }
+        if (key === 'inline-template') {
+          continue
+        }
       }
 
       const value = rawProps[key] // vnode prop属性值
@@ -324,9 +361,22 @@ function setFullProps(
         // '组件vnode的props' 如果在 '组件定义的props选项里' 则赋值保存到有效的props
         props[camelKey] = value
       } else if (!isEmitListener(instance.emitsOptions, key)) {
-        // 'onUpdate:user-name'
-        // 不在组件props属性选项里 也不在组件emits属性选项里
-        attrs[key] = value
+        // Any non-declared (either as a prop or an emitted event) props are put
+        // into a separate `attrs` object for spreading. Make sure to preserve
+        // original key casing
+        if (__COMPAT__) {
+          if (isOn(key) && key.endsWith('Native')) {
+            key = key.slice(0, -6) // remove Native postfix
+          } else if (shouldSkipAttr(key, instance)) {
+            continue
+          }
+        }
+        if (value !== attrs[key]) {
+          // 'onUpdate:user-name'
+          // 不在组件props属性选项里 也不在组件emits属性选项里
+          attrs[key] = value
+          hasAttrsChanged = true
+        }
       }
     }
   }
@@ -348,6 +398,8 @@ function setFullProps(
       )
     }
   }
+
+  return hasAttrsChanged
 }
 
 // 解析组件props属性选项 - 存在 boolean类型或默认值，并进行校验和赋值
@@ -375,7 +427,13 @@ function resolvePropValue(
           value = propsDefaults[key]
         } else {
           setCurrentInstance(instance)
-          value = propsDefaults[key] = defaultValue(props)
+          value = propsDefaults[key] = defaultValue.call(
+            __COMPAT__ &&
+            isCompatEnabled(DeprecationTypes.PROPS_DEFAULT_THIS, instance)
+              ? createPropsDefaultThis(instance, props, key)
+              : null,
+            props
+          )
           setCurrentInstance(null)
         }
       } else {
@@ -427,6 +485,9 @@ export function normalizePropsOptions(
   // isBundlerESMBuild ? `__VUE_OPTIONS_API__` : true,
   if (__FEATURE_OPTIONS_API__ && !isFunction(comp)) {
     const extendProps = (raw: ComponentOptions) => {
+      if (__COMPAT__ && isFunction(raw)) {
+        raw = raw.options
+      }
       hasExtends = true
       const [props, keys] = normalizePropsOptions(raw, appContext, true)
       extend(normalized, props)

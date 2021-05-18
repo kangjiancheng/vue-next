@@ -149,13 +149,6 @@ export function buildSlots(
   // 保存动态的slot节点列表 (if/for)
   const dynamicSlots: (ConditionalExpression | CallExpression)[] = []
 
-  // 创建一个的 default slot 节点
-  // 即 当组件当子元素中不存在slot节点，则都分配到 'default'
-  const buildDefaultSlotProperty = (
-    props: ExpressionNode | undefined,
-    children: TemplateChildNode[]
-  ) => createObjectProperty(`default`, buildSlotFn(props, children, loc)) // JS_PROPERTY 创建一个js对象属性节点，如 { default: _withCtx((slotProps) => [...]) }
-
   // 组件/子元素存在动态v-slot、 子元素<template v-slot> 存在v-if/v-for指令
   // 或组件元素的祖先元素中存在v-slot/v-for
   // If the slot is inside a v-for or another v-slot, force it to be dynamic
@@ -392,18 +385,34 @@ export function buildSlots(
   }
 
   // 普通子节点 分配到 'default' slot
-
   if (!onComponentSlot) {
-    // 组件自身不带 v-slot 指令
+    // 创建一个 default slot 节点
+    // 即 当组件当子元素中不存在slot节点，则都分配到 'default'
+    const buildDefaultSlotProperty = (
+      props: ExpressionNode | undefined,
+      children: TemplateChildNode[]
+    ) => {
+      const fn = buildSlotFn(props, children, loc)
+      if (__COMPAT__ && context.compatConfig) {
+        fn.isNonScopedSlot = true
+      }
+      return createObjectProperty(`default`, fn) // JS_PROPERTY 创建一个js对象属性节点，如 { default: _withCtx((slotProps) => [...]) }
+    }
 
+    // 组件自身不带 v-slot 指令
     if (!hasTemplateSlots) {
       // 组件没有子节点<template v-slot>即 只有普通子元素，都分配到 'default' slot
 
       // implicit default slot (on component)
       slotsProperties.push(buildDefaultSlotProperty(undefined, children))
-    } else if (implicitDefaultChildren.length) {
+    } else if (
+      implicitDefaultChildren.length &&
+      // #3766
+      // with whitespace: 'preserve', whitespaces between slots will end up in
+      // implicitDefaultChildren. Ignore if all implicit children are whitespaces.
+      implicitDefaultChildren.some(node => isNonWhitespaceContent(node))
+    ) {
       // 存在普通节点时，slots节点列表中不可以有 'default' slot
-
       // implicit default slot (mixed with named slots)
       if (hasNamedDefaultSlot) {
         context.onError(
@@ -504,4 +513,12 @@ function hasForwardedSlots(children: TemplateChildNode[]): boolean {
     }
   }
   return false
+}
+
+function isNonWhitespaceContent(node: TemplateChildNode): boolean {
+  if (node.type !== NodeTypes.TEXT && node.type !== NodeTypes.TEXT_CALL)
+    return true
+  return node.type === NodeTypes.TEXT
+    ? !!node.content.trim()
+    : isNonWhitespaceContent(node.content)
 }

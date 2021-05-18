@@ -2,9 +2,14 @@
  * 解析模板template，得到ast语法树
  */
 
-import { ParserOptions } from './options'
+import { ErrorHandlingOptions, ParserOptions } from './options'
 import { NO, isArray, makeMap, extend } from '@vue/shared'
-import { ErrorCodes, createCompilerError, defaultOnError } from './errors'
+import {
+  ErrorCodes,
+  createCompilerError,
+  defaultOnError,
+  defaultOnWarn
+} from './errors'
 import {
   assert,
   advancePositionWithMutation,
@@ -29,8 +34,19 @@ import {
   createRoot,
   ConstantTypes
 } from './ast'
+import {
+  checkCompatEnabled,
+  CompilerCompatOptions,
+  CompilerDeprecationTypes,
+  isCompatEnabled,
+  warnDeprecation
+} from './compat/compatConfig'
 
-type OptionalOptions = 'isNativeTag' | 'isBuiltInComponent'
+type OptionalOptions =
+  | 'whitespace'
+  | 'isNativeTag'
+  | 'isBuiltInComponent'
+  | keyof CompilerCompatOptions
 type MergedParserOptions = Omit<Required<ParserOptions>, OptionalOptions> &
   Pick<ParserOptions, OptionalOptions>
 type AttributeValue =
@@ -63,6 +79,7 @@ export const defaultParserOptions: MergedParserOptions = {
   decodeEntities: (rawText: string): string =>
     rawText.replace(decodeRE, (_, p1) => decodeMap[p1]),
   onError: defaultOnError,
+  onWarn: defaultOnWarn,
   comments: false
 }
 
@@ -84,6 +101,7 @@ export interface ParserContext {
   column: number
   inPre: boolean // HTML <pre> tag, preserve whitespaces
   inVPre: boolean // v-pre, do not process directives and interpolations
+  onWarn: NonNullable<ErrorHandlingOptions['onWarn']>
 }
 
 /**
@@ -130,7 +148,8 @@ function createParserContext(
     originalSource: content, // 模板代码 innerHTML，开头包括换行和代码缩进（缩进以空格表示）
     source: content, // 当前正在操作的模板内容，即 originalSource.slice(offset)
     inPre: false, // 当前解析上下文在 pre 标签内，如解析pre标签内的子元素
-    inVPre: false // v-pre 指令内
+    inVPre: false, // v-pre 指令内
+    onWarn: options.onWarn
   }
 }
 
@@ -226,6 +245,30 @@ function parseChildren(
         } else if (/[a-z]/i.test(s[1])) {
           // s = '<p' 开始标签，解析标签名、标签属性、指令等
           node = parseElement(context, ancestors)
+
+          // 2.x <template> with no directive compat
+          if (
+            __COMPAT__ &&
+            isCompatEnabled(
+              CompilerDeprecationTypes.COMPILER_NATIVE_TEMPLATE,
+              context
+            ) &&
+            node &&
+            node.tag === 'template' &&
+            !node.props.some(
+              p =>
+                p.type === NodeTypes.DIRECTIVE &&
+                isSpecialTemplateDirective(p.name)
+            )
+          ) {
+            __DEV__ &&
+              warnDeprecation(
+                CompilerDeprecationTypes.COMPILER_NATIVE_TEMPLATE,
+                context,
+                node.loc
+              )
+            node = node.children
+          }
         } else if (s[1] === '?') {
           // '<?' xml 格式
           emitError(
@@ -269,12 +312,12 @@ function parseChildren(
    * 2、将连续空格替换成一个空格
    */
 
-  // Whitespace management for more efficient output
-  // (same as v2 whitespace: 'condense')
+  // Whitespace handling strategy like v2
   let removedWhitespace = false
 
   // 排除 TextModes.RAWTEXT，即标签为：style,iframe,script,noscript
   if (mode !== TextModes.RAWTEXT && mode !== TextModes.RCDATA) {
+    const preserve = context.options.whitespace === 'preserve' // 设置保留空白
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i]
       if (!context.inPre && node.type === NodeTypes.TEXT) {
@@ -283,30 +326,31 @@ function parseChildren(
           // 内容只有：换行、空白
           const prev = nodes[i - 1] // 前后相邻元素
           const next = nodes[i + 1]
-          // If:
+          // Remove if:
           // - the whitespace is the first or last node, or:
-          // - the whitespace is adjacent to a comment, or:
-          // - the whitespace is between two elements AND contains newline
-          // Then the whitespace is ignored.
+          // - (condense mode) the whitespace is adjacent to a comment, or:
+          // - (condense mode) the whitespace is between two elements AND contains newline
           if (
             !prev || // 前边没有相邻元素（首个元素）
             !next || // 后边没有相邻元素（最后元素）
-            prev.type === NodeTypes.COMMENT || // 前边为注释元素
-            next.type === NodeTypes.COMMENT || // 后边为注释元素
-            (prev.type === NodeTypes.ELEMENT && // 前后都有相邻元素，且内容为换行
-              next.type === NodeTypes.ELEMENT &&
-              /[\r\n]/.test(node.content))
+            (!preserve &&
+              (prev.type === NodeTypes.COMMENT || // 前边为注释元素
+              next.type === NodeTypes.COMMENT || // 后边为注释元素
+                (prev.type === NodeTypes.ELEMENT && // 前后都有相邻元素，且内容为换行
+                  next.type === NodeTypes.ELEMENT &&
+                  /[\r\n]/.test(node.content))))
           ) {
             removedWhitespace = true // 移除空白
             nodes[i] = null as any // 删除此节点
           } else {
-            // Otherwise, condensed consecutive whitespace inside the text
-            // down to a single space
-            // 如同一行内的两个元素之间的连续空白，如： template: '{{ foo }}   {{ bar }}'，两个插值节点间的空白
+            // Otherwise, the whitespace is condensed into a single space
+            // 如过一行内的两个元素之间的连续空白，如： template: '{{ foo }}   {{ bar }}'，两个插值节点间的空白
             node.content = ' '
           }
-        } else {
+        } else if (!preserve) {
           // 将文本内容中的连续空格替换成一个空格
+          // in condense mode, consecutive whitespaces in text are condensed
+          // down to a single space.
           node.content = node.content.replace(/[\t\r\n\f ]+/g, ' ')
         }
       }
@@ -523,6 +567,28 @@ function parseElement(
   ancestors.pop()
   // 解析完子元素
 
+  // 2.x inline-template compat
+  if (__COMPAT__) {
+    const inlineTemplateProp = element.props.find(
+      p => p.type === NodeTypes.ATTRIBUTE && p.name === 'inline-template'
+    ) as AttributeNode
+    if (
+      inlineTemplateProp &&
+      checkCompatEnabled(
+        CompilerDeprecationTypes.COMPILER_INLINE_TEMPLATE,
+        context,
+        inlineTemplateProp.loc
+      )
+    ) {
+      const loc = getSelection(context, element.loc.end)
+      inlineTemplateProp.value = {
+        type: NodeTypes.TEXT,
+        content: loc.source,
+        loc
+      }
+    }
+  }
+
   element.children = children
 
   /**
@@ -573,9 +639,19 @@ const isSpecialTemplateDirective = /*#__PURE__*/ makeMap(
  */
 function parseTag(
   context: ParserContext,
-  type: TagType, // 开始或结束
+  type: TagType.Start, // 开始或结束
   parent: ElementNode | undefined
-): ElementNode {
+): ElementNode
+function parseTag(
+  context: ParserContext,
+  type: TagType.End,
+  parent: ElementNode | undefined
+): void
+function parseTag(
+  context: ParserContext,
+  type: TagType,
+  parent: ElementNode | undefined
+): ElementNode | undefined {
   __TEST__ && assert(/^<\/?[a-z]/i.test(context.source))
   __TEST__ &&
     assert(
@@ -613,6 +689,7 @@ function parseTag(
 
   // 检测节点属性列表中是否有 v-pre 指令
   if (
+    type === TagType.Start &&
     !context.inVPre &&
     props.some(p => p.type === NodeTypes.DIRECTIVE && p.name === 'pre')
   ) {
@@ -643,6 +720,40 @@ function parseTag(
   }
   // 至此标签的模版光标解析结束
 
+  if (type === TagType.End) {
+    return
+  }
+
+  // 2.x deprecation checks
+  if (
+    __COMPAT__ &&
+    __DEV__ &&
+    isCompatEnabled(
+      CompilerDeprecationTypes.COMPILER_V_IF_V_FOR_PRECEDENCE,
+      context
+    )
+  ) {
+    let hasIf = false
+    let hasFor = false
+    for (let i = 0; i < props.length; i++) {
+      const p = props[i]
+      if (p.type === NodeTypes.DIRECTIVE) {
+        if (p.name === 'if') {
+          hasIf = true
+        } else if (p.name === 'for') {
+          hasFor = true
+        }
+      }
+      if (hasIf && hasFor) {
+        warnDeprecation(
+          CompilerDeprecationTypes.COMPILER_V_IF_V_FOR_PRECEDENCE,
+          context,
+          getSelection(context, start)
+        )
+      }
+    }
+  }
+
   /**
    * 非用户自定义元素时，需要判断元素标签类型： ELEMENT、 COMPONENT、 SLOT、 TEMPLATE
    * 默认都是 ELEMENT
@@ -652,9 +763,28 @@ function parseTag(
   if (!context.inVPre && !options.isCustomElement(tag)) {
     // 非用户自定义元素： NO = () => false
     // 判断是 v-is 指令，动态组件
-    const hasVIs = props.some(
-      p => p.type === NodeTypes.DIRECTIVE && p.name === 'is' // v-bind:is，则 p.name = 'bind'
-    )
+    const hasVIs = props.some(p => {
+      if (p.name !== 'is') return
+      // v-is="xxx" (TODO: deprecate)
+      if (p.type === NodeTypes.DIRECTIVE) {
+        return true
+      }
+      // is="vue:xxx"
+      if (p.value && p.value.content.startsWith('vue:')) {
+        return true
+      }
+      // in compat mode, any is usage is considered a component
+      if (
+        __COMPAT__ &&
+        checkCompatEnabled(
+          CompilerDeprecationTypes.COMPILER_IS_ON_ELEMENT,
+          context,
+          p.loc
+        )
+      ) {
+        return true
+      }
+    })
 
     // 判断 ElementTypes 为是 COMPONENT 元素
     // 一：
@@ -683,11 +813,10 @@ function parseTag(
       tagType = ElementTypes.SLOT // 元素类型 为slot
     } else if (
       tag === 'template' &&
-      props.some(p => {
-        return (
+      props.some(
+        p =>
           p.type === NodeTypes.DIRECTIVE && isSpecialTemplateDirective(p.name) // 存在指定指令列表if、else、else-if、for、slot，则 元素为template类型
-        )
-      })
+      )
     ) {
       tagType = ElementTypes.TEMPLATE // 元素类型为模版template，且必须带有指定指令列表，注意: 不带指定指令的template标签是html标签 即 ElementTypes.ELEMENT
     }
@@ -863,7 +992,7 @@ function parseAttribute(
      *        '@' 开头代表 'on'
      *        '#' 开头代表 'slot'，此为默认，如：template: '<span #header="nav"></span>'，则 dirName = 'slot'
      */
-    const dirName =
+    let dirName =
       match[1] ||
       (startsWith(name, ':') ? 'bind' : startsWith(name, '@') ? 'on' : 'slot')
 
@@ -936,6 +1065,32 @@ function parseAttribute(
       valueLoc.source = valueLoc.source.slice(1, -1) // 调整loc 中的source，去掉引号
     }
 
+    const modifiers = match[3] ? match[3].substr(1).split('.') : []
+
+    // 2.x compat v-bind:foo.sync -> v-model:foo
+    if (__COMPAT__ && dirName === 'bind' && arg) {
+      if (
+        modifiers.includes('sync') &&
+        checkCompatEnabled(
+          CompilerDeprecationTypes.COMPILER_V_BIND_SYNC,
+          context,
+          loc,
+          arg.loc.source
+        )
+      ) {
+        dirName = 'model'
+        modifiers.splice(modifiers.indexOf('sync'), 1)
+      }
+
+      if (__DEV__ && modifiers.includes('prop')) {
+        checkCompatEnabled(
+          CompilerDeprecationTypes.COMPILER_V_BIND_PROP,
+          context,
+          loc
+        )
+      }
+    }
+
     // 返回指令属性节点
     return {
       type: NodeTypes.DIRECTIVE, // 节点类型为指令类型
@@ -951,7 +1106,7 @@ function parseAttribute(
         loc: value.loc
       },
       arg, //  指令参数节点，注意必须是个变量 @['click'] 不符合语法，指令名不能包含 ' " <
-      modifiers: match[3] ? match[3].substr(1).split('.') : [], // 指令修饰符节点 '@click.prevent.once'中的 'prevent'、'once'
+      modifiers, // 指令修饰符节点 '@click.prevent.once'中的 'prevent'、'once'
       loc // 指令属性位置，包括属性名与属性值
     }
   }

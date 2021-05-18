@@ -55,6 +55,11 @@ import {
 import { buildSlots } from './vSlot'
 import { getConstantType } from './hoistStatic'
 import { BindingTypes } from '../options'
+import {
+  checkCompatEnabled,
+  CompilerDeprecationTypes,
+  isCompatEnabled
+} from '../compat/compatConfig'
 
 // some directive transforms (e.g. v-model) may return a symbol for runtime
 // import, which should be used instead of a resolveDirective call.
@@ -91,9 +96,10 @@ export const transformElement: NodeTransform = (node, context) => {
     // 解析组件is指令，如果dom标签有v-is指令，则也是组件
 
     // 解析组件类型，返回相关内容，如动态is组件的 vnode patch方法、内置组件名、区分用户自定义组件名
-    const vnodeTag = isComponent
+    let vnodeTag = isComponent
       ? resolveComponentType(node as ComponentNode, context) // 解析is属性: 静态属性is、静态指令属性:is、v-is，返回一个对象
       : `"${tag}"` // dom 元素标签名
+
     // 是否是动态组件，即存在静态is、:is、v-is
     const isDynamicComponent =
       isObject(vnodeTag) && vnodeTag.callee === RESOLVE_DYNAMIC_COMPONENT
@@ -304,28 +310,35 @@ export function resolveComponentType(
   context: TransformContext, // transform 上下文
   ssr = false
 ) {
-  const { tag } = node // 组件标签名
+  let { tag } = node
 
   // 1. dynamic component
   // 存在is属性（动态组件）
-  const isProp = isComponentTag(tag)
-    ? findProp(node, 'is')
-    : findDir(node, 'is')
+  const isExplicitDynamic = isComponentTag(tag)
+  const isProp =
+    findProp(node, 'is') || (!isExplicitDynamic && findDir(node, 'is'))
   if (isProp) {
     // 如 存在属性is：'<component is="HelloWorld" />' 或 '<component :is="HelloWorld" />'
     // 或 存在指令is：'<hello-world v-is="Welcome" />'
 
-    // 指令值节点格式，存储is指令值内容，一个简单的存值对象，存的是一个js表达式片段
-    const exp =
-      isProp.type === NodeTypes.ATTRIBUTE // 静态dom属性
-        ? isProp.value && createSimpleExpression(isProp.value.content, true) // 转换为指令值节点格式
-        : isProp.exp // 指令值节点
-    if (exp) {
-      // 创建一个类型为 JS_CALL_EXPRESSION 的渲染源码树codegen节点
-      // Symbol(`resolveDynamicComponent`) 为执行的方法 callee
-      return createCallExpression(context.helper(RESOLVE_DYNAMIC_COMPONENT), [
-        exp
-      ])
+    if (!isExplicitDynamic && isProp.type === NodeTypes.ATTRIBUTE) {
+      // <button is="vue:xxx">
+      // if not <component>, only is value that starts with "vue:" will be
+      // treated as component by the parse phase and reach here, unless it's
+      // compat mode where all is values are considered components
+      tag = isProp.value!.content.replace(/^vue:/, '')
+    } else {
+      const exp =
+        isProp.type === NodeTypes.ATTRIBUTE // 静态dom属性
+          ? isProp.value && createSimpleExpression(isProp.value.content, true) // 转换为指令值节点格式
+          : isProp.exp // 指令值节点
+      if (exp) {
+        // 创建一个类型为 JS_CALL_EXPRESSION 的渲染源码树codegen节点
+        // Symbol(`resolveDynamicComponent`) 为执行的方法 callee
+        return createCallExpression(context.helper(RESOLVE_DYNAMIC_COMPONENT), [
+          exp
+        ])
+      }
     }
   }
 
@@ -534,9 +547,12 @@ export function buildProps(
           isStatic = false
         }
       }
-      // skip :is on <component>
-      if (name === 'is' && isComponentTag(tag)) {
-        // 不处理静态is组件属性: <component is="HelloWorld" />
+      // skip is on <component>, or is="vue:xxx"
+      if (
+        name === 'is' &&
+        (isComponentTag(tag) || (value && value.content.startsWith('vue:')))
+      ) {
+        // 跳过 <component>, 或者 is="vue:xxx"
         continue
       }
 
@@ -564,8 +580,8 @@ export function buildProps(
       // directives 指令属性，合并去重，转换处理指令
 
       const { name, arg, exp, loc } = prop
-      const isBind = name === 'bind'
-      const isOn = name === 'on'
+      const isVBind = name === 'bind'
+      const isVOn = name === 'on'
 
       // skip v-slot - it is handled by its dedicated transform.
       // v-slot 有专门的transform插件处理：在transformElement中解析 buildSlots()，由directivesSlot插件解析
@@ -586,13 +602,13 @@ export function buildProps(
       // 跳过is指令，如 template: <component :is='HelloWold' />，is 指令在resolveComponentType中解析
       if (
         name === 'is' ||
-        (isBind && isComponentTag(tag) && isBindKey(arg, 'is')) // 绑定静态is属性，如 <component :is='HelloWold' />
+        (isVBind && isComponentTag(tag) && isBindKey(arg, 'is')) // 绑定静态is属性，如 <component :is='HelloWold' />
       ) {
         continue
       }
       // skip v-on in SSR compilation
       // 跳过 ssr中的on指令
-      if (isOn && ssr) {
+      if (isVOn && ssr) {
         continue
       }
 
@@ -601,7 +617,7 @@ export function buildProps(
       // 分析 v-on 与 v-bind 指令，v-on/v-bind 不带指令名表达式参数
       // 如 template: '<button v-bind="{name: 'btn-name', class: 'btn-class'}" v-on="{ mousedown: handleDown, mouseup: handleUp }"></button>'
       // special case for v-bind and v-on with no argument
-      if (!arg && (isBind || isOn)) {
+      if (!arg && (isVBind || isVOn)) {
         hasDynamicKeys = true // 存在动态绑定参数指令
         if (exp) {
           // 存在属性值节点
@@ -621,9 +637,54 @@ export function buildProps(
             // 如果存在v-bind/v-on指令，之后都依据mergeArgs合并后的列表
             properties = []
           }
-          if (isBind) {
+
+          if (isVBind) {
             // 如：<span class="red" :class="['blue', { green: true}]" v-bind="{ class: 'yellow'}"></span>
             // 直接保存v-bind属性值节点
+
+            if (__COMPAT__) {
+              // 2.x v-bind object order compat
+              if (__DEV__) {
+                const hasOverridableKeys = mergeArgs.some(arg => {
+                  if (arg.type === NodeTypes.JS_OBJECT_EXPRESSION) {
+                    return arg.properties.some(({ key }) => {
+                      if (
+                        key.type !== NodeTypes.SIMPLE_EXPRESSION ||
+                        !key.isStatic
+                      ) {
+                        return true
+                      }
+                      return (
+                        key.content !== 'class' &&
+                        key.content !== 'style' &&
+                        !isOn(key.content)
+                      )
+                    })
+                  } else {
+                    // dynamic expression
+                    return true
+                  }
+                })
+                if (hasOverridableKeys) {
+                  checkCompatEnabled(
+                    CompilerDeprecationTypes.COMPILER_V_BIND_OBJECT_ORDER,
+                    context,
+                    loc
+                  )
+                }
+              }
+
+              if (
+                isCompatEnabled(
+                  CompilerDeprecationTypes.COMPILER_V_BIND_OBJECT_ORDER,
+                  context
+                )
+              ) {
+                mergeArgs.unshift(exp)
+                continue
+              }
+            }
+
             mergeArgs.push(exp)
           } else {
             // v-on="obj" -> toHandlers(obj)
@@ -641,7 +702,7 @@ export function buildProps(
           // 没有属性值，'<button v-bind v-on></button>'
           context.onError(
             createCompilerError(
-              isBind
+              isVBind
                 ? ErrorCodes.X_V_BIND_NO_EXPRESSION // 缺少v-bind值表达式
                 : ErrorCodes.X_V_ON_NO_EXPRESSION,
               loc
@@ -695,6 +756,25 @@ export function buildProps(
         // no built-in transform, this is a user custom directive.
         runtimeDirectives.push(prop)
       }
+    }
+
+    if (
+      __COMPAT__ &&
+      prop.type === NodeTypes.ATTRIBUTE &&
+      prop.name === 'ref' &&
+      context.scopes.vFor > 0 &&
+      checkCompatEnabled(
+        CompilerDeprecationTypes.COMPILER_V_FOR_REF,
+        context,
+        prop.loc
+      )
+    ) {
+      properties.push(
+        createObjectProperty(
+          createSimpleExpression('refInFor', true),
+          createSimpleExpression('true', false)
+        )
+      )
     }
   }
 

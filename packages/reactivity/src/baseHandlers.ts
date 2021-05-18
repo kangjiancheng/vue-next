@@ -118,11 +118,8 @@ function createGetter(isReadonly = false, shallow = false) {
 
     const res = Reflect.get(target, key, receiver)
 
-    if (
-      isSymbol(key)
-        ? builtInSymbols.has(key as symbol) // Symbol对象的内置属性与方法
-        : isNonTrackableKeys(key) // __proto__,__v_isRef,__isVue
-    ) {
+    if (isSymbol(key) ? builtInSymbols.has(key) : isNonTrackableKeys(key)) {
+      // Symbol对象的内置属性与方法、__proto__,__v_isRef,__isVue
       return res
     }
 

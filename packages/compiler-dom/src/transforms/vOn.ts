@@ -8,7 +8,11 @@ import {
   createCompoundExpression,
   ExpressionNode,
   SimpleExpressionNode,
-  isStaticExp
+  isStaticExp,
+  CompilerDeprecationTypes,
+  TransformContext,
+  SourceLocation,
+  checkCompatEnabled
 } from '@vue/compiler-core'
 import { V_ON_WITH_MODIFIERS, V_ON_WITH_KEYS } from '../runtimeHelpers'
 import { makeMap, capitalize } from '@vue/shared'
@@ -36,7 +40,12 @@ const isKeyboardEvent = /*#__PURE__*/ makeMap(
  * @param key 指令属性名的codegen节点
  * @param modifiers 指令修饰符列表
  */
-const resolveModifiers = (key: ExpressionNode, modifiers: string[]) => {
+const resolveModifiers = (
+  key: ExpressionNode,
+  modifiers: string[],
+  context: TransformContext,
+  loc: SourceLocation
+) => {
   const keyModifiers = []
   const nonKeyModifiers = []
   const eventOptionModifiers = []
@@ -44,7 +53,17 @@ const resolveModifiers = (key: ExpressionNode, modifiers: string[]) => {
   for (let i = 0; i < modifiers.length; i++) {
     const modifier = modifiers[i]
 
-    if (isEventOptionModifier(modifier)) {
+    if (
+      __COMPAT__ &&
+      modifier === 'native' &&
+      checkCompatEnabled(
+        CompilerDeprecationTypes.COMPILER_V_ON_NATIVE,
+        context,
+        loc
+      )
+    ) {
+      eventOptionModifiers.push(modifier)
+    } else if (isEventOptionModifier(modifier)) {
       // 事件监听方法 addEventListener：passive,once,capture
       // eventOptionModifiers: modifiers for addEventListener() options,
       // e.g. .passive & .capture
@@ -134,7 +153,7 @@ export const transformOn: DirectiveTransform = (dir, node, context) => {
       keyModifiers, // 具体键盘按键，如回车键修饰符：@keyup.enter，某些按键存在left/right
       nonKeyModifiers, // 特殊键盘按键 如 shift、ctrl、alt、meta、exec 或 鼠标middle、left、right 或 事件流程 prevent、stop、self
       eventOptionModifiers // 基本事件流程：passive,once,capture
-    } = resolveModifiers(key, modifiers)
+    } = resolveModifiers(key, modifiers, context, dir.loc)
 
     // normalize click.right and click.middle since they don't actually fire
     // 调整click.right和click.middle事件，正常情况下并不会触发

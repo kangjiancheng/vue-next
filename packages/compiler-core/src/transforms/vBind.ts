@@ -14,7 +14,7 @@ import { CAMELIZE } from '../runtimeHelpers'
  * @param node - dom元素 或 组件元素
  * @param context
  */
-export const transformBind: DirectiveTransform = (dir, node, context) => {
+export const transformBind: DirectiveTransform = (dir, _node, context) => {
   // 指令值、修饰符、模版位置信息
   const { exp, modifiers, loc } = dir
   const arg = dir.arg! // 指令参数节点， ts 排除null/undefined

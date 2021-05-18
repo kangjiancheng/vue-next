@@ -18,7 +18,8 @@ import {
   NOOP,
   remove,
   isMap,
-  isSet
+  isSet,
+  isPlainObject
 } from '@vue/shared'
 import {
   currentInstance,
@@ -33,6 +34,9 @@ import {
 } from './errorHandling'
 import { queuePostRenderEffect } from './renderer'
 import { warn } from './warning'
+import { DeprecationTypes } from './compat/compatConfig'
+import { checkCompatEnabled, isCompatEnabled } from './compat/compatConfig'
+import { ObjectWatchOptionItem } from './componentOptions'
 
 export type WatchEffect = (onInvalidate: InvalidateCbRegistrator) => void
 
@@ -176,6 +180,8 @@ function doWatch(
 
   let getter: () => any // ref、reactive、数组、getter => ...
   let forceTrigger = false
+  let isMultiSource = false
+
   if (isRef(source)) {
     // ref 引用 __v_isRef
     getter = () => (source as Ref).value // 访问时，依赖项value被跟踪
@@ -185,6 +191,8 @@ function doWatch(
     getter = () => source
     deep = true
   } else if (isArray(source)) {
+    isMultiSource = true
+    forceTrigger = source.some(isReactive)
     // 数组 转换为 getter函数
     getter = () =>
       source.map(s => {
@@ -229,6 +237,21 @@ function doWatch(
     __DEV__ && warnInvalidSource(source)
   }
 
+  // 2.x array mutation watch compat
+  if (__COMPAT__ && cb && !deep) {
+    const baseGetter = getter
+    getter = () => {
+      const val = baseGetter()
+      if (
+        isArray(val) &&
+        checkCompatEnabled(DeprecationTypes.WATCH_ARRAY, instance)
+      ) {
+        traverse(val)
+      }
+      return val
+    }
+  }
+
   // 深层次响应式依赖收集
   if (cb && deep) {
     const baseGetter = getter
@@ -261,8 +284,7 @@ function doWatch(
   }
 
   // 记录 old value
-  let oldValue = isArray(source) ? [] : INITIAL_WATCHER_VALUE // {}
-
+  let oldValue = isMultiSource ? [] : INITIAL_WATCHER_VALUE
   // 执行runner
   const job: SchedulerJob = () => {
     if (!runner.active) {
@@ -272,7 +294,18 @@ function doWatch(
     if (cb) {
       // watch(source, cb)
       const newValue = runner() // 执行source的effect函数 - 对监听目标进行依赖跟踪与收集
-      if (deep || forceTrigger || hasChanged(newValue, oldValue)) {
+      if (
+        deep ||
+        forceTrigger ||
+        (isMultiSource
+          ? (newValue as any[]).some((v, i) =>
+              hasChanged(v, (oldValue as any[])[i])
+            )
+          : hasChanged(newValue, oldValue)) ||
+        (__COMPAT__ &&
+          isArray(newValue) &&
+          isCompatEnabled(DeprecationTypes.WATCH_ARRAY, instance))
+      ) {
         // cleanup before running cb again
         if (cleanup) {
           cleanup() // 下一次更新回调函数之前，会再触发一次回调函数
@@ -358,17 +391,37 @@ function doWatch(
 export function instanceWatch(
   this: ComponentInternalInstance,
   source: string | Function,
-  cb: WatchCallback,
+  value: WatchCallback | ObjectWatchOptionItem,
   options?: WatchOptions
 ): WatchStopHandle {
   const publicThis = this.proxy as any
   const getter = isString(source)
-    ? () => publicThis[source]
+    ? source.includes('.')
+      ? createPathGetter(publicThis, source)
+      : () => publicThis[source]
     : source.bind(publicThis)
+  let cb
+  if (isFunction(value)) {
+    cb = value
+  } else {
+    cb = value.handler as Function
+    options = value
+  }
   return doWatch(getter, cb.bind(publicThis), options, this)
 }
 
 // 遍历访问数据，并进行依赖收集
+export function createPathGetter(ctx: any, path: string) {
+  const segments = path.split('.')
+  return () => {
+    let cur = ctx
+    for (let i = 0; i < segments.length && cur; i++) {
+      cur = cur[segments[i]]
+    }
+    return cur
+  }
+}
+
 function traverse(value: unknown, seen: Set<unknown> = new Set()) {
   if (!isObject(value) || seen.has(value)) {
     return value
@@ -387,10 +440,9 @@ function traverse(value: unknown, seen: Set<unknown> = new Set()) {
     value.forEach((v: any) => {
       traverse(v, seen)
     })
-  } else {
-    // 默认对象
+  } else if (isPlainObject(value)) {
     for (const key in value) {
-      traverse(value[key], seen)
+      traverse((value as any)[key], seen)
     }
   }
   return value

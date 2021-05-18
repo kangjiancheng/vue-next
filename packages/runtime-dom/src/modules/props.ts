@@ -2,7 +2,7 @@
 // Reason: potentially setting innerHTML.
 // This can come from explicit usage of v-html or innerHTML as a prop in render
 
-import { warn } from '@vue/runtime-core'
+import { warn, DeprecationTypes, compatUtils } from '@vue/runtime-core'
 
 // 添加 vnode dom实例el 的属性，如 id、innerHTML
 // functions. The user is responsible for using them with only trusted content.
@@ -58,6 +58,28 @@ export function patchDOMProp(
       // 数字 属性
       // e.g. <img :width="null">
       el[key] = 0
+      el.removeAttribute(key)
+      return
+    }
+  }
+
+  if (
+    __COMPAT__ &&
+    value === false &&
+    compatUtils.isCompatEnabled(
+      DeprecationTypes.ATTR_FALSE_VALUE,
+      parentComponent
+    )
+  ) {
+    const type = typeof el[key]
+    if (type === 'string' || type === 'number') {
+      __DEV__ &&
+        compatUtils.warnDeprecation(
+          DeprecationTypes.ATTR_FALSE_VALUE,
+          parentComponent,
+          key
+        )
+      el[key] = type === 'number' ? 0 : ''
       el.removeAttribute(key)
       return
     }

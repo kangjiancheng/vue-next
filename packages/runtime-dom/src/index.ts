@@ -8,7 +8,9 @@ import {
   HydrationRenderer,
   App,
   RootHydrateFunction,
-  isRuntimeOnly
+  isRuntimeOnly,
+  DeprecationTypes,
+  compatUtils
 } from '@vue/runtime-core'
 import { nodeOps } from './nodeOps'
 import { patchProp, forcePatchProp } from './patchProp'
@@ -66,7 +68,7 @@ export const createApp = ((...args) => {
   if (__DEV__) {
     // 如：检测组件name属性时，不可使用这些保留name
     injectNativeTagCheck(app) // app.config.isNativeTag
-    injectCustomElementCheck(app)
+    injectCompilerOptionsCheck(app)
   }
 
   // 针对客户端，增强 mount 功能
@@ -84,9 +86,28 @@ export const createApp = ((...args) => {
     // 此外 vue模版内容template 可为：组件为函数、或 组件为对象有render方法、或 组件为对象有template属性
     if (!isFunction(component) && !component.render && !component.template) {
       // rootComponent 是一个对象，且不存在 render 方法、不存在 template 属性
+      // __UNSAFE__
+      // Reason: potential execution of JS expressions in in-DOM template.
+      // The user must make sure the in-DOM template is trusted. If it's
+      // rendered by the server, the template should not contain any user data.
       component.template = container.innerHTML // 挂载目标dom节点的内容
+      // 2.x compat check
+      if (__COMPAT__ && __DEV__) {
+        for (let i = 0; i < container.attributes.length; i++) {
+          const attr = container.attributes[i]
+          if (attr.name !== 'v-cloak' && /^(v-|:|@)/.test(attr.name)) {
+            compatUtils.warnDeprecation(
+              DeprecationTypes.GLOBAL_MOUNT_CONTAINER,
+              null
+            )
+            break
+          }
+        }
+      }
     }
+
     // 清空 挂载目标dom 已存在的内容
+    // clear content before mounting
     container.innerHTML = ''
 
     // 执行 mount，返回组件实例上下文ctx
@@ -106,7 +127,7 @@ export const createSSRApp = ((...args) => {
 
   if (__DEV__) {
     injectNativeTagCheck(app)
-    injectCustomElementCheck(app)
+    injectCompilerOptionsCheck(app)
   }
 
   const { mount } = app
@@ -132,19 +153,38 @@ function injectNativeTagCheck(app: App) {
 
 // dev only
 // 运行环境下，不可以修改 isCustomElement
-function injectCustomElementCheck(app: App) {
+function injectCompilerOptionsCheck(app: App) {
   if (isRuntimeOnly()) {
-    const value = app.config.isCustomElement
+    const isCustomElement = app.config.isCustomElement
     Object.defineProperty(app.config, 'isCustomElement', {
       get() {
-        return value
+        return isCustomElement
       },
       set() {
         warn(
-          `The \`isCustomElement\` config option is only respected when using the runtime compiler.` +
-            `If you are using the runtime-only build, \`isCustomElement\` must be passed to \`@vue/compiler-dom\` in the build setup instead` +
-            `- for example, via the \`compilerOptions\` option in vue-loader: https://vue-loader.vuejs.org/options.html#compileroptions.`
+          `The \`isCustomElement\` config option is deprecated. Use ` +
+            `\`compilerOptions.isCustomElement\` instead.`
         )
+      }
+    })
+
+    const compilerOptions = app.config.compilerOptions
+    const msg =
+      `The \`compilerOptions\` config option is only respected when using ` +
+      `a build of Vue.js that includes the runtime compiler (aka "full build"). ` +
+      `Since you are using the runtime-only build, \`compilerOptions\` ` +
+      `must be passed to \`@vue/compiler-dom\` in the build setup instead.\n` +
+      `- For vue-loader: pass it via vue-loader's \`compilerOptions\` loader option.\n` +
+      `- For vue-cli: see https://cli.vuejs.org/guide/webpack.html#modifying-options-of-a-loader\n` +
+      `- For vite: pass it via @vitejs/plugin-vue options. See https://github.com/vitejs/vite/tree/main/packages/plugin-vue#example-for-passing-options-to-vuecompiler-dom`
+
+    Object.defineProperty(app.config, 'compilerOptions', {
+      get() {
+        warn(msg)
+        return compilerOptions
+      },
+      set() {
+        warn(msg)
       }
     })
   }

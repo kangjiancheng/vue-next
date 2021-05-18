@@ -73,22 +73,24 @@ export const createHook = <T extends Function = () => any>(
   hook: T,
   target: ComponentInternalInstance | null = currentInstance // currentInstance 当前组件实例
 ) =>
-  // post-create lifecycle registrations are noops during SSR
-  !isInSSRComponentSetup && injectHook(lifecycle, hook, target) // 向组件实例添加生命周期函数
+  // post-create lifecycle registrations are noops during SSR (except for serverPrefetch)
+  (!isInSSRComponentSetup || lifecycle === LifecycleHooks.SERVER_PREFETCH) &&
+  injectHook(lifecycle, hook, target) // 向组件实例添加生命周期函数
 
 // 执行组件的渲染函数之前
-export const onBeforeMount = createHook(LifecycleHooks.BEFORE_MOUNT) // bm
+export const onBeforeMount = createHook(LifecycleHooks.BEFORE_MOUNT)
 
 // 挂载组件节点vnode el（即组件模版template vnode el）到父容器dom上：
 //    即执行组件的渲染模版函数 生成渲染模版 vnode，
 //    然后生成 vnode对应的el dom实例节点（包括其子节点），
 //    并挂载到父节点容器上，且确定了组件vnode节点的el 后。
-export const onMounted = createHook(LifecycleHooks.MOUNTED) // m
+export const onMounted = createHook(LifecycleHooks.MOUNTED)
 
-export const onBeforeUpdate = createHook(LifecycleHooks.BEFORE_UPDATE) // bu
-export const onUpdated = createHook(LifecycleHooks.UPDATED) // u
-export const onBeforeUnmount = createHook(LifecycleHooks.BEFORE_UNMOUNT) // bum
-export const onUnmounted = createHook(LifecycleHooks.UNMOUNTED) // um
+export const onBeforeUpdate = createHook(LifecycleHooks.BEFORE_UPDATE)
+export const onUpdated = createHook(LifecycleHooks.UPDATED)
+export const onBeforeUnmount = createHook(LifecycleHooks.BEFORE_UNMOUNT)
+export const onUnmounted = createHook(LifecycleHooks.UNMOUNTED)
+export const onServerPrefetch = createHook(LifecycleHooks.SERVER_PREFETCH)
 
 export type DebuggerHook = (e: DebuggerEvent) => void
 export const onRenderTriggered = createHook<DebuggerHook>(
@@ -98,15 +100,15 @@ export const onRenderTracked = createHook<DebuggerHook>(
   LifecycleHooks.RENDER_TRACKED
 )
 
-export type ErrorCapturedHook = (
-  err: unknown,
+export type ErrorCapturedHook<TError = unknown> = (
+  err: TError,
   instance: ComponentPublicInstance | null,
   info: string
 ) => boolean | void
 
-export const onErrorCaptured = (
-  hook: ErrorCapturedHook,
+export function onErrorCaptured<TError = Error>(
+  hook: ErrorCapturedHook<TError>,
   target: ComponentInternalInstance | null = currentInstance
-) => {
+) {
   injectHook(LifecycleHooks.ERROR_CAPTURED, hook, target)
 }

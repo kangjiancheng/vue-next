@@ -54,31 +54,30 @@ function compileToFunction(
       {
         hoistStatic: true, // 静态提升
         // 解析失败时，比如解析注释失败，当 template = 'abc<!--123' 错误提示：'Template compilation error: Unexpected EOF in comment.'
-        onError(err: CompilerError) {
-          if (__DEV__) {
-            const message = `Template compilation error: ${err.message}` // 错误范围
-            const codeFrame =
-              err.loc &&
-              generateCodeFrame(
-                // 输出 '错误源码'
-                template as string,
-                err.loc.start.offset,
-                err.loc.end.offset
-              )
-            // 控制台输出错误信息
-            warn(codeFrame ? `${message}\n${codeFrame}` : message)
-          } else {
-            /* istanbul ignore next */
-            throw err
-          }
-        }
-      },
+        onError: __DEV__ ? onError : undefined,
+        onWarn: __DEV__ ? e => onError(e, true) : NOOP
+      } as CompilerOptions,
       options
     )
   )
 
   // 执行渲染源码 生成 渲染函数
   // 同时也会执行静态节点的vnode
+  function onError(err: CompilerError, asWarning = false) {
+    const message = asWarning
+      ? err.message
+      : `Template compilation error: ${err.message}` // 错误范围
+    const codeFrame =
+      err.loc &&
+      generateCodeFrame(
+        // 输出 '错误源码'
+        template as string,
+        err.loc.start.offset,
+        err.loc.end.offset
+      )
+    // 控制台输出错误信息
+    warn(codeFrame ? `${message}\n${codeFrame}` : message)
+  }
 
   // The wildcard import results in a huge object with every export
   // with keys that cannot be mangled, and can be quite heavy size-wise.

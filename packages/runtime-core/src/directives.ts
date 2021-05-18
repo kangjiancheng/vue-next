@@ -18,6 +18,7 @@ import { ComponentInternalInstance, Data } from './component'
 import { currentRenderingInstance } from './componentRenderContext'
 import { callWithAsyncErrorHandling, ErrorCodes } from './errorHandling'
 import { ComponentPublicInstance } from './componentPublicInstance'
+import { mapCompatDirectiveHook } from './compat/customDirective'
 
 export interface DirectiveBinding<V = any> {
   instance: ComponentPublicInstance | null
@@ -161,7 +162,10 @@ export function invokeDirectiveHook(
     // updated： vnode 更新后 - props、children 更新完后
     // beforeUnmount
     // unmounted
-    const hook = binding.dir[name] as DirectiveHook | undefined
+    let hook = binding.dir[name] as DirectiveHook | DirectiveHook[] | undefined
+    if (__COMPAT__ && !hook) {
+      hook = mapCompatDirectiveHook(name, binding.dir, instance)
+    }
     if (hook) {
       callWithAsyncErrorHandling(hook, instance, ErrorCodes.DIRECTIVE_HOOK, [
         vnode.el, // vnode el 实例

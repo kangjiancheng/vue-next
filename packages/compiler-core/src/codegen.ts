@@ -50,7 +50,8 @@ import {
   CREATE_BLOCK,
   OPEN_BLOCK,
   CREATE_STATIC,
-  WITH_CTX
+  WITH_CTX,
+  RESOLVE_FILTER
 } from './runtimeHelpers'
 import { ImportItem } from './transform'
 
@@ -345,6 +346,13 @@ export function generate(
       newline() // 添加新行并缩进
     }
   }
+
+  if (__COMPAT__ && ast.filters && ast.filters.length) {
+    newline()
+    genAssets(ast.filters, 'filter', context)
+    newline()
+  }
+
   // 生成临时变量源码，如：code: 'let _temp1, _temp2, _temp3...'
   if (ast.temps > 0) {
     push(`let `)
@@ -615,15 +623,19 @@ function genModulePreamble(
   }
 }
 
-// 生成 - 自定义组件与自定义指令 的渲染代码 ast code
+// 生成 - 自定义组件与自定义指令、过滤器 的渲染代码 ast code
 // 如: 'const _component_hello__world = _resolveComponent("hello-world")'
 function genAssets(
   assets: string[], // 自定义组件标签名
-  type: 'component' | 'directive',
+  type: 'component' | 'directive' | 'filter',
   { helper, push, newline }: CodegenContext
 ) {
   const resolver = helper(
-    type === 'component' ? RESOLVE_COMPONENT : RESOLVE_DIRECTIVE
+    __COMPAT__ && type === 'filter'
+      ? RESOLVE_FILTER
+      : type === 'component'
+        ? RESOLVE_COMPONENT
+        : RESOLVE_DIRECTIVE
   )
   for (let i = 0; i < assets.length; i++) {
     let id = assets[i]
@@ -991,13 +1003,11 @@ function genExpressionAsPropertyKey(
 }
 
 function genComment(node: CommentNode, context: CodegenContext) {
-  if (__DEV__) {
-    const { push, helper, pure } = context
-    if (pure) {
-      push(PURE_ANNOTATION)
-    }
-    push(`${helper(CREATE_COMMENT)}(${JSON.stringify(node.content)})`, node)
+  const { push, helper, pure } = context
+  if (pure) {
+    push(PURE_ANNOTATION)
   }
+  push(`${helper(CREATE_COMMENT)}(${JSON.stringify(node.content)})`, node)
 }
 
 // 生成 标签元素节点 的渲染源码片段 code
@@ -1217,6 +1227,9 @@ function genFunctionExpression(
     push(`}`)
   }
   if (isSlot) {
+    if (__COMPAT__ && node.isNonScopedSlot) {
+      push(`, undefined, true`)
+    }
     push(`)`)
   }
 }

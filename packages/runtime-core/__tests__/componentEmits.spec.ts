@@ -94,7 +94,7 @@ describe('component: emit', () => {
     render(h(Comp), nodeOps.createElement('div'))
 
     expect(fooSpy).toHaveBeenCalledTimes(1)
-    expect(fooSpy).toHaveBeenCalledTimes(1)
+    expect(barSpy).toHaveBeenCalledTimes(1)
   })
 
   // for v-model:foo-bar usage in DOM templates
@@ -144,7 +144,7 @@ describe('component: emit', () => {
     expect(fn1).toHaveBeenCalledTimes(1)
     expect(fn1).toHaveBeenCalledWith(1)
     expect(fn2).toHaveBeenCalledTimes(1)
-    expect(fn1).toHaveBeenCalledWith(1)
+    expect(fn2).toHaveBeenCalledWith(1)
   })
 
   test('warning for undeclared event (array)', () => {

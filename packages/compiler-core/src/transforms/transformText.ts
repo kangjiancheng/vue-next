@@ -80,7 +80,21 @@ export const transformText: NodeTransform = (node, context) => {
         (children.length === 1 &&
           (node.type === NodeTypes.ROOT || // template模版节点为 文本节点，如 template: '文本或js表达式{{ xxx }}，没有其它标签节点'
             (node.type === NodeTypes.ELEMENT && // 或 当前节点为 html dom元素节点，且只有文本子节点
-              node.tagType === ElementTypes.ELEMENT)))
+              node.tagType === ElementTypes.ELEMENT &&
+              // #3756
+              // custom directives can potentially add DOM elements arbitrarily,
+              // we need to avoid setting textContent of the element at runtime
+              // to avoid accidentally overwriting the DOM elements added
+              // by the user through custom directives.
+              !node.props.find(
+                p =>
+                  p.type === NodeTypes.DIRECTIVE &&
+                  !context.directiveTransforms[p.name]
+              ) &&
+              // in compat mode, <template> tags with no special directives
+              // will be rendered as a fragment so its children must be
+              // converted into vnodes.
+              !(__COMPAT__ && node.tag === 'template'))))
       ) {
         // 不含有文本
         // 或 只有文本子节点（当前节点：根节点/dom标签元素节点）
