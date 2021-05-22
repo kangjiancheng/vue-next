@@ -835,7 +835,7 @@ export function finishComponentSetup(
     // proxy used needs a different `has` handler which is more performant and
     // also only allows a whitelist of globals to fallthrough.
     if (instance.render._rc) {
-      // 通过编译vue模版得到的渲染函数，渲染函数带有with作用域，需要引入has、get拦截方法
+      // render的上下文ctx: 通过编译vue模版得到的渲染函数，渲染函数带有with作用域，需要引入has、get拦截方法
       instance.withProxy = new Proxy(
         instance.ctx,
         RuntimeCompiledPublicInstanceProxyHandlers
