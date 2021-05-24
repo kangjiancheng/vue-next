@@ -22,41 +22,13 @@
 
 <!-- 开发模式 -->
 <script src="../packages/vue/dist/vue.global.js"></script>
-<!-- 生产模式-->
-<!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
 <script>
 
-  const {
-    createApp,
-    ref,
-    reactive,
-    onMounted,
-  } = Vue
-
-  const HelloWorld = {
-    name: 'HelloWorld',
-    template: '<div class="hello-world">Hi, {{ userName }} <slot></slot></div>',
-    props: ['userName']
-  }
+  const { createApp, ref, reactive, onMounted } = Vue
 
   const rootComponent = {
     name: 'root-component',
-    components: {
-      HelloWorld,
-    },
-    props: {
-      age: Number,
-      sex: {
-        type: String,
-        default: 'girl'
-      }
-    },
-    data (){
-      return {
-        myID: '000', // 在模版中访问： myID
-        $id: '001' // 在模版中访问：$data.$id
-      }
-    },
+    props: {},
     // props 不可通过解构来获取对应值
     setup(props, context ) {
       const count = ref(0)
@@ -73,17 +45,13 @@
 
 
       return {
-        age: props.age,
         red: 'red',
+        count,
         handleClick,
       }
     }
   }
-  const rootProps = {
-    key: 1,
-    age: 10,
-    sex: 'boy',
-  }
+  const rootProps = {}
 
   const app = createApp(rootComponent, rootProps)
 
