@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Vue 3 分析 runtime v-model</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <hello-world v-model="userName" v-model:user-id.number="userId" :user-age="userAge" @update:user-age="handleAge" @submit="handleSubmit"></hello-world>
+  <div>user name: {{ userName }}</div>
+  <div>user id: {{ userId }}</div>
+  <div>user age: {{ userAge }}</div>
+</div>
+
+<!-- 开发模式 -->
+<script src="../packages/vue/dist/vue.global.js"></script>
+<!-- 生产模式-->
+<!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
+<script>
+
+  const {
+    createApp,
+    ref,
+    reactive,
+    onMounted,
+  } = Vue
+
+  const HelloWorld = {
+    name: 'HelloWorld',
+    template: `<button @click="handleClick">Click {{ modelValue }} {{ userAge }}</button>`,
+    props: ['model-value','user-age'],
+    setup(props, context) {
+      const handleClick = () => {
+        context.emit('update:model-value', '小红')
+        context.emit('update:user-id', 2)
+        context.emit('update:user-age', 30)
+        context.emit('submit', new Date())
+      }
+
+
+      return {
+        handleClick
+      }
+    }
+  }
+
+
+  const rootComponent = {
+    name: 'root-component',
+    components: {
+      HelloWorld,
+    },
+    setup(props, context) {
+      let userName = ref('小明')
+      let userId = ref(1)
+      let userAge = ref(20)
+
+      let handleSubmit = (event) => {
+        console.log('userName: ', userName.value)
+        console.log('userId: ', userId.value)
+        console.log('submit: ', event)
+      }
+
+      let handleAge = (event) => {
+        userAge.value = event
+      }
+
+      return {
+        userName,
+        userId,
+        userAge,
+        handleSubmit,
+        handleAge,
+      }
+    }
+  }
+  const rootProps = {}
+
+  const app = createApp(rootComponent, rootProps)
+
+  app.config.performance = true
+  app.config.globalProperties.isBoy = true
+
+  app.mount('#app')
+
+</script>
+
+</body>
+</html>

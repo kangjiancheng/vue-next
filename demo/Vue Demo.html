@@ -14,10 +14,10 @@
 </head>
 <body>
 <div id="app">
-  <template v-for="item of items" :key="item.id">
-    <div>{{ item.name }}</div>
-    <div>{{ item.value }}</div>
-  </template>
+  <div class="hello-world">
+    <div :class="red">{{ count }}</div>
+    <button @click="handleClick">Click</button>
+  </div>
 </div>
 
 <!-- 开发模式 -->
@@ -74,9 +74,8 @@
 
       return {
         age: props.age,
-        classRed: 'red',
+        red: 'red',
         handleClick,
-        items: [{id:1, name: '小明', value: '123'}]
       }
     }
   }
