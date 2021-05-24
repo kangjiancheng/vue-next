@@ -13,40 +13,86 @@
   </style>
 </head>
 <body>
-  <div id="app">
-    <div class="hello-world">
-      <div class="red" :class="blue" >total: {{ count }}!</div>
-      <button @click="handleClick">Click</button>
-    </div>
+<div id="app">
+  <div class="hello-world">
+    <div :class="red">{{ count }}</div>
+    <button @click="handleClick">Click</button>
   </div>
-  <script src="../packages/vue/dist/vue.global.js"></script>
-  <script>
-    const { createApp, ref, reactive, onMounted, watch } = Vue
+</div>
 
-    const rootComponent = {
-      name: 'root-component',
-      props: ['age'],
-      setup(props, context ) {
-        const count = ref(0)
-        const handleClick = () => {
-          count.value++
-        }
-        watch(count, (count, preCount) => {
-          console.log(count, preCount)
-        })
+<!-- 开发模式 -->
+<script src="../packages/vue/dist/vue.global.js"></script>
+<!-- 生产模式-->
+<!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
+<script>
 
-        return {
-          count,
-          blue: 'blue',
-          handleClick,
-        }
+  const {
+    createApp,
+    ref,
+    reactive,
+    onMounted,
+  } = Vue
+
+  const HelloWorld = {
+    name: 'HelloWorld',
+    template: '<div class="hello-world">Hi, {{ userName }} <slot></slot></div>',
+    props: ['userName']
+  }
+
+  const rootComponent = {
+    name: 'root-component',
+    components: {
+      HelloWorld,
+    },
+    props: {
+      age: Number,
+      sex: {
+        type: String,
+        default: 'girl'
+      }
+    },
+    data (){
+      return {
+        myID: '000', // 在模版中访问： myID
+        $id: '001' // 在模版中访问：$data.$id
+      }
+    },
+    // props 不可通过解构来获取对应值
+    setup(props, context ) {
+      const count = ref(0)
+      const state = reactive({ foo: 1 })
+
+      const handleClick = () => {
+        count.value++
+        state.foo++
+      }
+
+      onMounted(() => {
+        console.log(1)
+      })
+
+
+      return {
+        age: props.age,
+        red: 'red',
+        handleClick,
       }
     }
+  }
+  const rootProps = {
+    key: 1,
+    age: 10,
+    sex: 'boy',
+  }
 
-    const rootProps = {age: 20}
-    const app = createApp(rootComponent, rootProps)
-    app.mount('#app')
+  const app = createApp(rootComponent, rootProps)
 
-  </script>
+  app.config.performance = true
+  app.config.globalProperties.isBoy = true
+
+  app.mount('#app')
+
+</script>
+
 </body>
 </html>
