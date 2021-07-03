@@ -70,10 +70,7 @@ export interface CodegenResult {
 }
 
 export interface CodegenContext
-  extends Omit<
-      Required<CodegenOptions>,
-      'bindingMetadata' | 'inline' | 'isTS'
-    > {
+  extends Omit<Required<CodegenOptions>, 'bindingMetadata' | 'inline'> {
   source: string
   code: string
   line: number
@@ -100,7 +97,8 @@ function createCodegenContext(
     optimizeImports = false,
     runtimeGlobalName = `Vue`,
     runtimeModuleName = `vue`,
-    ssr = false
+    ssr = false,
+    isTS = false
   }: CodegenOptions
 ): CodegenContext {
   const context: CodegenContext = {
@@ -113,6 +111,7 @@ function createCodegenContext(
     runtimeGlobalName, // Vue
     runtimeModuleName, // Vue
     ssr, // false
+    isTS,
     source: ast.loc.source, // 模版template源码
     code: ``, // 渲染源码
     column: 1,
@@ -628,7 +627,7 @@ function genModulePreamble(
 function genAssets(
   assets: string[], // 自定义组件标签名
   type: 'component' | 'directive' | 'filter',
-  { helper, push, newline }: CodegenContext
+  { helper, push, newline, isTS }: CodegenContext
 ) {
   const resolver = helper(
     __COMPAT__ && type === 'filter'
@@ -649,7 +648,7 @@ function genAssets(
       // code: 'const _component_hello__world = _resolveComponent("hello-world")()'
       `const ${toValidAssetId(id, type)} = ${resolver}(${JSON.stringify(id)}${
         maybeSelfReference ? `, true` : ``
-      })`
+      })${isTS ? `!` : ``}`
     )
     // 换行
     if (i < assets.length - 1) {

@@ -34,7 +34,7 @@ import {
   OPEN_BLOCK,
   CREATE_VNODE
 } from '../runtimeHelpers'
-import { injectProp, findDir, findProp } from '../utils'
+import { injectProp, findDir, findProp, isBuiltInType } from '../utils'
 import { PatchFlags, PatchFlagNames } from '@vue/shared'
 
 /**
@@ -174,10 +174,19 @@ export function processIf(
         // 然后将当前的else/else-if节点归并到前边if节点对应的branches里
         // move the node to the if node's branches
         context.removeNode()
-        const branch = createIfBranch(node, dir) // 创建一个 v-if分支系列
 
+        const branch = createIfBranch(node, dir) // 创建一个 v-if分支系列
         // 将else/else-if节点到if节点之间的注释节点列表规划到 当前else/else-if节点分支下
-        if (__DEV__ && comments.length) {
+        if (
+          __DEV__ &&
+          comments.length &&
+          // #3619 ignore comments if the v-if is direct child of <transition>
+          !(
+            context.parent &&
+            context.parent.type === NodeTypes.ELEMENT &&
+            isBuiltInType(context.parent.tag, 'transition')
+          )
+        ) {
           branch.children = [...comments, ...branch.children]
         }
 

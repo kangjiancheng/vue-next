@@ -174,10 +174,11 @@ export function emit(
   const onceHandler = props[handlerName + `Once`]
   if (onceHandler) {
     if (!instance.emitted) {
-      ;(instance.emitted = {} as Record<string, boolean>)[handlerName] = true
+      instance.emitted = {} as Record<any, boolean>
     } else if (instance.emitted[handlerName]) {
       return
     }
+    instance.emitted[handlerName] = true
     callWithAsyncErrorHandling(
       onceHandler,
       instance,
@@ -198,8 +199,10 @@ export function normalizeEmitsOptions(
   appContext: AppContext,
   asMixin = false
 ): ObjectEmitsOptions | null {
-  if (!appContext.deopt && comp.__emits !== undefined) {
-    return comp.__emits
+  const cache = appContext.emitsCache
+  const cached = cache.get(comp)
+  if (cached !== undefined) {
+    return cached
   }
 
   const raw = comp.emits
@@ -227,7 +230,8 @@ export function normalizeEmitsOptions(
   }
 
   if (!raw && !hasExtends) {
-    return (comp.__emits = null)
+    cache.set(comp, null)
+    return null
   }
 
   // 规范例子：https://v3.cn.vuejs.org/api/options-data.html#emits
@@ -237,7 +241,9 @@ export function normalizeEmitsOptions(
   } else {
     extend(normalized, raw)
   }
-  return (comp.__emits = normalized)
+
+  cache.set(comp, normalized)
+  return normalized
 }
 
 // 判断是否是组件emits里的事件属性

@@ -57,9 +57,8 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
     bindingType !== BindingTypes.SETUP_CONST
 
   // 必须有值，不可为空，如：v-model=""
-
-  // v-model绑定的应该是一个变量或某个对象属性，如：$_abc[foo][bar] 或 $_abc.foo.bar
-  if (!isMemberExpression(expString) && !maybeRef) {
+  // 或者 v-model绑定的应该是一个变量或某个对象属性，如：$_abc[foo][bar] 或 $_abc.foo.bar
+  if (!expString.trim() || (!isMemberExpression(expString) && !maybeRef)) {
     context.onError(
       // v-model value must be a valid JavaScript member expression
       createCompilerError(ErrorCodes.X_V_MODEL_MALFORMED_EXPRESSION, exp.loc)

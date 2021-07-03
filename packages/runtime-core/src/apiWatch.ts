@@ -5,7 +5,8 @@ import {
   Ref,
   ComputedRef,
   ReactiveEffectOptions,
-  isReactive
+  isReactive,
+  ReactiveFlags
 } from '@vue/reactivity'
 import { SchedulerJob, queuePreFlushCb } from './scheduler'
 import {
@@ -184,8 +185,8 @@ function doWatch(
 
   if (isRef(source)) {
     // ref 引用 __v_isRef
-    getter = () => (source as Ref).value // 访问时，依赖项value被跟踪
-    forceTrigger = !!(source as Ref)._shallow
+    getter = () => source.value // 访问时，依赖项value被跟踪
+    forceTrigger = !!source._shallow
   } else if (isReactive(source)) {
     // reactive 响应对象 __v_isReactive
     getter = () => source
@@ -201,9 +202,7 @@ function doWatch(
         } else if (isReactive(s)) {
           return traverse(s) // 遍历访问所有数据，为了响应式依赖收集
         } else if (isFunction(s)) {
-          return callWithErrorHandling(s, instance, ErrorCodes.WATCH_GETTER, [
-            instance && (instance.proxy as any)
-          ])
+          return callWithErrorHandling(s, instance, ErrorCodes.WATCH_GETTER)
         } else {
           __DEV__ && warnInvalidSource(s)
         }
@@ -212,9 +211,7 @@ function doWatch(
     if (cb) {
       // getter with cb
       getter = () =>
-        callWithErrorHandling(source, instance, ErrorCodes.WATCH_GETTER, [
-          instance && (instance.proxy as any)
-        ])
+        callWithErrorHandling(source, instance, ErrorCodes.WATCH_GETTER)
     } else {
       // no cb -> simple effect
       getter = () => {
@@ -332,7 +329,8 @@ function doWatch(
   // 任务调度机：修改watch监听目标值时，trigger触发更新任务列表
   let scheduler: ReactiveEffectOptions['scheduler']
   if (flush === 'sync') {
-    scheduler = job // 同步执行：当监听目标值改变时，立刻执行
+    // 同步执行：当监听目标值改变时，立刻执行
+    scheduler = job as any // the scheduler function gets called directly
   } else if (flush === 'post') {
     // 更新时：同步任务后，在组件执行渲染函数effect任务之后
     scheduler = () => queuePostRenderEffect(job, instance && instance.suspense)
@@ -399,7 +397,7 @@ export function instanceWatch(
     ? source.includes('.')
       ? createPathGetter(publicThis, source)
       : () => publicThis[source]
-    : source.bind(publicThis)
+    : source.bind(publicThis, publicThis)
   let cb
   if (isFunction(value)) {
     cb = value
@@ -423,7 +421,11 @@ export function createPathGetter(ctx: any, path: string) {
 }
 
 function traverse(value: unknown, seen: Set<unknown> = new Set()) {
-  if (!isObject(value) || seen.has(value)) {
+  if (
+    !isObject(value) ||
+    seen.has(value) ||
+    (value as any)[ReactiveFlags.SKIP]
+  ) {
     return value
   }
   seen.add(value)

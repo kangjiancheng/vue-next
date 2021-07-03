@@ -42,44 +42,48 @@ const shallowGet = /*#__PURE__*/ createGetter(false, true)
 const readonlyGet = /*#__PURE__*/ createGetter(true)
 const shallowReadonlyGet = /*#__PURE__*/ createGetter(true, true)
 
-// 对数组方法和数据进行响应
-const arrayInstrumentations: Record<string, Function> = {}
-// instrument identity-sensitive Array methods to account for possible reactive
-// values
-;(['includes', 'indexOf', 'lastIndexOf'] as const).forEach(key => {
-  const method = Array.prototype[key] as any
-  arrayInstrumentations[key] = function(this: unknown[], ...args: unknown[]) {
-    const arr = toRaw(this)
-    for (let i = 0, l = this.length; i < l; i++) {
-      // 访问数据时，并进行跟踪数组，指定跟踪索引
-      track(arr, TrackOpTypes.GET, i + '')
-    }
+const arrayInstrumentations = /*#__PURE__*/ createArrayInstrumentations()
 
-    // 执行数组方法
-    // we run the method using the original args first (which may be reactive)
-    const res = method.apply(arr, args)
-    if (res === -1 || res === false) {
-      // if that didn't work, run it again using raw values.
-      return method.apply(arr, args.map(toRaw))
-    } else {
+// 对数组方法和数据进行响应
+function createArrayInstrumentations() {
+  const instrumentations: Record<string, Function> = {}
+  // instrument identity-sensitive Array methods to account for possible reactive
+  // values
+  ;(['includes', 'indexOf', 'lastIndexOf'] as const).forEach(key => {
+    const method = Array.prototype[key] as any
+    instrumentations[key] = function(this: unknown[], ...args: unknown[]) {
+      const arr = toRaw(this)
+      for (let i = 0, l = this.length; i < l; i++) {
+        // 访问数据时，并进行跟踪数组，指定跟踪索引
+        track(arr, TrackOpTypes.GET, i + '')
+      }
+      // 执行数组方法
+      // we run the method using the original args first (which may be reactive)
+      const res = method.apply(arr, args)
+      if (res === -1 || res === false) {
+        // if that didn't work, run it again using raw values.
+        return method.apply(arr, args.map(toRaw))
+      } else {
+        return res
+      }
+    }
+  })
+  // instrument length-altering mutation methods to avoid length being tracked
+  // which leads to infinite loops in some cases (#2137)
+  ;(['push', 'pop', 'shift', 'unshift', 'splice'] as const).forEach(key => {
+    const method = Array.prototype[key] as any
+    // 重新封装array这些方法
+    instrumentations[key] = function(this: unknown[], ...args: unknown[]) {
+      // 开始执行这些方法时：停止跟踪数据变化，避免因数组长度变化而导致的无限更新
+      pauseTracking()
+      // 会触发数组对象proxy: 先触发get获取操作索引；再触发set进行设值，并触发依赖更新（类型ADD)
+      const res = method.apply(this, args)
+      resetTracking()
       return res
     }
-  }
-})
-// instrument length-altering mutation methods to avoid length being tracked
-// which leads to infinite loops in some cases (#2137)
-;(['push', 'pop', 'shift', 'unshift', 'splice'] as const).forEach(key => {
-  const method = Array.prototype[key] as any
-  // 重新封装array这些方法
-  arrayInstrumentations[key] = function(this: unknown[], ...args: unknown[]) {
-    // 开始执行这些方法时：停止跟踪数据变化，避免因数组长度变化而导致的无限更新
-    pauseTracking()
-    // 会触发数组对象proxy: 先触发get获取操作索引；再触发set进行设值，并触发依赖更新（类型ADD)
-    const res = method.apply(this, args)
-    resetTracking()
-    return res
-  }
-})
+  })
+  return instrumentations
+}
 
 function createGetter(isReadonly = false, shallow = false) {
   return function get(target: Target, key: string | symbol, receiver: object) {
@@ -255,7 +259,7 @@ export const readonlyHandlers: ProxyHandler<object> = {
 }
 
 // 如 instance.props，在执行渲染函数期间，渲染函数访问ctx上的props属性
-export const shallowReactiveHandlers: ProxyHandler<object> = extend(
+export const shallowReactiveHandlers = /*#__PURE__*/ extend(
   {},
   mutableHandlers,
   {
@@ -269,7 +273,7 @@ export const shallowReactiveHandlers: ProxyHandler<object> = extend(
 // Props handlers are special in the sense that it should not unwrap top-level
 // refs (in order to allow refs to be explicitly passed down), but should
 // retain the reactivity of the normal readonly object.
-export const shallowReadonlyHandlers: ProxyHandler<object> = extend(
+export const shallowReadonlyHandlers = /*#__PURE__*/ extend(
   {},
   readonlyHandlers,
   {

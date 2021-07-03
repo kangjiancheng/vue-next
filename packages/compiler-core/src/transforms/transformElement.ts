@@ -315,19 +315,18 @@ export function resolveComponentType(
   // 1. dynamic component
   // 存在is属性（动态组件）
   const isExplicitDynamic = isComponentTag(tag)
-  const isProp =
-    findProp(node, 'is') || (!isExplicitDynamic && findDir(node, 'is'))
+  const isProp = findProp(node, 'is')
   if (isProp) {
     // 如 存在属性is：'<component is="HelloWorld" />' 或 '<component :is="HelloWorld" />'
     // 或 存在指令is：'<hello-world v-is="Welcome" />'
-
-    if (!isExplicitDynamic && isProp.type === NodeTypes.ATTRIBUTE) {
-      // <button is="vue:xxx">
-      // if not <component>, only is value that starts with "vue:" will be
-      // treated as component by the parse phase and reach here, unless it's
-      // compat mode where all is values are considered components
-      tag = isProp.value!.content.replace(/^vue:/, '')
-    } else {
+    if (
+      isExplicitDynamic ||
+      (__COMPAT__ &&
+        isCompatEnabled(
+          CompilerDeprecationTypes.COMPILER_IS_ON_ELEMENT,
+          context
+        ))
+    ) {
       const exp =
         isProp.type === NodeTypes.ATTRIBUTE // 静态dom属性
           ? isProp.value && createSimpleExpression(isProp.value.content, true) // 转换为指令值节点格式
@@ -339,7 +338,24 @@ export function resolveComponentType(
           exp
         ])
       }
+    } else if (
+      isProp.type === NodeTypes.ATTRIBUTE &&
+      isProp.value!.content.startsWith('vue:')
+    ) {
+      // <button is="vue:xxx">
+      // if not <component>, only is value that starts with "vue:" will be
+      // treated as component by the parse phase and reach here, unless it's
+      // compat mode where all is values are considered components
+      tag = isProp.value!.content.slice(4)
     }
+  }
+
+  // 1.5 v-is (TODO: Deprecate)
+  const isDir = !isExplicitDynamic && findDir(node, 'is')
+  if (isDir && isDir.exp) {
+    return createCallExpression(context.helper(RESOLVE_DYNAMIC_COMPONENT), [
+      isDir.exp
+    ])
   }
 
   // 2. built-in components (Teleport, Transition, KeepAlive, Suspense...)
@@ -550,7 +566,13 @@ export function buildProps(
       // skip is on <component>, or is="vue:xxx"
       if (
         name === 'is' &&
-        (isComponentTag(tag) || (value && value.content.startsWith('vue:')))
+        (isComponentTag(tag) ||
+          (value && value.content.startsWith('vue:')) ||
+          (__COMPAT__ &&
+            isCompatEnabled(
+              CompilerDeprecationTypes.COMPILER_IS_ON_ELEMENT,
+              context
+            )))
       ) {
         // 跳过 <component>, 或者 is="vue:xxx"
         continue
@@ -602,7 +624,14 @@ export function buildProps(
       // 跳过is指令，如 template: <component :is='HelloWold' />，is 指令在resolveComponentType中解析
       if (
         name === 'is' ||
-        (isVBind && isComponentTag(tag) && isBindKey(arg, 'is')) // 绑定静态is属性，如 <component :is='HelloWold' />
+        (isVBind &&
+        isBindKey(arg, 'is') && // 绑定静态is属性，如 <component :is='HelloWold' />
+          (isComponentTag(tag) ||
+            (__COMPAT__ &&
+              isCompatEnabled(
+                CompilerDeprecationTypes.COMPILER_IS_ON_ELEMENT,
+                context
+              ))))
       ) {
         continue
       }
@@ -947,7 +976,8 @@ function buildDirectiveArgs(
     // 用户自定义指令
     // user directive.
     // see if we have directives exposed via <script setup>
-    const fromSetup = !__BROWSER__ && resolveSetupReference(dir.name, context)
+    const fromSetup =
+      !__BROWSER__ && resolveSetupReference('v-' + dir.name, context)
     if (fromSetup) {
       // TODO: analyze cfs
       dirArgs.push(fromSetup)

@@ -1,6 +1,7 @@
 import {
   ComponentInternalInstance,
   Data,
+  getExposeProxy,
   isStatefulComponent
 } from './component'
 import { nextTick, queueJob } from './scheduler'
@@ -18,7 +19,6 @@ import {
   ReactiveEffect,
   toRaw,
   shallowReadonly,
-  ReactiveFlags,
   track,
   TrackOpTypes,
   ShallowUnwrapRef,
@@ -33,7 +33,8 @@ import {
   OptionTypesType,
   OptionTypesKeys,
   resolveMergedOptions,
-  shouldCacheAccess
+  shouldCacheAccess,
+  MergedComponentOptionsOverride
 } from './componentOptions'
 import { EmitsOptions, EmitFn } from './componentEmits'
 import { Slots } from './componentSlots'
@@ -188,7 +189,7 @@ export type ComponentPublicInstance<
   $parent: ComponentPublicInstance | null
   $emit: EmitFn<E>
   $el: any
-  $options: Options
+  $options: Options & MergedComponentOptionsOverride
   $forceUpdate: ReactiveEffect
   $nextTick: typeof nextTick
   $watch(
@@ -217,28 +218,31 @@ const getPublicInstance = (
   i: ComponentInternalInstance | null
 ): ComponentPublicInstance | ComponentInternalInstance['exposed'] | null => {
   if (!i) return null
-  if (isStatefulComponent(i)) return i.exposed ? i.exposed : i.proxy
+  if (isStatefulComponent(i)) return getExposeProxy(i) || i.proxy
   return getPublicInstance(i.parent)
 }
 
 // instance.ctx: 公开组件实例部分属性与方法
-const publicPropertiesMap: PublicPropertiesMap = extend(Object.create(null), {
-  // i 为component实例: instance
-  $: i => i,
-  $el: i => i.vnode.el,
-  $data: i => i.data,
-  $props: i => (__DEV__ ? shallowReadonly(i.props) : i.props),
-  $attrs: i => (__DEV__ ? shallowReadonly(i.attrs) : i.attrs),
-  $slots: i => (__DEV__ ? shallowReadonly(i.slots) : i.slots),
-  $refs: i => (__DEV__ ? shallowReadonly(i.refs) : i.refs),
-  $parent: i => getPublicInstance(i.parent),
-  $root: i => getPublicInstance(i.root),
-  $emit: i => i.emit,
-  $options: i => (__FEATURE_OPTIONS_API__ ? resolveMergedOptions(i) : i.type),
-  $forceUpdate: i => () => queueJob(i.update),
-  $nextTick: i => nextTick.bind(i.proxy!),
-  $watch: i => (__FEATURE_OPTIONS_API__ ? instanceWatch.bind(i) : NOOP)
-} as PublicPropertiesMap)
+export const publicPropertiesMap: PublicPropertiesMap = extend(
+  Object.create(null),
+  {
+    // i 为component实例: instance
+    $: i => i,
+    $el: i => i.vnode.el,
+    $data: i => i.data,
+    $props: i => (__DEV__ ? shallowReadonly(i.props) : i.props),
+    $attrs: i => (__DEV__ ? shallowReadonly(i.attrs) : i.attrs),
+    $slots: i => (__DEV__ ? shallowReadonly(i.slots) : i.slots),
+    $refs: i => (__DEV__ ? shallowReadonly(i.refs) : i.refs),
+    $parent: i => getPublicInstance(i.parent),
+    $root: i => getPublicInstance(i.root),
+    $emit: i => i.emit,
+    $options: i => (__FEATURE_OPTIONS_API__ ? resolveMergedOptions(i) : i.type),
+    $forceUpdate: i => () => queueJob(i.update),
+    $nextTick: i => nextTick.bind(i.proxy!),
+    $watch: i => (__FEATURE_OPTIONS_API__ ? instanceWatch.bind(i) : NOOP)
+  } as PublicPropertiesMap
+)
 
 if (__COMPAT__) {
   installCompatInstanceProperties(publicPropertiesMap)
@@ -272,11 +276,6 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
       appContext
     } = instance
 
-    // let @vue/reactivity know it should never observe Vue public instances.
-    if (key === ReactiveFlags.SKIP) {
-      return true
-    }
-
     // for internal formatters to know that this is a Vue instance
     if (__DEV__ && key === '__isVue') {
       return true
@@ -284,6 +283,26 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
 
     // 当访问组件实例上下文ctx属性时，设置缓存所访问属性的范围：data / props / ctx，方便后续再次访问时可直接返回，避免重复判断等操作
     // 访问优先级：setup > data > props
+
+    // prioritize <script setup> bindings during dev.
+    // this allows even properties that start with _ or $ to be used - so that
+    // it aligns with the production behavior where the render fn is inlined and
+    // indeed has access to all declared variables.
+    if (
+      __DEV__ &&
+      setupState !== EMPTY_OBJ &&
+      setupState.__isScriptSetup &&
+      hasOwn(setupState, key)
+    ) {
+      return setupState[key]
+    }
+
+    // data / props / ctx
+    // This getter gets called for every property access on the render context
+    // during render and is a major hotspot. The most expensive part of this
+    // is the multiple hasOwn() calls. It's much faster to do a simple property
+    // access on a plain object, so we use an accessCache object (with null
+    // prototype) to memoize what access type a key corresponds to.
     let normalizedProps
     if (key[0] !== '$') {
       // 设置所访问属性的范围
@@ -562,7 +581,7 @@ export function exposeSetupStateOnRenderContext(
 
   // toRaw: 设置 setupState.__v_raw = setupState
   Object.keys(toRaw(setupState)).forEach(key => {
-    if (key[0] === '$' || key[0] === '_') {
+    if (!setupState.__isScriptSetup && (key[0] === '$' || key[0] === '_')) {
       // setup方法的返回值属性里不能以 $、_ 开头，这些是Vue的 内部属性预留前置代表
       warn(
         `setup() return property ${JSON.stringify(

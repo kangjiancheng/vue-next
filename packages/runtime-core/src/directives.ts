@@ -19,6 +19,7 @@ import { currentRenderingInstance } from './componentRenderContext'
 import { callWithAsyncErrorHandling, ErrorCodes } from './errorHandling'
 import { ComponentPublicInstance } from './componentPublicInstance'
 import { mapCompatDirectiveHook } from './compat/customDirective'
+import { pauseTracking, resetTracking } from '@vue/reactivity'
 
 export interface DirectiveBinding<V = any> {
   instance: ComponentPublicInstance | null
@@ -167,12 +168,16 @@ export function invokeDirectiveHook(
       hook = mapCompatDirectiveHook(name, binding.dir, instance)
     }
     if (hook) {
+      // disable tracking inside all lifecycle hooks
+      // since they can potentially be called inside effects.
+      pauseTracking()
       callWithAsyncErrorHandling(hook, instance, ErrorCodes.DIRECTIVE_HOOK, [
         vnode.el, // vnode el 实例
         binding, // vnode 指令节点（包括：指令对象、指令属性值、指令属性参数、指令属性修饰符）
         vnode, // vnode 节点
         prevVNode // 旧vnode
       ])
+      resetTracking()
     }
   }
 }

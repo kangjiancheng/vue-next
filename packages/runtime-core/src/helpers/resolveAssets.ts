@@ -112,7 +112,7 @@ function resolveAsset(
     // 返回解析到组件/指令对象
     const res =
       // local registration
-      // check instance[type] first for components with mixin or extends.
+      // check instance[type] first which is resolved for options API
       resolve(instance[type] || (Component as ComponentOptions)[type], name) || // 当前组件的组件定义列表components
       // global registration
       resolve(instance.appContext[type], name) // 全局组件的组件定义列表components

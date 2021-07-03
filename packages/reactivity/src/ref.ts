@@ -4,7 +4,7 @@ import { isArray, isObject, hasChanged } from '@vue/shared'
 import { reactive, isProxy, toRaw, isReactive } from './reactive'
 import { CollectionTypes } from './collectionHandlers'
 
-declare const RefSymbol: unique symbol
+export declare const RefSymbol: unique symbol
 
 export interface Ref<T = any> {
   value: T
@@ -66,8 +66,9 @@ class RefImpl<T> {
   public readonly __v_isRef = true // 标记为 ref
 
   // _shallow: 转换对象时，只考虑value值，不进行其它属性响应转换
-  constructor(private _rawValue: T, public readonly _shallow = false) {
-    this._value = _shallow ? _rawValue : convert(_rawValue) // isObject(_rawValue) ? reactive(_rawValue) : _rawValue
+  constructor(private _rawValue: T, public readonly _shallow: boolean) {
+    // isObject(_rawValue) ? reactive(_rawValue) : _rawValue
+    this._value = _shallow ? _rawValue : convert(_rawValue)
   }
 
   get value() {
@@ -106,7 +107,7 @@ export function triggerRef(ref: Ref) {
 }
 
 // 访问 ref数据的value值 或 原生数据（即非响应数据）
-export function unref<T>(ref: T): T extends Ref<infer V> ? V : T {
+export function unref<T>(ref: T | Ref<T>): T {
   return isRef(ref) ? (ref.value as any) : ref
 }
 

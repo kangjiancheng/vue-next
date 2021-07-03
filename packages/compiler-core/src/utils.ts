@@ -70,10 +70,68 @@ export const isSimpleIdentifier = (name: string): boolean =>
 // 匹配一个指令属性值的表达式，即有效的函数名调用： 以 [A-Za-z_$] 开头，如 <button @click="$_abc[foo][bar]"></button>
 // '$_abc$123 . $_abc$123$ . $_abc$123' 或 '$_abc[foo][bar]'
 // 不匹配： '1 + 1'、handleClick(1)
-const memberExpRE = /^[A-Za-z_$\xA0-\uFFFF][\w$\xA0-\uFFFF]*(?:\s*\.\s*[A-Za-z_$\xA0-\uFFFF][\w$\xA0-\uFFFF]*|\[[^\]]+\])*$/
+
+const enum MemberExpLexState {
+  inMemberExp,
+  inBrackets,
+  inString
+}
+
+const validFirstIdentCharRE = /[A-Za-z_$\xA0-\uFFFF]/
+const validIdentCharRE = /[\.\w$\xA0-\uFFFF]/
+const whitespaceRE = /\s+[.[]\s*|\s*[.[]\s+/g
+
+/**
+ * Simple lexer to check if an expression is a member expression. This is
+ * lax and only checks validity at the root level (i.e. does not validate exps
+ * inside square brackets), but it's ok since these are only used on template
+ * expressions and false positives are invalid expressions in the first place.
+ */
 export const isMemberExpression = (path: string): boolean => {
-  if (!path) return false
-  return memberExpRE.test(path.trim())
+  // remove whitespaces around . or [ first
+  path = path.trim().replace(whitespaceRE, s => s.trim())
+
+  let state = MemberExpLexState.inMemberExp
+  let prevState = MemberExpLexState.inMemberExp
+  let currentOpenBracketCount = 0
+  let currentStringType: "'" | '"' | '`' | null = null
+
+  for (let i = 0; i < path.length; i++) {
+    const char = path.charAt(i)
+    switch (state) {
+      case MemberExpLexState.inMemberExp:
+        if (char === '[') {
+          prevState = state
+          state = MemberExpLexState.inBrackets
+          currentOpenBracketCount++
+        } else if (
+          !(i === 0 ? validFirstIdentCharRE : validIdentCharRE).test(char)
+        ) {
+          return false
+        }
+        break
+      case MemberExpLexState.inBrackets:
+        if (char === `'` || char === `"` || char === '`') {
+          prevState = state
+          state = MemberExpLexState.inString
+          currentStringType = char
+        } else if (char === `[`) {
+          currentOpenBracketCount++
+        } else if (char === `]`) {
+          if (!--currentOpenBracketCount) {
+            state = prevState
+          }
+        }
+        break
+      case MemberExpLexState.inString:
+        if (char === currentStringType) {
+          state = prevState
+          currentStringType = null
+        }
+        break
+    }
+  }
+  return !currentOpenBracketCount
 }
 
 // 获取节点中的内部某段内容的光标信息

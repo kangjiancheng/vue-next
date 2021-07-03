@@ -4,7 +4,8 @@ import {
   pauseTracking,
   resetTracking,
   shallowReadonly,
-  proxyRefs
+  proxyRefs,
+  markRaw
 } from '@vue/reactivity'
 import {
   ComponentPublicInstance,
@@ -13,7 +14,8 @@ import {
   createRenderContext,
   exposePropsOnRenderContext,
   exposeSetupStateOnRenderContext,
-  ComponentPublicInstanceConstructor
+  ComponentPublicInstanceConstructor,
+  publicPropertiesMap
 } from './componentPublicInstance'
 import {
   ComponentPropsOptions,
@@ -76,14 +78,6 @@ export interface AllowedComponentProps {
 // Note: can't mark this whole interface internal because some public interfaces
 // extend it.
 export interface ComponentInternalOptions {
-  /**
-   * @internal
-   */
-  __props?: NormalizedPropsOptions
-  /**
-   * @internal
-   */
-  __emits?: ObjectEmitsOptions | null
   /**
    * @internal
    */
@@ -176,7 +170,7 @@ export interface SetupContext<E = EmitsOptions> {
   attrs: Data
   slots: Slots
   emit: EmitFn<E>
-  expose: (exposed: Record<string, any>) => void
+  expose: (exposed?: Record<string, any>) => void
 }
 
 /**
@@ -285,6 +279,12 @@ export interface ComponentInternalInstance {
    */
   emitsOptions: ObjectEmitsOptions | null
 
+  /**
+   * resolved inheritAttrs options
+   * @internal
+   */
+  inheritAttrs?: boolean
+
   // the rest are only for stateful components ---------------------------------
 
   // main proxy that serves as the public instance (`this`)
@@ -292,6 +292,7 @@ export interface ComponentInternalInstance {
 
   // exposed properties via expose()
   exposed: Record<string, any> | null
+  exposeProxy: Record<string, any> | null
 
   /**
    * alternative proxy used only for runtime-compiled render functions using
@@ -451,6 +452,7 @@ export function createComponentInstance(
     render: null,
     proxy: null, // instance.ctx  =》PublicInstanceProxyHandlers
     exposed: null,
+    exposeProxy: null,
     withProxy: null, // instance.ctx =》有vue模版编译得到的渲染函数 RuntimeCompiledPublicInstanceProxyHandlers
     effects: null,
     provides: parent ? parent.provides : Object.create(appContext.provides),
@@ -472,6 +474,9 @@ export function createComponentInstance(
 
     // props default value
     propsDefaults: EMPTY_OBJ,
+
+    // inheritAttrs
+    inheritAttrs: type.inheritAttrs,
 
     // state
     ctx: EMPTY_OBJ, // 组件实例的上下文
@@ -617,12 +622,14 @@ function setupStatefulComponent(
     }
   }
 
+  // 0. create render proxy property access cache
   // 缓存 相关属性归属 的范围  -  props、data、setup、组件上下文context
   instance.accessCache = Object.create(null) // 属性的所属范围
-
+  // 1. create public instance / render proxy
+  // also mark it raw so it's never observed
   // 拦截 instance.ctx 的访问get、设置set、判断has
   // get: data、setupState、props、全局属性、组件实例公开属性与方法 等等
-  instance.proxy = new Proxy(instance.ctx, PublicInstanceProxyHandlers)
+  instance.proxy = markRaw(new Proxy(instance.ctx, PublicInstanceProxyHandlers))
 
   // 将组件的props选项列表添加到组件实例上下文ctx
   if (__DEV__) {
@@ -658,6 +665,11 @@ function setupStatefulComponent(
 
     // 客户端未实现 Promise
     if (isPromise(setupResult)) {
+      const unsetInstance = () => {
+        currentInstance = null
+      }
+      setupResult.then(unsetInstance, unsetInstance)
+
       if (isSSR) {
         // return the promise so server-renderer can wait on it
         return setupResult
@@ -850,7 +862,7 @@ export function finishComponentSetup(
   if (__FEATURE_OPTIONS_API__ && !(__COMPAT__ && skipOptions)) {
     currentInstance = instance
     pauseTracking()
-    applyOptions(instance, Component)
+    applyOptions(instance)
     resetTracking()
     currentInstance = null
   }
@@ -878,11 +890,9 @@ export function finishComponentSetup(
   }
 }
 
-const attrHandlers: ProxyHandler<Data> = {
+const attrDevProxyHandlers: ProxyHandler<Data> = {
   get: (target, key: string) => {
-    if (__DEV__) {
-      markAttrsAccessed()
-    }
+    markAttrsAccessed()
     return target[key]
   },
   set: () => {
@@ -903,15 +913,18 @@ export function createSetupContext(
     if (__DEV__ && instance.exposed) {
       warn(`expose() should be called only once per setup().`)
     }
-    instance.exposed = proxyRefs(exposed)
+    instance.exposed = exposed || {}
   }
 
   if (__DEV__) {
+    let attrs: Data
     // We use getters in dev in case libs like test-utils overwrite instance
     // properties (overwrites should not be done in prod)
     return Object.freeze({
       get attrs() {
-        return new Proxy(instance.attrs, attrHandlers)
+        return (
+          attrs || (attrs = new Proxy(instance.attrs, attrDevProxyHandlers))
+        )
       },
       get slots() {
         return shallowReadonly(instance.slots)
@@ -928,6 +941,23 @@ export function createSetupContext(
       emit: instance.emit,
       expose
     }
+  }
+}
+
+export function getExposeProxy(instance: ComponentInternalInstance) {
+  if (instance.exposed) {
+    return (
+      instance.exposeProxy ||
+      (instance.exposeProxy = new Proxy(proxyRefs(markRaw(instance.exposed)), {
+        get(target, key: string) {
+          if (key in target) {
+            return target[key]
+          } else if (key in publicPropertiesMap) {
+            return publicPropertiesMap[key](instance)
+          }
+        }
+      }))
+    )
   }
 }
 

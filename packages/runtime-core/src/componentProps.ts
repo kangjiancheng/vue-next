@@ -51,7 +51,7 @@ export type Prop<T, D = T> = PropOptions<T, D> | PropType<T>
 
 type DefaultFactory<T> = (props: Data) => T | null | undefined
 
-interface PropOptions<T = any, D = T> {
+export interface PropOptions<T = any, D = T> {
   type?: PropType<T> | true | null
   required?: boolean
   default?: D | DefaultFactory<D> | null | undefined | object
@@ -109,7 +109,8 @@ type InferPropType<T> = [T] extends [null]
             : T
 
 export type ExtractPropTypes<O> = O extends object
-  ? { [K in RequiredKeys<O>]: InferPropType<O[K]> } &
+  ? { [K in keyof O]?: unknown } & // This is needed to keep the relation between the option prop and the props, allowing to use ctrl+click to navigate to the prop options. see: #3656
+      { [K in RequiredKeys<O>]: InferPropType<O[K]> } &
       { [K in OptionalKeys<O>]?: InferPropType<O[K]> }
   : { [K in string]: any }
 
@@ -242,7 +243,8 @@ export function updateProps(
               rawCurrentProps,
               camelizedKey,
               value,
-              instance
+              instance,
+              false /* isAbsent */
             )
           }
         } else {
@@ -287,10 +289,11 @@ export function updateProps(
           ) {
             props[key] = resolvePropValue(
               options,
-              rawProps || EMPTY_OBJ,
+              rawCurrentProps,
               key,
               undefined,
-              instance
+              instance,
+              true /* isAbsent */
             )
           }
         } else {
@@ -332,6 +335,7 @@ function setFullProps(
 
   // prop属性赋值
   let hasAttrsChanged = false
+  let rawCastValues: Data | undefined
   if (rawProps) {
     for (let key in rawProps) {
       // key, ref are reserved and never passed down
@@ -358,8 +362,12 @@ function setFullProps(
       // kebab -> camel conversion here we need to camelize the key.
       let camelKey
       if (options && hasOwn(options, (camelKey = camelize(key)))) {
-        // '组件vnode的props' 如果在 '组件定义的props选项里' 则赋值保存到有效的props
-        props[camelKey] = value
+        if (!needCastKeys || !needCastKeys.includes(camelKey)) {
+          // '组件vnode的props' 如果在 '组件定义的props选项里' 则赋值保存到有效的props
+          props[camelKey] = value
+        } else {
+          ;(rawCastValues || (rawCastValues = {}))[camelKey] = value
+        }
       } else if (!isEmitListener(instance.emitsOptions, key)) {
         // Any non-declared (either as a prop or an emitted event) props are put
         // into a separate `attrs` object for spreading. Make sure to preserve
@@ -385,7 +393,7 @@ function setFullProps(
 
   if (needCastKeys) {
     const rawCurrentProps = toRaw(props)
-
+    const castValues = rawCastValues || EMPTY_OBJ
     for (let i = 0; i < needCastKeys.length; i++) {
       // prop属性的类型 存在 boolean类型或默认值
       const key = needCastKeys[i]
@@ -393,8 +401,9 @@ function setFullProps(
         options!, // 组件props属性选项
         rawCurrentProps, // 存储组件的有效props
         key, // 传入的prop，
-        rawCurrentProps[key], // 传入的 prop的值
-        instance
+        castValues[key],
+        instance,
+        !hasOwn(castValues, key)
       )
     }
   }
@@ -408,7 +417,8 @@ function resolvePropValue(
   props: Data, // 处理后的有效props，带实际值，即传进组件的prop并在组件里声明了
   key: string, // 存在 boolean类型或默认值 的属性
   value: unknown, // vnode 的props属性 prop value
-  instance: ComponentInternalInstance
+  instance: ComponentInternalInstance,
+  isAbsent: boolean
 ) {
   const opt = options[key] // 组件上声明的prop
 
@@ -448,7 +458,7 @@ function resolvePropValue(
     // boolean casting
     if (opt[BooleanFlags.shouldCast]) {
       // 不在 vnode props 中，同时没有默认值
-      if (!hasOwn(props, key) && !hasDefault) {
+      if (isAbsent && !hasDefault) {
         value = false
       } else if (
         opt[BooleanFlags.shouldCastTrue] &&
@@ -471,8 +481,10 @@ export function normalizePropsOptions(
   appContext: AppContext, // app 上下文
   asMixin = false
 ): NormalizedPropsOptions {
-  if (!appContext.deopt && comp.__props) {
-    return comp.__props
+  const cache = appContext.propsCache
+  const cached = cache.get(comp)
+  if (cached) {
+    return cached
   }
 
   const raw = comp.props // 组件的props选项属性
@@ -506,7 +518,8 @@ export function normalizePropsOptions(
 
   // 没有props
   if (!raw && !hasExtends) {
-    return (comp.__props = EMPTY_ARR as any)
+    cache.set(comp, EMPTY_ARR as any)
+    return EMPTY_ARR as any
   }
 
   if (isArray(raw)) {
@@ -583,7 +596,9 @@ export function normalizePropsOptions(
     }
   }
 
-  return (comp.__props = [normalized, needCastKeys])
+  const res: NormalizedPropsOptions = [normalized, needCastKeys]
+  cache.set(comp, res)
+  return res
 }
 
 function validatePropName(key: string) {

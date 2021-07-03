@@ -14,7 +14,8 @@ import {
   assert,
   advancePositionWithMutation,
   advancePositionWithClone,
-  isCoreComponent
+  isCoreComponent,
+  isBindKey
 } from './utils'
 import {
   Namespaces,
@@ -544,6 +545,10 @@ function parseElement(
 
   // 自闭元素 或自闭标签 <br />、<img />、<input /> 等：@vue/shared/src/domTagConfig.ts
   if (element.isSelfClosing || context.options.isVoidTag(element.tag)) {
+    // #4030 self-closing <pre> tag
+    if (context.options.isPreTag(element.tag)) {
+      context.inPre = false
+    }
     return element
   }
 
@@ -678,15 +683,19 @@ function parseTag(
   const cursor = getCursor(context)
   const currentSource = context.source
 
+  // check <pre> tag
+  // 判断 tag === 'pre'
+  const isPreTag = context.options.isPreTag(tag)
+  if (isPreTag) {
+    context.inPre = true
+  }
+
+  // Attributes.
   // 解析标签属性，返回元素的属性节点列表，其中节点分为 普通html标签属性节点和指令属性节点
   let props = parseAttributes(context, type)
   // 至此 context.source = '' 或 '>...' 或 '/>...'
 
-  // 判断 tag === 'pre'
-  if (context.options.isPreTag(tag)) {
-    context.inPre = true
-  }
-
+  // check v-pre
   // 检测节点属性列表中是否有 v-pre 指令
   if (
     type === TagType.Start &&
@@ -759,66 +768,20 @@ function parseTag(
    * 默认都是 ELEMENT
    */
   let tagType = ElementTypes.ELEMENT
-  const options = context.options
-  if (!context.inVPre && !options.isCustomElement(tag)) {
-    // 非用户自定义元素： NO = () => false
-    // 判断是 v-is 指令，动态组件
-    const hasVIs = props.some(p => {
-      if (p.name !== 'is') return
-      // v-is="xxx" (TODO: deprecate)
-      if (p.type === NodeTypes.DIRECTIVE) {
-        return true
-      }
-      // is="vue:xxx"
-      if (p.value && p.value.content.startsWith('vue:')) {
-        return true
-      }
-      // in compat mode, any is usage is considered a component
+  if (!context.inVPre) {
+    if (tag === 'slot') {
+      tagType = ElementTypes.SLOT
+    } else if (tag === 'template') {
       if (
-        __COMPAT__ &&
-        checkCompatEnabled(
-          CompilerDeprecationTypes.COMPILER_IS_ON_ELEMENT,
-          context,
-          p.loc
+        props.some(
+          p =>
+            p.type === NodeTypes.DIRECTIVE && isSpecialTemplateDirective(p.name) // 存在指定指令列表if、else、else-if、for、slot，则 元素为template类型
         )
       ) {
-        return true
+        tagType = ElementTypes.TEMPLATE // 元素类型为模版template，且必须带有指定指令列表，注意: 不带指定指令的template标签是html标签 即 ElementTypes.ELEMENT
       }
-    })
-
-    // 判断 ElementTypes 为是 COMPONENT 元素
-    // 一：
-    //    不存在v-is指令属性，并且是非原生标签，如：<hello-world />
-    // 二：
-    //    存在v-is指令属性
-    //    标签为内置元素：Teleport、Suspense、KeepAlive、BaseTransition、Transition、TransitionGroup
-    //    大写开头的标签
-    //    标签名为 component
-    if (options.isNativeTag && !hasVIs) {
-      // 不存在 v-is 指令属性
-      // 如：<hello-world /> // 非原生标签，则判定为组件，注意 template标签属于html
-      if (!options.isNativeTag(tag)) tagType = ElementTypes.COMPONENT
-    } else if (
-      hasVIs || // 存在 v-is 指令属性
-      isCoreComponent(tag) || // 内置组件：Teleport、Suspense、KeepAlive、BaseTransition  (可以大小写横线)
-      (options.isBuiltInComponent && options.isBuiltInComponent(tag)) || // 内置组件 Transition、TransitionGroup
-      /^[A-Z]/.test(tag) || // 开头大写标签
-      tag === 'component'
-    ) {
+    } else if (isComponent(tag, props, context)) {
       tagType = ElementTypes.COMPONENT
-    }
-
-    // 判断 ElementTypes 为 TEMPLATE 元素
-    if (tag === 'slot') {
-      tagType = ElementTypes.SLOT // 元素类型 为slot
-    } else if (
-      tag === 'template' &&
-      props.some(
-        p =>
-          p.type === NodeTypes.DIRECTIVE && isSpecialTemplateDirective(p.name) // 存在指定指令列表if、else、else-if、for、slot，则 元素为template类型
-      )
-    ) {
-      tagType = ElementTypes.TEMPLATE // 元素类型为模版template，且必须带有指定指令列表，注意: 不带指定指令的template标签是html标签 即 ElementTypes.ELEMENT
     }
   }
 
@@ -833,6 +796,76 @@ function parseTag(
     children: [],
     loc: getSelection(context, start), // 元素标签位置信息，如：template='<span class="abc"></span>'，完成解析开始标签后，其中的 loc.source = '<span class="abc">'
     codegenNode: undefined // to be created during transform phase  在 transform 阶段进行赋值
+  }
+}
+
+// 判断 tagType 为是 COMPONENT 元素
+// 一：
+//    不存在v-is指令属性，并且是非原生标签，如：<hello-world />
+// 二：
+//    存在v-is指令属性
+//    标签为内置元素：Teleport、Suspense、KeepAlive、BaseTransition、Transition、TransitionGroup
+//    大写开头的标签
+//    标签名为 component
+function isComponent(
+  tag: string,
+  props: (AttributeNode | DirectiveNode)[],
+  context: ParserContext
+) {
+  const options = context.options
+  if (options.isCustomElement(tag)) {
+    return false
+  }
+  if (
+    tag === 'component' ||
+    /^[A-Z]/.test(tag) ||
+    isCoreComponent(tag) || // 内置组件：Teleport、Suspense、KeepAlive、BaseTransition  (可以大小写横线)
+    (options.isBuiltInComponent && options.isBuiltInComponent(tag)) || // 内置组件 Transition、TransitionGroup
+    (options.isNativeTag && !options.isNativeTag(tag)) // 如：<hello-world /> // 非原生标签，则判定为组件，注意 template标签属于html
+  ) {
+    return true
+  }
+
+  // 非用户自定义元素： NO = () => false
+  // 判断是 v-is 指令，动态组件
+  // at this point the tag should be a native tag, but check for potential "is"
+  // casting
+  for (let i = 0; i < props.length; i++) {
+    const p = props[i]
+    if (p.type === NodeTypes.ATTRIBUTE) {
+      if (p.name === 'is' && p.value) {
+        if (p.value.content.startsWith('vue:')) {
+          return true
+        } else if (
+          __COMPAT__ &&
+          checkCompatEnabled(
+            CompilerDeprecationTypes.COMPILER_IS_ON_ELEMENT,
+            context,
+            p.loc
+          )
+        ) {
+          return true
+        }
+      }
+    } else {
+      // directive
+      // v-is (TODO Deprecate)
+      if (p.name === 'is') {
+        return true
+      } else if (
+        // :is on plain element - only treat as component in compat mode
+        p.name === 'bind' &&
+        isBindKey(p.arg, 'is') &&
+        __COMPAT__ &&
+        checkCompatEnabled(
+          CompilerDeprecationTypes.COMPILER_IS_ON_ELEMENT,
+          context,
+          p.loc
+        )
+      ) {
+        return true
+      }
+    }
   }
 }
 

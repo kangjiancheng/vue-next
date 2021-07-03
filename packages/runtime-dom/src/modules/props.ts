@@ -37,6 +37,9 @@ export function patchDOMProp(
       // 如果属性值不一样，旧替换
       el.value = newValue
     }
+    if (value == null) {
+      el.removeAttribute(key)
+    }
     return
   }
 

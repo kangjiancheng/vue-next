@@ -44,7 +44,24 @@ export { provide, inject } from './apiInject'
 export { nextTick } from './scheduler'
 export { defineComponent } from './apiDefineComponent'
 export { defineAsyncComponent } from './apiAsyncComponent'
-export { defineProps, defineEmit, useContext } from './apiSetupHelpers'
+
+// <script setup> API ----------------------------------------------------------
+
+export {
+  // macros runtime, for warnings only
+  defineProps,
+  defineEmits,
+  defineExpose,
+  withDefaults,
+  // internal
+  mergeDefaults,
+  withAsyncContext,
+  // deprecated
+  defineEmit,
+  useContext,
+  useAttrs,
+  useSlots
+} from './apiSetupHelpers'
 
 // Advanced API ----------------------------------------------------------------
 
@@ -135,7 +152,6 @@ export {
   DeepReadonly
 } from '@vue/reactivity'
 export {
-  // types
   WatchEffect,
   WatchOptions,
   WatchOptionsBase,
@@ -186,7 +202,8 @@ export {
 export { EmitsOptions, ObjectEmitsOptions } from './componentEmits'
 export {
   ComponentPublicInstance,
-  ComponentCustomProperties
+  ComponentCustomProperties,
+  CreateComponentPublicInstance
 } from './componentPublicInstance'
 export {
   Renderer,

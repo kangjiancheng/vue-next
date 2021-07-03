@@ -19,6 +19,7 @@ import {
   ComponentOptions,
   createComponentInstance,
   Data,
+  getExposeProxy,
   setupComponent
 } from './component'
 import {
@@ -141,7 +142,8 @@ export interface RendererOptions<
     content: string,
     parent: HostElement,
     anchor: HostNode | null,
-    isSVG: boolean
+    isSVG: boolean,
+    cached?: HostNode[] | null
   ): HostElement[]
 }
 
@@ -334,7 +336,7 @@ export const setRef = (
 
   const refValue =
     vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT
-      ? vnode.component!.exposed || vnode.component!.proxy
+      ? getExposeProxy(vnode.component!) || vnode.component!.proxy
       : vnode.el
   const value = isUnmount ? null : refValue
 
@@ -660,12 +662,22 @@ function baseCreateRenderer(
   ) => {
     // static nodes are only present when used with compiler-dom/runtime-dom
     // which guarantees presence of hostInsertStaticContent.
-    ;[n2.el, n2.anchor] = hostInsertStaticContent!(
+    const nodes = hostInsertStaticContent!(
       n2.children as string,
       container,
       anchor,
-      isSVG
+      isSVG,
+      // pass cached nodes if the static node is being mounted multiple times
+      // so that runtime-dom can simply cloneNode() instead of inserting new
+      // HTML
+      n2.staticCache
     )
+    // first mount - this is the orignal hoisted vnode. cache nodes.
+    if (!n2.el) {
+      n2.staticCache = nodes
+    }
+    n2.el = nodes[0]
+    n2.anchor = nodes[nodes.length - 1]
   }
 
   /**
@@ -1168,16 +1180,19 @@ function baseCreateRenderer(
 
       // Determine the container (parent element) for the patch.
       const container =
+        // oldVNode may be an errored async setup() component inside Suspense
+        // which will not have a mounted element
+        oldVNode.el &&
         // - In the case of a Fragment, we need to provide the actual parent
         // of the Fragment itself so it can move its children.
-        oldVNode.type === Fragment ||
-        // - In the case of different nodes, there is going to be a replacement
-        // which also requires the correct parent container
-        !isSameVNodeType(oldVNode, newVNode) ||
-        // - In the case of a component, it could contain anything.
-        oldVNode.shapeFlag & ShapeFlags.COMPONENT ||
-        oldVNode.shapeFlag & ShapeFlags.TELEPORT
-          ? hostParentNode(oldVNode.el!)!
+        (oldVNode.type === Fragment ||
+          // - In the case of different nodes, there is going to be a replacement
+          // which also requires the correct parent container
+          !isSameVNodeType(oldVNode, newVNode) ||
+          // - In the case of a component, it could contain anything.
+          oldVNode.shapeFlag & ShapeFlags.COMPONENT ||
+          oldVNode.shapeFlag & ShapeFlags.TELEPORT)
+          ? hostParentNode(oldVNode.el)!
           : // In other cases, the parent container is not actually used so we
             // just pass the block element here to avoid a DOM parentNode call.
             fallbackContainer // 默认退回原先el
@@ -1273,7 +1288,7 @@ function baseCreateRenderer(
 
     // dynamicChildren 动态子节点列表：currentBlock vnode
     let { patchFlag, dynamicChildren, slotScopeIds: fragmentSlotScopeIds } = n2
-    if (patchFlag > 0) {
+    if (dynamicChildren) {
       optimized = true
     }
 
@@ -1426,7 +1441,8 @@ function baseCreateRenderer(
     // 规范组件的props选项属性格式
     // 2.x compat may pre-creaate the component instance before actually
     // mounting
-    const compatMountInstance = __COMPAT__ && initialVNode.component
+    const compatMountInstance =
+      __COMPAT__ && initialVNode.isCompatRoot && initialVNode.component
     const instance: ComponentInternalInstance =
       compatMountInstance ||
       (initialVNode.component = createComponentInstance(
@@ -1602,7 +1618,7 @@ function baseCreateRenderer(
               // which means it won't track dependencies - but it's ok because
               // a server-rendered async wrapper is already in resolved state
               // and it will never need to change.
-              hydrateSubTree
+              () => !instance.isUnmounted && hydrateSubTree()
             )
           } else {
             hydrateSubTree()

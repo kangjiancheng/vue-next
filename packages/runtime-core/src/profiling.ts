@@ -1,4 +1,5 @@
 import { ComponentInternalInstance, formatComponentName } from './component'
+import { devtoolsPerfEnd, devtoolsPerfStart } from './devtools'
 
 let supported: boolean
 let perf: any
@@ -10,6 +11,10 @@ export function startMeasure(
 ) {
   if (instance.appContext.config.performance && isSupported()) {
     perf.mark(`vue-${type}-${instance.uid}`)
+  }
+
+  if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
+    devtoolsPerfStart(instance, type, supported ? perf.now() : Date.now())
   }
 }
 
@@ -25,6 +30,10 @@ export function endMeasure(instance: ComponentInternalInstance, type: string) {
     )
     perf.clearMarks(startTag)
     perf.clearMarks(endTag)
+  }
+
+  if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
+    devtoolsPerfEnd(instance, type, supported ? perf.now() : Date.now())
   }
 }
 
