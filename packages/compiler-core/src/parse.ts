@@ -81,7 +81,7 @@ export const defaultParserOptions: MergedParserOptions = {
     rawText.replace(decodeRE, (_, p1) => decodeMap[p1]),
   onError: defaultOnError,
   onWarn: defaultOnWarn,
-  comments: false
+  comments: __DEV__
 }
 
 export const enum TextModes {
@@ -134,11 +134,16 @@ function createParserContext(
 ): ParserContext {
   // 初始化 解析options
   const options = extend({}, defaultParserOptions)
-  for (const key in rawOptions) {
+
+  let key: keyof ParserOptions
+  for (key in rawOptions) {
     // 为了不影响之前的options
     // 将rawOptions存在值的key 添加到 options：等价于 =》 if (rawOptions[key]) options[key] = rawOptions[key]
     // @ts-ignore
-    options[key] = rawOptions[key] || defaultParserOptions[key]
+    options[key] =
+      rawOptions[key] === undefined
+        ? defaultParserOptions[key]
+        : rawOptions[key]
   }
 
   return {
@@ -318,7 +323,7 @@ function parseChildren(
 
   // 排除 TextModes.RAWTEXT，即标签为：style,iframe,script,noscript
   if (mode !== TextModes.RAWTEXT && mode !== TextModes.RCDATA) {
-    const preserve = context.options.whitespace === 'preserve' // 设置保留空白
+    const shouldCondense = context.options.whitespace !== 'preserve' // 收缩空格
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i]
       if (!context.inPre && node.type === NodeTypes.TEXT) {
@@ -334,9 +339,9 @@ function parseChildren(
           if (
             !prev || // 前边没有相邻元素（首个元素）
             !next || // 后边没有相邻元素（最后元素）
-            (!preserve &&
+            (shouldCondense &&
               (prev.type === NodeTypes.COMMENT || // 前边为注释元素
-              next.type === NodeTypes.COMMENT || // 后边为注释元素
+                next.type === NodeTypes.COMMENT || // 后边为注释元素
                 (prev.type === NodeTypes.ELEMENT && // 前后都有相邻元素，且内容为换行
                   next.type === NodeTypes.ELEMENT &&
                   /[\r\n]/.test(node.content))))
@@ -348,20 +353,16 @@ function parseChildren(
             // 如过一行内的两个元素之间的连续空白，如： template: '{{ foo }}   {{ bar }}'，两个插值节点间的空白
             node.content = ' '
           }
-        } else if (!preserve) {
+        } else if (shouldCondense) {
           // 将文本内容中的连续空格替换成一个空格
           // in condense mode, consecutive whitespaces in text are condensed
           // down to a single space.
           node.content = node.content.replace(/[\t\r\n\f ]+/g, ' ')
         }
       }
-      // also remove comment nodes in prod by default
-      // 默认去掉生产环境下的注释节点
-      if (
-        !__DEV__ &&
-        node.type === NodeTypes.COMMENT &&
-        !context.options.comments
-      ) {
+      // 默认去掉下的注释节点
+      // Remove comment nodes if desired by configuration.
+      else if (node.type === NodeTypes.COMMENT && !context.options.comments) {
         removedWhitespace = true
         nodes[i] = null as any // 删除节点
       }
@@ -546,8 +547,11 @@ function parseElement(
   // 自闭元素 或自闭标签 <br />、<img />、<input /> 等：@vue/shared/src/domTagConfig.ts
   if (element.isSelfClosing || context.options.isVoidTag(element.tag)) {
     // #4030 self-closing <pre> tag
-    if (context.options.isPreTag(element.tag)) {
+    if (isPreBoundary) {
       context.inPre = false
+    }
+    if (isVPreBoundary) {
+      context.inVPre = false
     }
     return element
   }
@@ -685,8 +689,7 @@ function parseTag(
 
   // check <pre> tag
   // 判断 tag === 'pre'
-  const isPreTag = context.options.isPreTag(tag)
-  if (isPreTag) {
+  if (context.options.isPreTag(tag)) {
     context.inPre = true
   }
 
@@ -999,16 +1002,17 @@ function parseAttribute(
 
   // 指令开头必须是：v-、:、@、#
   // context.inVPre 即指令列表存在v-pre指令，则不需要解析（触发时机：当解析完所有指令之后，会判断指令列表中是否有v-pre指令，有则会重新解析一遍所有属性，且把指令属性当做普通html标签属性处理）
-  if (!context.inVPre && /^(v-|:|@|#)/.test(name)) {
+  if (!context.inVPre && /^(v-|:|\.|@|#)/.test(name)) {
     // 指令分类：v-xxx指令、v-xxx:xxx指令、 :[xxx]（参数形式的指令）、:xxx指令
     // 还有：@[xxx]指令、@xxx指令、#[xxx]、#xxx
     // 注意 ':'、 '@'、'#' 后边 不能马上跟 '.'，如：'<span @.click="someHandler"></span>'，此时 match[2] = undefined，match[3] = '@.click'，即只符合 (.+)?
     // 如： template = '<span v-if="true"></span>'，则 name = 'v-if'
     // 如： template = '<span :attr1='true' @[attr2]="false"></span>'，则 name = 'v-if'
     // '?:' 表示不进行捕获这个括号中内容
-    const match = /(?:^v-([a-z0-9-]+))?(?:(?::|^@|^#)(\[[^\]]+\]|[^\.]+))?(.+)?$/i.exec(
-      name
-    )! // 排除 null
+    const match =
+      /(?:^v-([a-z0-9-]+))?(?:(?::|^\.|^@|^#)(\[[^\]]+\]|[^\.]+))?(.+)?$/i.exec(
+        name
+      )! // 排除 null
 
     /**
      * 如属性名name为： 'v-bind:["指令参数(如click或change)"].prevent'  或者 '#header' 或 '@click'
@@ -1025,9 +1029,14 @@ function parseAttribute(
      *        '@' 开头代表 'on'
      *        '#' 开头代表 'slot'，此为默认，如：template: '<span #header="nav"></span>'，则 dirName = 'slot'
      */
+    let isPropShorthand = startsWith(name, '.')
     let dirName =
       match[1] ||
-      (startsWith(name, ':') ? 'bind' : startsWith(name, '@') ? 'on' : 'slot')
+      (isPropShorthand || startsWith(name, ':')
+        ? 'bind'
+        : startsWith(name, '@')
+        ? 'on'
+        : 'slot')
 
     // 指令属性名节点/指令名表达式，match[2]，如 @click.prevent 中的 'click'；
     // 注意 动态指令时，不能是 @['click']，指令名不可以有 ' " < 这3个字符，必须是个变量
@@ -1099,6 +1108,7 @@ function parseAttribute(
     }
 
     const modifiers = match[3] ? match[3].substr(1).split('.') : []
+    if (isPropShorthand) modifiers.push('prop')
 
     // 2.x compat v-bind:foo.sync -> v-model:foo
     if (__COMPAT__ && dirName === 'bind' && arg) {

@@ -50,19 +50,18 @@ function createArrayInstrumentations() {
   // instrument identity-sensitive Array methods to account for possible reactive
   // values
   ;(['includes', 'indexOf', 'lastIndexOf'] as const).forEach(key => {
-    const method = Array.prototype[key] as any
-    instrumentations[key] = function(this: unknown[], ...args: unknown[]) {
-      const arr = toRaw(this)
+    instrumentations[key] = function (this: unknown[], ...args: unknown[]) {
+      const arr = toRaw(this) as any
       for (let i = 0, l = this.length; i < l; i++) {
         // 访问数据时，并进行跟踪数组，指定跟踪索引
         track(arr, TrackOpTypes.GET, i + '')
       }
       // 执行数组方法
       // we run the method using the original args first (which may be reactive)
-      const res = method.apply(arr, args)
+      const res = arr[key](...args)
       if (res === -1 || res === false) {
         // if that didn't work, run it again using raw values.
-        return method.apply(arr, args.map(toRaw))
+        return arr[key](...args.map(toRaw))
       } else {
         return res
       }
@@ -71,13 +70,12 @@ function createArrayInstrumentations() {
   // instrument length-altering mutation methods to avoid length being tracked
   // which leads to infinite loops in some cases (#2137)
   ;(['push', 'pop', 'shift', 'unshift', 'splice'] as const).forEach(key => {
-    const method = Array.prototype[key] as any
     // 重新封装array这些方法
-    instrumentations[key] = function(this: unknown[], ...args: unknown[]) {
+    instrumentations[key] = function (this: unknown[], ...args: unknown[]) {
       // 开始执行这些方法时：停止跟踪数据变化，避免因数组长度变化而导致的无限更新
       pauseTracking()
       // 会触发数组对象proxy: 先触发get获取操作索引；再触发set进行设值，并触发依赖更新（类型ADD)
-      const res = method.apply(this, args)
+      const res = (toRaw(this) as any)[key].apply(this, args)
       resetTracking()
       return res
     }
@@ -101,8 +99,8 @@ function createGetter(isReadonly = false, shallow = false) {
             ? shallowReadonlyMap
             : readonlyMap
           : shallow
-            ? shallowReactiveMap
-            : reactiveMap
+          ? shallowReactiveMap
+          : reactiveMap
         ).get(target)
     ) {
       // 访问 原生对象

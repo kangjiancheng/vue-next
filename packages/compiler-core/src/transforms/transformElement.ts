@@ -37,11 +37,15 @@ import {
   RESOLVE_COMPONENT,
   RESOLVE_DYNAMIC_COMPONENT,
   MERGE_PROPS,
+  NORMALIZE_CLASS,
+  NORMALIZE_STYLE,
+  NORMALIZE_PROPS,
   TO_HANDLERS,
   TELEPORT,
   KEEP_ALIVE,
   SUSPENSE,
-  UNREF
+  UNREF,
+  GUARD_REACTIVE_PROPS
 } from '../runtimeHelpers'
 import {
   getInnerRange,
@@ -299,6 +303,7 @@ export const transformElement: NodeTransform = (node, context) => {
       vnodeDirectives, // 需要在运行时，重新处理的指令，如：v-model、v-show、用户自定义指令
       !!shouldUseBlock, // 是否使用block，如：动态is组件或TELEPORT或SUSPENSE；或是非组件当是特殊标签如svg，普通元素绑定了动态 :key； 或是 keep-alive组件，注意for节点/if节点(transform vIf)、root节点（transform createRootCodegen）
       false /* disableTracking */, // 默认 false
+      isComponent,
       node.loc
     )
   }
@@ -376,6 +381,13 @@ export function resolveComponentType(
     const fromSetup = resolveSetupReference(tag, context)
     if (fromSetup) {
       return fromSetup
+    }
+    const dotIndex = tag.indexOf('.')
+    if (dotIndex > 0) {
+      const ns = resolveSetupReference(tag.slice(0, dotIndex), context)
+      if (ns) {
+        return ns + tag.slice(dotIndex)
+      }
     }
   }
   // TODO: analyze cfs
@@ -528,13 +540,22 @@ export function buildProps(
 
       if (name === 'ref') {
         hasRef = true
-      } else if (name === 'class' && !isComponent) {
+      } else if (name === 'class') {
         hasClassBinding = true
-      } else if (name === 'style' && !isComponent) {
+      } else if (name === 'style') {
         hasStyleBinding = true
       } else if (name !== 'key' && !dynamicPropNames.includes(name)) {
         // 静态指令属性名列表
         // 注意： v-model，template: '<input v-model="textInput" />'，v-model属性值节点的prop，key.content='onUpdate:modelValue'
+        dynamicPropNames.push(name)
+      }
+
+      // treat the dynamic class and style binding of the component as dynamic props
+      if (
+        isComponent &&
+        (name === 'class' || name === 'style') &&
+        !dynamicPropNames.includes(name)
+      ) {
         dynamicPropNames.push(name)
       }
     } else {
@@ -615,9 +636,10 @@ export function buildProps(
         }
         continue
       }
-      // skip v-once - it is handled by its dedicated transform.
-      // // v-once 有专门的transform插件处理
-      if (name === 'once') {
+
+      // skip v-once/v-memo - they are handled by dedicated transforms.
+      // v-once 有专门的transform插件处理
+      if (name === 'once' || name === 'memo') {
         continue
       }
       // skip v-is and :is on <component>
@@ -625,7 +647,7 @@ export function buildProps(
       if (
         name === 'is' ||
         (isVBind &&
-        isBindKey(arg, 'is') && // 绑定静态is属性，如 <component :is='HelloWold' />
+          isBindKey(arg, 'is') && // 绑定静态is属性，如 <component :is='HelloWold' />
           (isComponentTag(tag) ||
             (__COMPAT__ &&
               isCompatEnabled(
@@ -853,12 +875,11 @@ export function buildProps(
     // 存在动态指令参数 或 v-on/v-bind（无参数）指令
     patchFlag |= PatchFlags.FULL_PROPS
   } else {
-    // 否则，只针对部分patch
-    if (hasClassBinding) {
+    if (hasClassBinding && !isComponent) {
       // 存在class属性，非组件
       patchFlag |= PatchFlags.CLASS
     }
-    if (hasStyleBinding) {
+    if (hasStyleBinding && !isComponent) {
       // 存在v-bind:style属性，非组件
       patchFlag |= PatchFlags.STYLE
     }
@@ -877,6 +898,80 @@ export function buildProps(
     (hasRef || hasVnodeHook || runtimeDirectives.length > 0)
   ) {
     patchFlag |= PatchFlags.NEED_PATCH
+  }
+
+  // pre-normalize props, SSR is skipped for now
+  if (!context.inSSR && propsExpression) {
+    switch (propsExpression.type) {
+      case NodeTypes.JS_OBJECT_EXPRESSION:
+        // means that there is no v-bind,
+        // but still need to deal with dynamic key binding
+        let classKeyIndex = -1
+        let styleKeyIndex = -1
+        let hasDynamicKey = false
+
+        for (let i = 0; i < propsExpression.properties.length; i++) {
+          const key = propsExpression.properties[i].key
+          if (isStaticExp(key)) {
+            if (key.content === 'class') {
+              classKeyIndex = i
+            } else if (key.content === 'style') {
+              styleKeyIndex = i
+            }
+          } else if (!key.isHandlerKey) {
+            hasDynamicKey = true
+          }
+        }
+
+        const classProp = propsExpression.properties[classKeyIndex]
+        const styleProp = propsExpression.properties[styleKeyIndex]
+
+        // no dynamic key
+        if (!hasDynamicKey) {
+          if (classProp && !isStaticExp(classProp.value)) {
+            classProp.value = createCallExpression(
+              context.helper(NORMALIZE_CLASS),
+              [classProp.value]
+            )
+          }
+          if (
+            styleProp &&
+            !isStaticExp(styleProp.value) &&
+            // the static style is compiled into an object,
+            // so use `hasStyleBinding` to ensure that it is a dynamic style binding
+            (hasStyleBinding ||
+              // v-bind:style and style both exist,
+              // v-bind:style with static literal object
+              styleProp.value.type === NodeTypes.JS_ARRAY_EXPRESSION)
+          ) {
+            styleProp.value = createCallExpression(
+              context.helper(NORMALIZE_STYLE),
+              [styleProp.value]
+            )
+          }
+        } else {
+          // dynamic key binding, wrap with `normalizeProps`
+          propsExpression = createCallExpression(
+            context.helper(NORMALIZE_PROPS),
+            [propsExpression]
+          )
+        }
+        break
+      case NodeTypes.JS_CALL_EXPRESSION:
+        // mergeProps call, do nothing
+        break
+      default:
+        // single v-bind
+        propsExpression = createCallExpression(
+          context.helper(NORMALIZE_PROPS),
+          [
+            createCallExpression(context.helper(GUARD_REACTIVE_PROPS), [
+              propsExpression
+            ])
+          ]
+        )
+        break
+    }
   }
 
   return {

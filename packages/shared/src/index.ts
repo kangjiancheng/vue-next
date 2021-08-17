@@ -120,14 +120,12 @@ const camelizeRE = /-(\w)/g
  * 短横线 转换为 小驼峰：camelCase
  * @private
  */
-export const camelize = cacheStringFunction(
-  (str: string): string => {
-    // _ : 匹配到的字符串
-    // c : 捕获组1
-    // 表示把 捕获组c 进行 首字母大写，返回并替换 匹配到的字符串 _
-    return str.replace(camelizeRE, (_, c) => (c ? c.toUpperCase() : ''))
-  }
-)
+export const camelize = cacheStringFunction((str: string): string => {
+  // _ : 匹配到的字符串
+  // c : 捕获组1
+  // 表示把 捕获组c 进行 首字母大写，返回并替换 匹配到的字符串 _
+  return str.replace(camelizeRE, (_, c) => (c ? c.toUpperCase() : ''))
+})
 
 // 匹配非单词边界中的大写字母
 const hyphenateRE = /\B([A-Z])/g
@@ -150,14 +148,14 @@ export const capitalize = cacheStringFunction(
 /**
  * @private 添加事件前缀 on，并大写第一个字母
  */
-export const toHandlerKey = cacheStringFunction(
-  (str: string) => (str ? `on${capitalize(str)}` : ``)
+export const toHandlerKey = cacheStringFunction((str: string) =>
+  str ? `on${capitalize(str)}` : ``
 )
 
 // compare whether a value has changed, accounting for NaN.
 // 特殊值：NaN，如果两个都是NaN，也是 不变 （NaN !== NaN 为 true，NaN === NaN 为 false）
 export const hasChanged = (value: any, oldValue: any): boolean =>
-  value !== oldValue && (value === value || oldValue === oldValue)
+  !Object.is(value, oldValue)
 
 export const invokeArrayFns = (fns: Function[], arg?: any) => {
   for (let i = 0; i < fns.length; i++) {
@@ -188,11 +186,11 @@ export const getGlobalThis = (): any => {
       typeof globalThis !== 'undefined'
         ? globalThis
         : typeof self !== 'undefined'
-          ? self
-          : typeof window !== 'undefined'
-            ? window
-            : typeof global !== 'undefined'
-              ? global
-              : {})
+        ? self
+        : typeof window !== 'undefined'
+        ? window
+        : typeof global !== 'undefined'
+        ? global
+        : {})
   )
 }

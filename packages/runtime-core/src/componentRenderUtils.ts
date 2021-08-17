@@ -158,10 +158,7 @@ export function renderComponentRoot(
       const keys = Object.keys(fallthroughAttrs)
       const { shapeFlag } = root
       if (keys.length) {
-        if (
-          shapeFlag & ShapeFlags.ELEMENT ||
-          shapeFlag & ShapeFlags.COMPONENT
-        ) {
+        if (shapeFlag & (ShapeFlags.ELEMENT | ShapeFlags.COMPONENT)) {
           // vnode节点上有形如："onUpdate:xxx"的属性props，即attrs属性列表里 是否存在 'onUpdate:' 开头的属性
           // 如 <hello-world v-model="helloMsg"></hello-world>
           if (propsOptions && keys.some(isModelListener)) {
@@ -221,8 +218,7 @@ export function renderComponentRoot(
       __COMPAT__ &&
       isCompatEnabled(DeprecationTypes.INSTANCE_ATTRS_CLASS_STYLE, instance) &&
       vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT &&
-      (root.shapeFlag & ShapeFlags.ELEMENT ||
-        root.shapeFlag & ShapeFlags.COMPONENT)
+      root.shapeFlag & (ShapeFlags.ELEMENT | ShapeFlags.COMPONENT)
     ) {
       const { class: cls, style } = vnode.props || {}
       if (cls || style) {
@@ -356,8 +352,7 @@ const filterModelListeners = (attrs: Data, props: NormalizedProps): Data => {
 
 const isElementRoot = (vnode: VNode) => {
   return (
-    vnode.shapeFlag & ShapeFlags.COMPONENT ||
-    vnode.shapeFlag & ShapeFlags.ELEMENT ||
+    vnode.shapeFlag & (ShapeFlags.COMPONENT | ShapeFlags.ELEMENT) ||
     vnode.type === Comment // potential v-if branch switch
   )
 }

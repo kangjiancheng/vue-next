@@ -45,8 +45,12 @@ interface CompiledSlotDescriptor {
 // 处理动态slot列表
 export function createSlots(
   slots: Record<string, Slot>, // 静态slots列表对象
-  dynamicSlots: (// 动态slots列表
-  CompiledSlotDescriptor | CompiledSlotDescriptor[] | undefined)[]
+  dynamicSlots: (
+    | // 动态slots列表
+    CompiledSlotDescriptor
+    | CompiledSlotDescriptor[]
+    | undefined
+  )[]
 ): Record<string, Slot> {
   for (let i = 0; i < dynamicSlots.length; i++) {
     const slot = dynamicSlots[i]

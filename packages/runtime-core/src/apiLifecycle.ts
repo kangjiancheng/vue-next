@@ -3,7 +3,8 @@ import {
   currentInstance,
   isInSSRComponentSetup,
   LifecycleHooks,
-  setCurrentInstance
+  setCurrentInstance,
+  unsetCurrentInstance
 } from './component'
 import { ComponentPublicInstance } from './componentPublicInstance'
 import { callWithAsyncErrorHandling, ErrorTypeStrings } from './errorHandling'
@@ -42,7 +43,7 @@ export function injectHook(
         // can only be false when the user does something really funky.
         setCurrentInstance(target)
         const res = callWithAsyncErrorHandling(hook, target, type, args) // 开始执行生命周期函数
-        setCurrentInstance(null)
+        unsetCurrentInstance()
         resetTracking()
         return res
       })
@@ -67,15 +68,15 @@ export function injectHook(
 }
 
 // 创建生命周期函数
-export const createHook = <T extends Function = () => any>(
-  lifecycle: LifecycleHooks
-) => (
-  hook: T,
-  target: ComponentInternalInstance | null = currentInstance // currentInstance 当前组件实例
-) =>
-  // post-create lifecycle registrations are noops during SSR (except for serverPrefetch)
-  (!isInSSRComponentSetup || lifecycle === LifecycleHooks.SERVER_PREFETCH) &&
-  injectHook(lifecycle, hook, target) // 向组件实例添加生命周期函数
+export const createHook =
+  <T extends Function = () => any>(lifecycle: LifecycleHooks) =>
+  (
+    hook: T,
+    target: ComponentInternalInstance | null = currentInstance // currentInstance 当前组件实例
+  ) =>
+    // post-create lifecycle registrations are noops during SSR (except for serverPrefetch)
+    (!isInSSRComponentSetup || lifecycle === LifecycleHooks.SERVER_PREFETCH) &&
+    injectHook(lifecycle, hook, target) // 向组件实例添加生命周期函数
 
 // 执行组件的渲染函数之前
 export const onBeforeMount = createHook(LifecycleHooks.BEFORE_MOUNT)

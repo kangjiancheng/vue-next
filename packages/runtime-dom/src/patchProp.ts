@@ -12,10 +12,6 @@ const nativeOnRE = /^on[a-z]/
 
 type DOMRendererOptions = RendererOptions<Node, Element>
 
-// 必须更新的dom节点属性
-export const forcePatchProp: DOMRendererOptions['forcePatchProp'] = (_, key) =>
-  key === 'value'
-
 // 添加或更新 vnode dom实例el 的prop属性
 // 当属性值发生变化 会触发更新， dom的value属性强制更新
 export const patchProp: DOMRendererOptions['patchProp'] = (
@@ -29,48 +25,47 @@ export const patchProp: DOMRendererOptions['patchProp'] = (
   parentSuspense,
   unmountChildren
 ) => {
-  switch (key) {
-    // special
-    case 'class': // 添加 class属性
-      patchClass(el, nextValue, isSVG)
-      break
-    case 'style': // 添加 style属性
-      patchStyle(el, prevValue, nextValue)
-      break
-    default:
-      if (isOn(key)) {
-        // 添加 on开头的vue事件属性
-        // ignore v-model listeners
-        if (!isModelListener(key)) {
-          // 忽略 onUpdate:xxx 事件
-          // 为el绑定事件及事件处理函数
-          patchEvent(el, key, prevValue, nextValue, parentComponent)
-        }
-      } else if (shouldSetAsProp(el, key, nextValue, isSVG)) {
-        // dom 实例属性，如： innerHTML、id
-        patchDOMProp(
-          el,
-          key,
-          nextValue,
-          prevChildren,
-          parentComponent,
-          parentSuspense,
-          unmountChildren
-        )
-      } else {
-        // dom 标签属性(即一些非dom实例属性)： 即直接添加到标签到属性列表上，如value 或 一些自定义到属性 data-xxx
-        // special case for <input v-model type="checkbox"> with
-        // :true-value & :false-value
-        // store value as dom properties since non-string values will be
-        // stringified.
-        if (key === 'true-value') {
-          ;(el as any)._trueValue = nextValue
-        } else if (key === 'false-value') {
-          ;(el as any)._falseValue = nextValue
-        }
-        patchAttr(el, key, nextValue, isSVG, parentComponent)
-      }
-      break
+  if (key === 'class') {
+    patchClass(el, nextValue, isSVG) // 添加 class属性
+  } else if (key === 'style') {
+    patchStyle(el, prevValue, nextValue) // 添加 style属性
+  } else if (isOn(key)) {
+    // 添加 on开头的vue事件属性
+    // ignore v-model listeners
+    if (!isModelListener(key)) {
+      // 忽略 onUpdate:xxx 事件
+      // 为el绑定事件及事件处理函数
+      patchEvent(el, key, prevValue, nextValue, parentComponent)
+    }
+  } else if (
+    key[0] === '.'
+      ? ((key = key.slice(1)), true)
+      : key[0] === '^'
+      ? ((key = key.slice(1)), false)
+      : shouldSetAsProp(el, key, nextValue, isSVG)
+  ) {
+    // dom 实例属性，如： innerHTML、id
+    patchDOMProp(
+      el,
+      key,
+      nextValue,
+      prevChildren,
+      parentComponent,
+      parentSuspense,
+      unmountChildren
+    )
+  } else {
+    // dom 标签属性(即一些非dom实例属性)： 即直接添加到标签到属性列表上，如value 或 一些自定义到属性 data-xxx
+    // special case for <input v-model type="checkbox"> with
+    // :true-value & :false-value
+    // store value as dom properties since non-string values will be
+    // stringified.
+    if (key === 'true-value') {
+      ;(el as any)._trueValue = nextValue
+    } else if (key === 'false-value') {
+      ;(el as any)._falseValue = nextValue
+    }
+    patchAttr(el, key, nextValue, isSVG, parentComponent)
   }
 }
 
@@ -83,8 +78,8 @@ function shouldSetAsProp(
 ) {
   if (isSVG) {
     // most keys must be set as attribute on svg elements to work
-    // ...except innerHTML
-    if (key === 'innerHTML') {
+    // ...except innerHTML & textContent
+    if (key === 'innerHTML' || key === 'textContent') {
       return true
     }
     // or native onclick with function values

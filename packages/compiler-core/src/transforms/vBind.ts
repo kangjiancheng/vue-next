@@ -1,5 +1,10 @@
 import { DirectiveTransform } from '../transform'
-import { createObjectProperty, createSimpleExpression, NodeTypes } from '../ast'
+import {
+  createObjectProperty,
+  createSimpleExpression,
+  ExpressionNode,
+  NodeTypes
+} from '../ast'
 import { createCompilerError, ErrorCodes } from '../errors'
 import { camelize } from '@vue/shared'
 import { CAMELIZE } from '../runtimeHelpers'
@@ -52,6 +57,14 @@ export const transformBind: DirectiveTransform = (dir, _node, context) => {
   }
 
   // 属性值 校验
+  if (!context.inSSR) {
+    if (modifiers.includes('prop')) {
+      injectPrefix(arg, '.')
+    }
+    if (modifiers.includes('attr')) {
+      injectPrefix(arg, '^')
+    }
+  }
 
   if (
     !exp || // 属性值不存在
@@ -59,11 +72,24 @@ export const transformBind: DirectiveTransform = (dir, _node, context) => {
   ) {
     context.onError(createCompilerError(ErrorCodes.X_V_BIND_NO_EXPRESSION, loc)) // 需要设置属性值
     return {
-      props: [createObjectProperty(arg!, createSimpleExpression('', true, loc))] // 临时创建节点，属性值内容为空
+      props: [createObjectProperty(arg, createSimpleExpression('', true, loc))] // 临时创建节点，属性值内容为空
     }
   }
 
   return {
-    props: [createObjectProperty(arg!, exp)] // 返回转换后的属性列表
+    props: [createObjectProperty(arg, exp)] // 返回转换后的属性列表
+  }
+}
+
+const injectPrefix = (arg: ExpressionNode, prefix: string) => {
+  if (arg.type === NodeTypes.SIMPLE_EXPRESSION) {
+    if (arg.isStatic) {
+      arg.content = prefix + arg.content
+    } else {
+      arg.content = `\`${prefix}\${${arg.content}}\``
+    }
+  } else {
+    arg.children.unshift(`'${prefix}' + (`)
+    arg.children.push(`)`)
   }
 }

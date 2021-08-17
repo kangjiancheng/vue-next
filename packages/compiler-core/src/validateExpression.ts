@@ -18,7 +18,8 @@ const prohibitedKeywordRE = new RegExp(
 )
 
 // strip strings in expressions
-const stripStringRE = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*\$\{|\}(?:[^`\\]|\\.)*`|`(?:[^`\\]|\\.)*`/g
+const stripStringRE =
+  /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*\$\{|\}(?:[^`\\]|\\.)*`|`(?:[^`\\]|\\.)*`/g
 
 /**
  * 校验在浏览器环境下，表达式值的js语法是否规范：指令值表达式、动态指令参数表达式、插值表达式等
@@ -56,9 +57,7 @@ export function validateBrowserExpression(
       .match(prohibitedKeywordRE)
     if (keywordMatch) {
       // 如  <button @click="if (count > 1) count++ "></button>， 在上方 new Function() 时，会接在 return 关键字之后
-      message = `avoid using JavaScript keyword as property name: "${
-        keywordMatch[0]
-      }"`
+      message = `avoid using JavaScript keyword as property name: "${keywordMatch[0]}"`
     }
     context.onError(
       createCompilerError(

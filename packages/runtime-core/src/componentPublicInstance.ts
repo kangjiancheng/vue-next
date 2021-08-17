@@ -16,7 +16,6 @@ import {
   isFunction
 } from '@vue/shared'
 import {
-  ReactiveEffect,
   toRaw,
   shallowReadonly,
   track,
@@ -72,7 +71,9 @@ import { installCompatInstanceProperties } from './compat/instance'
 export interface ComponentCustomProperties {}
 
 type IsDefaultMixinComponent<T> = T extends ComponentOptionsMixin
-  ? ComponentOptionsMixin extends T ? true : false
+  ? ComponentOptionsMixin extends T
+    ? true
+    : false
   : false
 
 type MixinToOptionTypes<T> = T extends ComponentOptionsBase<
@@ -190,7 +191,7 @@ export type ComponentPublicInstance<
   $emit: EmitFn<E>
   $el: any
   $options: Options & MergedComponentOptionsOverride
-  $forceUpdate: ReactiveEffect
+  $forceUpdate: () => void
   $nextTick: typeof nextTick
   $watch(
     source: string | Function,
@@ -223,7 +224,7 @@ const getPublicInstance = (
 }
 
 // instance.ctx: 公开组件实例部分属性与方法
-export const publicPropertiesMap: PublicPropertiesMap = extend(
+export const publicPropertiesMap: PublicPropertiesMap = /*#__PURE__*/ extend(
   Object.create(null),
   {
     // i 为component实例: instance
@@ -266,15 +267,8 @@ export interface ComponentRenderContext {
 export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
   // 访问instance.ctx的属性: key
   get({ _: instance }: ComponentRenderContext, key: string) {
-    const {
-      ctx,
-      setupState,
-      data,
-      props,
-      accessCache,
-      type,
-      appContext
-    } = instance
+    const { ctx, setupState, data, props, accessCache, type, appContext } =
+      instance
 
     // for internal formatters to know that this is a Vue instance
     if (__DEV__ && key === '__isVue') {
@@ -492,7 +486,7 @@ if (__DEV__ && !__TEST__) {
 }
 
 // 编译vue模版的render函数：instance.withProxy
-export const RuntimeCompiledPublicInstanceProxyHandlers = extend(
+export const RuntimeCompiledPublicInstanceProxyHandlers = /*#__PURE__*/ extend(
   {},
   PublicInstanceProxyHandlers,
   {
@@ -521,10 +515,11 @@ export const RuntimeCompiledPublicInstanceProxyHandlers = extend(
 )
 
 // 创建组件实例的上下文，包含：组件本身实例、组件公开的属性、app上下文的全局属性
+// dev only
 // In dev mode, the proxy target exposes the same properties as seen on `this`
 // for easier console inspection. In prod mode it will be an empty object so
 // these properties definitions can be skipped.
-export function createRenderContext(instance: ComponentInternalInstance) {
+export function createDevRenderContext(instance: ComponentInternalInstance) {
   const target: Record<string, any> = {}
 
   // expose internal instance for proxy handlers

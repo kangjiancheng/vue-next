@@ -1,21 +1,23 @@
 import { VNode, VNodeChild, isVNode } from './vnode'
 import {
-  ReactiveEffect,
   pauseTracking,
   resetTracking,
   shallowReadonly,
   proxyRefs,
-  markRaw
+  EffectScope,
+  markRaw,
+  track,
+  TrackOpTypes
 } from '@vue/reactivity'
 import {
   ComponentPublicInstance,
   PublicInstanceProxyHandlers,
-  RuntimeCompiledPublicInstanceProxyHandlers,
-  createRenderContext,
+  createDevRenderContext,
   exposePropsOnRenderContext,
   exposeSetupStateOnRenderContext,
   ComponentPublicInstanceConstructor,
-  publicPropertiesMap
+  publicPropertiesMap,
+  RuntimeCompiledPublicInstanceProxyHandlers
 } from './componentPublicInstance'
 import {
   ComponentPropsOptions,
@@ -59,6 +61,7 @@ import { currentRenderingInstance } from './componentRenderContext'
 import { startMeasure, endMeasure } from './profiling'
 import { convertLegacyRenderFn } from './compat/renderFn'
 import { globalCompatConfig, validateCompatConfig } from './compat/compatConfig'
+import { SchedulerJob } from './scheduler'
 
 export type Data = Record<string, unknown>
 
@@ -217,9 +220,9 @@ export interface ComponentInternalInstance {
    */
   subTree: VNode
   /**
-   * The reactive effect for rendering and patching the component. Callable.
+   * Bound effect runner to be passed to schedulers
    */
-  update: ReactiveEffect
+  update: SchedulerJob
   /**
    * The render function that returns vdom tree.
    * @internal
@@ -240,7 +243,7 @@ export interface ComponentInternalInstance {
    * so that they can be automatically stopped on component unmount
    * @internal
    */
-  effects: ReactiveEffect[] | null
+  scope: EffectScope
   /**
    * cache for proxy access type to avoid hasOwnProperty calls
    * @internal
@@ -278,12 +281,19 @@ export interface ComponentInternalInstance {
    * @internal
    */
   emitsOptions: ObjectEmitsOptions | null
-
   /**
    * resolved inheritAttrs options
    * @internal
    */
   inheritAttrs?: boolean
+  /**
+   * is custom element?
+   */
+  isCE?: boolean
+  /**
+   * custom element specific HMR method
+   */
+  ceReload?: (newStyles?: string[]) => void
 
   // the rest are only for stateful components ---------------------------------
 
@@ -449,12 +459,12 @@ export function createComponentInstance(
     next: null, // 更新组件时：组件新的渲染模版vnode
     subTree: null!, // 组件渲染模版的vnode， will be set synchronously right after creation
     update: null!, // will be set synchronously right after creation
+    scope: new EffectScope(true /* detached */),
     render: null,
     proxy: null, // instance.ctx  =》PublicInstanceProxyHandlers
     exposed: null,
     exposeProxy: null,
     withProxy: null, // instance.ctx =》有vue模版编译得到的渲染函数 RuntimeCompiledPublicInstanceProxyHandlers
-    effects: null,
     provides: parent ? parent.provides : Object.create(appContext.provides),
     accessCache: null!,
     renderCache: [],
@@ -469,7 +479,7 @@ export function createComponentInstance(
     emitsOptions: normalizeEmitsOptions(type, appContext),
 
     // emit
-    emit: null as any, // to be set immediately
+    emit: null!, // to be set immediately
     emitted: null,
 
     // props default value
@@ -517,12 +527,17 @@ export function createComponentInstance(
   }
   if (__DEV__) {
     // 组件实例的上下文，包含：组件本身实例、组件公开的属性与方法、app全局配置
-    instance.ctx = createRenderContext(instance)
+    instance.ctx = createDevRenderContext(instance)
   } else {
     instance.ctx = { _: instance }
   }
   instance.root = parent ? parent.root : instance // 绑定 root根组件的实例信息
   instance.emit = emit.bind(null, instance) // 组件实例的emit
+
+  // apply custom element special handling
+  if (vnode.ce) {
+    vnode.ce(instance)
+  }
 
   return instance
 }
@@ -532,10 +547,14 @@ export let currentInstance: ComponentInternalInstance | null = null
 export const getCurrentInstance: () => ComponentInternalInstance | null = () =>
   currentInstance || currentRenderingInstance
 
-export const setCurrentInstance = (
-  instance: ComponentInternalInstance | null
-) => {
+export const setCurrentInstance = (instance: ComponentInternalInstance) => {
   currentInstance = instance
+  instance.scope.on()
+}
+
+export const unsetCurrentInstance = () => {
+  currentInstance && currentInstance.scope.off()
+  currentInstance = null
 }
 
 const isBuiltInTag = /*#__PURE__*/ makeMap('slot,component')
@@ -645,8 +664,7 @@ function setupStatefulComponent(
     const setupContext = (instance.setupContext =
       setup.length > 1 ? createSetupContext(instance) : null)
 
-    currentInstance = instance // 当前正在挂载的组件实例
-
+    setCurrentInstance(instance) // 当前正在挂载的组件实例
     // 在执行setup期间，停止对setup 内部数据变化的跟踪与收集
     pauseTracking()
 
@@ -661,14 +679,11 @@ function setupStatefulComponent(
 
     // 恢复跟踪
     resetTracking()
-    currentInstance = null
+    unsetCurrentInstance()
 
     // 客户端未实现 Promise
     if (isPromise(setupResult)) {
-      const unsetInstance = () => {
-        currentInstance = null
-      }
-      setupResult.then(unsetInstance, unsetInstance)
+      setupResult.then(unsetCurrentInstance, unsetCurrentInstance)
 
       if (isSSR) {
         // return the promise so server-renderer can wait on it
@@ -757,9 +772,7 @@ type CompileFunction = (
 
 // Vue 模版源码的编译器，生成渲染函数render
 let compile: CompileFunction | undefined
-
-// dev only
-export const isRuntimeOnly = () => !compile
+let installWithProxy: (i: ComponentInternalInstance) => void
 
 /**
  * For runtime-dom to register the compiler.
@@ -768,9 +781,17 @@ export const isRuntimeOnly = () => !compile
 // 在 packages/vue/src/index.ts 时，调用执行赋值
 export function registerRuntimeCompiler(_compile: any) {
   compile = _compile
+  installWithProxy = i => {
+    if (i.render!._rc) {
+      i.withProxy = new Proxy(i.ctx, RuntimeCompiledPublicInstanceProxyHandlers)
+    }
+  }
 }
 
 // 设置组件的 render方法
+// dev only
+export const isRuntimeOnly = () => !compile
+
 export function finishComponentSetup(
   instance: ComponentInternalInstance,
   isSSR: boolean,
@@ -812,10 +833,8 @@ export function finishComponentSetup(
           startMeasure(instance, `compile`)
         }
         const { isCustomElement, compilerOptions } = instance.appContext.config
-        const {
-          delimiters,
-          compilerOptions: componentCompilerOptions
-        } = Component
+        const { delimiters, compilerOptions: componentCompilerOptions } =
+          Component
         const finalCompilerOptions: CompilerOptions = extend(
           extend(
             {
@@ -846,12 +865,9 @@ export function finishComponentSetup(
     // for runtime-compiled render functions using `with` blocks, the render
     // proxy used needs a different `has` handler which is more performant and
     // also only allows a whitelist of globals to fallthrough.
-    if (instance.render._rc) {
-      // render的上下文ctx: 通过编译vue模版得到的渲染函数，渲染函数带有with作用域，需要引入has、get拦截方法
-      instance.withProxy = new Proxy(
-        instance.ctx,
-        RuntimeCompiledPublicInstanceProxyHandlers
-      )
+    // render的上下文ctx: 通过编译vue模版得到的渲染函数，渲染函数带有with作用域，需要引入has、get拦截方法
+    if (installWithProxy) {
+      installWithProxy(instance)
     }
   }
 
@@ -860,11 +876,11 @@ export function finishComponentSetup(
   // support for 2.x options
   // rollup: isBundlerESMBuild ? `__VUE_OPTIONS_API__` : true
   if (__FEATURE_OPTIONS_API__ && !(__COMPAT__ && skipOptions)) {
-    currentInstance = instance
+    setCurrentInstance(instance)
     pauseTracking()
     applyOptions(instance)
     resetTracking()
-    currentInstance = null
+    unsetCurrentInstance()
   }
 
   // warn missing template/render
@@ -879,10 +895,10 @@ export function finishComponentSetup(
           (__ESM_BUNDLER__
             ? ` Configure your bundler to alias "vue" to "vue/dist/vue.esm-bundler.js".`
             : __ESM_BROWSER__
-              ? ` Use "vue.esm-browser.js" instead.`
-              : __GLOBAL__
-                ? ` Use "vue.global.js" instead.`
-                : ``) /* should not happen */
+            ? ` Use "vue.esm-browser.js" instead.`
+            : __GLOBAL__
+            ? ` Use "vue.global.js" instead.`
+            : ``) /* should not happen */
       )
     } else {
       warn(`Component is missing template or render function.`)
@@ -890,19 +906,32 @@ export function finishComponentSetup(
   }
 }
 
-const attrDevProxyHandlers: ProxyHandler<Data> = {
-  get: (target, key: string) => {
-    markAttrsAccessed()
-    return target[key]
-  },
-  set: () => {
-    warn(`setupContext.attrs is readonly.`)
-    return false
-  },
-  deleteProperty: () => {
-    warn(`setupContext.attrs is readonly.`)
-    return false
-  }
+function createAttrsProxy(instance: ComponentInternalInstance): Data {
+  return new Proxy(
+    instance.attrs,
+    __DEV__
+      ? {
+          get(target, key: string) {
+            markAttrsAccessed()
+            track(instance, TrackOpTypes.GET, '$attrs')
+            return target[key]
+          },
+          set() {
+            warn(`setupContext.attrs is readonly.`)
+            return false
+          },
+          deleteProperty() {
+            warn(`setupContext.attrs is readonly.`)
+            return false
+          }
+        }
+      : {
+          get(target, key: string) {
+            track(instance, TrackOpTypes.GET, '$attrs')
+            return target[key]
+          }
+        }
+  )
 }
 
 // 设置组件的setup方法的上下文
@@ -916,15 +945,13 @@ export function createSetupContext(
     instance.exposed = exposed || {}
   }
 
+  let attrs: Data
   if (__DEV__) {
-    let attrs: Data
     // We use getters in dev in case libs like test-utils overwrite instance
     // properties (overwrites should not be done in prod)
     return Object.freeze({
       get attrs() {
-        return (
-          attrs || (attrs = new Proxy(instance.attrs, attrDevProxyHandlers))
-        )
+        return attrs || (attrs = createAttrsProxy(instance))
       },
       get slots() {
         return shallowReadonly(instance.slots)
@@ -936,7 +963,9 @@ export function createSetupContext(
     })
   } else {
     return {
-      attrs: instance.attrs,
+      get attrs() {
+        return attrs || (attrs = createAttrsProxy(instance))
+      },
       slots: instance.slots,
       emit: instance.emit,
       expose
@@ -958,18 +987,6 @@ export function getExposeProxy(instance: ComponentInternalInstance) {
         }
       }))
     )
-  }
-}
-
-// record effects created during a component's setup() so that they can be
-// stopped when the component unmounts
-export function recordInstanceBoundEffect(
-  effect: ReactiveEffect,
-  instance = currentInstance
-) {
-  // 如 在setup中执行watch()，记录 监听目标getter的effect函数
-  if (instance) {
-    ;(instance.effects || (instance.effects = [])).push(effect)
   }
 }
 

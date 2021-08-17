@@ -9,12 +9,21 @@ import {
   ComponentNode,
   TemplateNode,
   VNodeCall,
-  ParentNode
+  ParentNode,
+  JSChildNode,
+  CallExpression,
+  createArrayExpression
 } from '../ast'
 import { TransformContext } from '../transform'
-import { PatchFlags, isString, isSymbol } from '@vue/shared'
-import { isSlotOutlet } from '../utils'
-import { CREATE_BLOCK, CREATE_VNODE, OPEN_BLOCK } from '../runtimeHelpers'
+import { PatchFlags, isString, isSymbol, isArray } from '@vue/shared'
+import { getVNodeBlockHelper, getVNodeHelper, isSlotOutlet } from '../utils'
+import {
+  OPEN_BLOCK,
+  GUARD_REACTIVE_PROPS,
+  NORMALIZE_CLASS,
+  NORMALIZE_PROPS,
+  NORMALIZE_STYLE
+} from '../runtimeHelpers'
 
 // 静态提升：节点属性列表、节点子元素
 // ConstantTypes {
@@ -53,7 +62,6 @@ function walk(
   context: TransformContext,
   doNotHoistNode: boolean = false
 ) {
-  let hasHoistedNode = false
   // Some transforms, e.g. transformAssetUrls from @vue/compiler-sfc, replaces
   // static bindings with expressions. These expressions are guaranteed to be
   // constant so they are still eligible for hoisting, but they are only
@@ -72,6 +80,9 @@ function walk(
   // }
 
   const { children } = node // ast子节点列表
+  const originalCount = children.length
+  let hoistedCount = 0
+
   for (let i = 0; i < children.length; i++) {
     const child = children[i]
     // only plain elements & text calls are eligible for hoisting.
@@ -107,7 +118,7 @@ function walk(
 
           // 创建静态节点与变量名
           child.codegenNode = context.hoist(child.codegenNode!)
-          hasHoistedNode = true
+          hoistedCount++
           continue
         }
       } else {
@@ -134,6 +145,9 @@ function walk(
               codegenNode.props = context.hoist(props)
             }
           }
+          if (codegenNode.dynamicProps) {
+            codegenNode.dynamicProps = context.hoist(codegenNode.dynamicProps)
+          }
         }
       }
     } else if (child.type === NodeTypes.TEXT_CALL) {
@@ -159,7 +173,7 @@ function walk(
 
           // 如 <div><i :class="red">1</i>abc</div>，静态提升其中文本节点 'abc'
           child.codegenNode = context.hoist(child.codegenNode)
-          hasHoistedNode = true
+          hoistedCount++
         }
       }
     }
@@ -199,9 +213,24 @@ function walk(
 
   // ConstantTypes = CAN_STRINGIFY
   // 如，template: '<div>123</div><div>abc</div>'
-  if (canStringify && hasHoistedNode && context.transformHoist) {
+  if (canStringify && hoistedCount && context.transformHoist) {
     // transformHoist: __BROWSER__ ? null : stringifyStatic
     context.transformHoist(children, context, node)
+  }
+
+  // all children were hoisted - the entire children array is hoistable.
+  if (
+    hoistedCount &&
+    hoistedCount === originalCount &&
+    node.type === NodeTypes.ELEMENT &&
+    node.tagType === ElementTypes.ELEMENT &&
+    node.codegenNode &&
+    node.codegenNode.type === NodeTypes.VNODE_CALL &&
+    isArray(node.codegenNode.children)
+  ) {
+    node.codegenNode.children = context.hoist(
+      createArrayExpression(node.codegenNode.children)
+    )
   }
 }
 
@@ -279,9 +308,11 @@ export function getConstantType(
         // nested updates.
         if (codegenNode.isBlock) {
           context.removeHelper(OPEN_BLOCK)
-          context.removeHelper(CREATE_BLOCK)
+          context.removeHelper(
+            getVNodeBlockHelper(context.inSSR, codegenNode.isComponent)
+          )
           codegenNode.isBlock = false
-          context.helper(CREATE_VNODE)
+          context.helper(getVNodeHelper(context.inSSR, codegenNode.isComponent))
         }
 
         constantCache.set(node, returnType)
@@ -340,6 +371,33 @@ export function getConstantType(
   }
 }
 
+const allowHoistedHelperSet = new Set([
+  NORMALIZE_CLASS,
+  NORMALIZE_STYLE,
+  NORMALIZE_PROPS,
+  GUARD_REACTIVE_PROPS
+])
+
+function getConstantTypeOfHelperCall(
+  value: CallExpression,
+  context: TransformContext
+): ConstantTypes {
+  if (
+    value.type === NodeTypes.JS_CALL_EXPRESSION &&
+    !isString(value.callee) &&
+    allowHoistedHelperSet.has(value.callee)
+  ) {
+    const arg = value.arguments[0] as JSChildNode
+    if (arg.type === NodeTypes.SIMPLE_EXPRESSION) {
+      return getConstantType(arg, context)
+    } else if (arg.type === NodeTypes.JS_CALL_EXPRESSION) {
+      // in the case of nested helper call, e.g. `normalizeProps(guardReactiveProps(exp))`
+      return getConstantTypeOfHelperCall(arg, context)
+    }
+  }
+  return ConstantTypes.NOT_CONSTANT
+}
+
 function getGeneratedPropsConstantType(
   node: PlainElementNode,
   context: TransformContext
@@ -357,10 +415,17 @@ function getGeneratedPropsConstantType(
       if (keyType < returnType) {
         returnType = keyType
       }
-      if (value.type !== NodeTypes.SIMPLE_EXPRESSION) {
-        return ConstantTypes.NOT_CONSTANT
+      let valueType: ConstantTypes
+      if (value.type === NodeTypes.SIMPLE_EXPRESSION) {
+        valueType = getConstantType(value, context)
+      } else if (value.type === NodeTypes.JS_CALL_EXPRESSION) {
+        // some helper calls can be hoisted,
+        // such as the `normalizeProps` generated by the compiler for pre-normalize class,
+        // in this case we need to respect the ConstanType of the helper's argments
+        valueType = getConstantTypeOfHelperCall(value, context)
+      } else {
+        valueType = ConstantTypes.NOT_CONSTANT
       }
-      const valueType = getConstantType(value, context)
       if (valueType === ConstantTypes.NOT_CONSTANT) {
         return valueType
       }

@@ -1,57 +1,44 @@
 import { TrackOpTypes, TriggerOpTypes } from './operations'
-import { EMPTY_OBJ, isArray, isIntegerKey, isMap } from '@vue/shared'
+import { extend, isArray, isIntegerKey, isMap } from '@vue/shared'
+import { EffectScope, recordEffectScope } from './effectScope'
+import {
+  createDep,
+  Dep,
+  finalizeDepMarkers,
+  initDepMarkers,
+  newTracked,
+  wasTracked
+} from './dep'
 
 // The main WeakMap that stores {target -> key -> dep} connections.
 // Conceptually, it's easier to think of a dependency as a Dep class
 // which maintains a Set of subscribers, but we simply store them as
 // raw Sets to reduce memory overhead.
-type Dep = Set<ReactiveEffect>
 type KeyToDepMap = Map<any, Dep>
 const targetMap = new WeakMap<any, KeyToDepMap>() // 保存响应式ref数据对象 -> 响应式数据对象key -> 依赖的组件effect集合
 
-export interface ReactiveEffect<T = any> {
-  (): T
-  _isEffect: true
-  id: number
-  active: boolean
-  raw: () => T
-  deps: Array<Dep>
-  options: ReactiveEffectOptions
-  allowRecurse: boolean
-}
+// The number of effects currently being tracked recursively.
+let effectTrackDepth = 0
 
-export interface ReactiveEffectOptions {
-  lazy?: boolean
-  scheduler?: (job: ReactiveEffect) => void
-  onTrack?: (event: DebuggerEvent) => void
-  onTrigger?: (event: DebuggerEvent) => void
-  onStop?: () => void
-  /**
-   * Indicates whether the job is allowed to recursively trigger itself when
-   * managed by the scheduler.
-   *
-   * By default, a job cannot trigger itself because some built-in method calls,
-   * e.g. Array.prototype.push actually performs reads as well (#1740) which
-   * can lead to confusing infinite loops.
-   * The allowed cases are component update functions and watch callbacks.
-   * Component update functions may update child component props, which in turn
-   * trigger flush: "pre" watch callbacks that mutates state that the parent
-   * relies on (#1801). Watch callbacks doesn't track its dependencies so if it
-   * triggers itself again, it's likely intentional and it is the user's
-   * responsibility to perform recursive state mutation that eventually
-   * stabilizes (#1727).
-   */
-  allowRecurse?: boolean
-}
+export let trackOpBit = 1
+
+/**
+ * The bitwise track markers support at most 30 levels op recursion.
+ * This value is chosen to enable modern JS engines to use a SMI on all platforms.
+ * When recursion depth is greater, fall back to using a full cleanup.
+ */
+const maxMarkerBits = 30
+
+export type EffectScheduler = (...args: any[]) => any
 
 export type DebuggerEvent = {
   effect: ReactiveEffect
+} & DebuggerEventExtraInfo
+
+export type DebuggerEventExtraInfo = {
   target: object
   type: TrackOpTypes | TriggerOpTypes
   key: any
-} & DebuggerEventExtraInfo
-
-export interface DebuggerEventExtraInfo {
   newValue?: any
   oldValue?: any
   oldTarget?: Map<any, any> | Set<any>
@@ -65,99 +52,74 @@ let activeEffect: ReactiveEffect | undefined
 export const ITERATE_KEY = Symbol(__DEV__ ? 'iterate' : '')
 export const MAP_KEY_ITERATE_KEY = Symbol(__DEV__ ? 'Map key iterate' : '')
 
-export function isEffect(fn: any): fn is ReactiveEffect {
-  return fn && fn._isEffect === true
-}
+export class ReactiveEffect<T = any> {
+  active = true
+  deps: Dep[] = [] // 组件/watch 每个响应式依赖项 被订阅的组件effect 的集合 （即记录该effect 依赖的数据 的effect列表）
 
-// 组件或watch
-export function effect<T = any>(
-  fn: () => T,
-  options: ReactiveEffectOptions = EMPTY_OBJ
-): ReactiveEffect<T> {
-  if (isEffect(fn)) {
-    // fn._isEffect === true
-    fn = fn.raw // 原函数
+  // can be attached after creation
+  computed?: boolean
+  allowRecurse?: boolean
+  onStop?: () => void
+  // dev only
+  onTrack?: (event: DebuggerEvent) => void
+  // dev only
+  onTrigger?: (event: DebuggerEvent) => void
+
+  constructor(
+    public fn: () => T,
+    public scheduler: EffectScheduler | null = null,
+    scope?: EffectScope | null
+  ) {
+    recordEffectScope(this, scope)
   }
 
-  // queueJob - Job
-  const effect = createReactiveEffect(fn, options)
-  if (!options.lazy) {
-    // 渲染函数：立刻执行，在创建的同时，并执行渲染函数fn
-    // watch、computed：延迟执行，即没有在创建的时候同时返回fn值
-    effect()
-  }
-  return effect
-}
-
-// 停止effect函数，如停止watch监听目标
-export function stop(effect: ReactiveEffect) {
-  if (effect.active) {
-    cleanup(effect)
-    if (effect.options.onStop) {
-      effect.options.onStop()
+  run() {
+    if (!this.active) {
+      return this.fn()
     }
-    effect.active = false
-  }
-}
-
-let uid = 0
-
-/**
- *
- * @param fn
- * @param options：
- *  dev {
-      scheduler: queueJob,
-      allowRecurse: true,
-      onTrack: instance.rtc ? e => invokeArrayFns(instance.rtc!, e) : void 0,
-      onTrigger: instance.rtg ? e => invokeArrayFns(instance.rtg!, e) : void 0
-    }
- *  prod - {
-      scheduler: queueJob,
-      // #1801, #2043 component render effects should allow recursive updates
-      allowRecurse: true
-    }
- */
-function createReactiveEffect<T = any>(
-  fn: () => T,
-  options: ReactiveEffectOptions
-): ReactiveEffect<T> {
-  // 组件更新数据时，也会重新执行这个effect，即 SchedulerJob
-  const effect = function reactiveEffect(): unknown {
-    if (!effect.active) {
-      // 执行 fn
-      return fn()
-    }
-
-    if (!effectStack.includes(effect)) {
-      cleanup(effect) // 删除已经存在的effect，避免之后重复添加与更新该effect，如更新组件响应式依赖数据时 更新组件effect
+    if (!effectStack.includes(this)) {
       try {
+        effectStack.push((activeEffect = this))
         enableTracking()
-        effectStack.push(effect)
-        activeEffect = effect // 当前正在渲染的组件 - effect
 
+        trackOpBit = 1 << ++effectTrackDepth
+
+        if (effectTrackDepth <= maxMarkerBits) {
+          initDepMarkers(this)
+        } else {
+          cleanupEffect(this)
+        }
         // 执行fn，并返回结果
-        return fn()
+        return this.fn()
       } finally {
+        if (effectTrackDepth <= maxMarkerBits) {
+          finalizeDepMarkers(this)
+        }
+
+        trackOpBit = 1 << --effectTrackDepth
+
+        resetTracking()
         // 执行完 fn() 后，停止对当前对effect跟踪
         effectStack.pop()
-        resetTracking()
-        activeEffect = effectStack[effectStack.length - 1]
+        const n = effectStack.length
+        activeEffect = n > 0 ? effectStack[n - 1] : undefined // 当前正在渲染的组件 - effect
       }
     }
-  } as ReactiveEffect
-  effect.id = uid++
-  effect.allowRecurse = !!options.allowRecurse // true
-  effect._isEffect = true
-  effect.active = true
-  effect.raw = fn // 当前正在执行渲染函数
-  effect.deps = [] // 组件/watch 每个响应式依赖项 被订阅的组件effect 的集合 （即记录该effect 依赖的数据 的effect列表）
-  effect.options = options
-  return effect
+  }
+
+  stop() {
+    if (this.active) {
+      cleanupEffect(this)
+      if (this.onStop) {
+        this.onStop()
+      }
+      this.active = false
+    }
+  }
 }
 
 // 删除已经存在的effect，避免之后重复添加，如更新组件响应式依赖数据时 发生的执行更新组件effect期间
-function cleanup(effect: ReactiveEffect) {
+function cleanupEffect(effect: ReactiveEffect) {
   const { deps } = effect
   if (deps.length) {
     for (let i = 0; i < deps.length; i++) {
@@ -166,6 +128,49 @@ function cleanup(effect: ReactiveEffect) {
     }
     deps.length = 0
   }
+}
+
+export interface DebuggerOptions {
+  onTrack?: (event: DebuggerEvent) => void
+  onTrigger?: (event: DebuggerEvent) => void
+}
+
+export interface ReactiveEffectOptions extends DebuggerOptions {
+  lazy?: boolean
+  scheduler?: EffectScheduler
+  scope?: EffectScope
+  allowRecurse?: boolean
+  onStop?: () => void
+}
+
+export interface ReactiveEffectRunner<T = any> {
+  (): T
+  effect: ReactiveEffect
+}
+
+export function effect<T = any>(
+  fn: () => T,
+  options?: ReactiveEffectOptions
+): ReactiveEffectRunner {
+  if ((fn as ReactiveEffectRunner).effect) {
+    fn = (fn as ReactiveEffectRunner).effect.fn
+  }
+
+  const _effect = new ReactiveEffect(fn)
+  if (options) {
+    extend(_effect, options)
+    if (options.scope) recordEffectScope(_effect, options.scope)
+  }
+  if (!options || !options.lazy) {
+    _effect.run()
+  }
+  const runner = _effect.run.bind(_effect) as ReactiveEffectRunner
+  runner.effect = _effect
+  return runner
+}
+
+export function stop(runner: ReactiveEffectRunner) {
+  runner.effect.stop()
 }
 
 let shouldTrack = true // 默认需要跟踪
@@ -192,7 +197,7 @@ export function resetTracking() {
 // 跟踪某个响应对象的某个属性 所依赖的组件effect（执行组件渲染函数期间、或执行watch/computed期间）
 // 如 const count = ref(1); track(toRaw(count), TrackOpTypes.GET, 'value')
 export function track(target: object, type: TrackOpTypes, key: unknown) {
-  if (!shouldTrack || activeEffect === undefined) {
+  if (!isTracking()) {
     // 即直接在setup 函数中进行读取时，没必要跟踪
     // 如 let count = ref(1) 然后直接读：console.log(count.value) 这时候，并不是在渲染期间，所以不需要跟踪
     return
@@ -215,22 +220,47 @@ export function track(target: object, type: TrackOpTypes, key: unknown) {
   // 收集响应式对象 实际被依赖的属性（如ref对象的value属性）
   let dep = depsMap.get(key)
   if (!dep) {
-    depsMap.set(key, (dep = new Set()))
+    depsMap.set(key, (dep = createDep()))
   }
 
-  // 收集组件effect - 组件在渲染期间 使用了该响应式ref对象属性value
-  if (!dep.has(activeEffect)) {
-    dep.add(activeEffect)
-    activeEffect.deps.push(dep) // 组件effect函数（或watch监听目标）依赖此响应式对象的这个属性
+  const eventInfo = __DEV__
+    ? { effect: activeEffect, target, type, key }
+    : undefined
 
-    if (__DEV__ && activeEffect.options.onTrack) {
-      // onTrack: instance.rtc ? e => invokeArrayFns(instance.rtc!, e) : void 0,
-      activeEffect.options.onTrack({
-        effect: activeEffect,
-        target,
-        type,
-        key
-      })
+  trackEffects(dep, eventInfo)
+}
+
+export function isTracking() {
+  return shouldTrack && activeEffect !== undefined
+}
+
+export function trackEffects(
+  dep: Dep,
+  debuggerEventExtraInfo?: DebuggerEventExtraInfo
+) {
+  let shouldTrack = false
+  if (effectTrackDepth <= maxMarkerBits) {
+    if (!newTracked(dep)) {
+      dep.n |= trackOpBit // set newly tracked
+      shouldTrack = !wasTracked(dep)
+    }
+  } else {
+    // Full cleanup mode.
+    shouldTrack = !dep.has(activeEffect!)
+  }
+
+  if (shouldTrack) {
+    dep.add(activeEffect!)
+    activeEffect!.deps.push(dep) // 组件effect函数（或watch监听目标）依赖此响应式对象的这个属性
+    if (__DEV__ && activeEffect!.onTrack) {
+      activeEffect!.onTrack(
+        Object.assign(
+          {
+            effect: activeEffect!
+          },
+          debuggerEventExtraInfo
+        )
+      )
     }
   }
 }
@@ -257,90 +287,101 @@ export function trigger(
   // 依赖组件
 
   // 收集当前key 所依赖的组件effects
-  const effects = new Set<ReactiveEffect>()
-  const add = (effectsToAdd: Set<ReactiveEffect> | undefined) => {
-    // effectsToAdd - key 所对应的组件effects列表
-    if (effectsToAdd) {
-      effectsToAdd.forEach(effect => {
-        if (effect !== activeEffect || effect.allowRecurse) {
-          // allowRecurse: true
-          effects.add(effect)
-        }
-      })
-    }
-  }
 
+  let deps: (Dep | undefined)[] = []
   if (type === TriggerOpTypes.CLEAR) {
     // 集合清空
     // collection being cleared
     // trigger all effects for target
-    depsMap.forEach(add)
+    deps = [...depsMap.values()]
   } else if (key === 'length' && isArray(target)) {
     // 数组清空
     depsMap.forEach((dep, key) => {
       if (key === 'length' || key >= (newValue as number)) {
-        add(dep)
+        deps.push(dep)
       }
     })
   } else {
     // schedule runs for SET | ADD | DELETE
     if (key !== void 0) {
       // deps: 属性key 所依赖的组件effect列表
-      add(depsMap.get(key))
+      deps.push(depsMap.get(key))
     }
 
     // also run for iteration key on ADD | DELETE | Map.SET
     switch (type) {
       case TriggerOpTypes.ADD: // 添加新属性
         if (!isArray(target)) {
-          add(depsMap.get(ITERATE_KEY)) // iterate
+          deps.push(depsMap.get(ITERATE_KEY)) // iterate
           if (isMap(target)) {
-            add(depsMap.get(MAP_KEY_ITERATE_KEY))
+            deps.push(depsMap.get(MAP_KEY_ITERATE_KEY))
           }
         } else if (isIntegerKey(key)) {
           // 属性key 为数字
           // new index added to array -> length changes
-          add(depsMap.get('length'))
+          deps.push(depsMap.get('length'))
         }
         break
       case TriggerOpTypes.DELETE:
         if (!isArray(target)) {
-          add(depsMap.get(ITERATE_KEY))
+          deps.push(depsMap.get(ITERATE_KEY))
           if (isMap(target)) {
-            add(depsMap.get(MAP_KEY_ITERATE_KEY))
+            deps.push(depsMap.get(MAP_KEY_ITERATE_KEY))
           }
         }
         break
       case TriggerOpTypes.SET:
         if (isMap(target)) {
           // 集合
-          add(depsMap.get(ITERATE_KEY))
+          deps.push(depsMap.get(ITERATE_KEY))
         }
         break
     }
   }
 
-  // 依次触发key所依赖组件effect列表更新
-  const run = (effect: ReactiveEffect) => {
-    if (__DEV__ && effect.options.onTrigger) {
-      // 触发跟踪响应事件（用户自定义，如watch）
-      effect.options.onTrigger({
-        effect,
-        target,
-        key,
-        type,
-        newValue,
-        oldValue,
-        oldTarget
-      })
+  const eventInfo = __DEV__
+    ? { target, type, key, newValue, oldValue, oldTarget }
+    : undefined
+
+  if (deps.length === 1) {
+    if (deps[0]) {
+      if (__DEV__) {
+        triggerEffects(deps[0], eventInfo)
+      } else {
+        triggerEffects(deps[0])
+      }
     }
-    if (effect.options.scheduler) {
-      // queueJob
-      effect.options.scheduler(effect) // 执行组件effect
+  } else {
+    const effects: ReactiveEffect[] = []
+    for (const dep of deps) {
+      if (dep) {
+        effects.push(...dep)
+      }
+    }
+    if (__DEV__) {
+      triggerEffects(createDep(effects), eventInfo)
     } else {
-      effect()
+      triggerEffects(createDep(effects))
     }
   }
+}
 
-  effects.forEach(run)
+export function triggerEffects(
+  dep: Dep | ReactiveEffect[],
+  debuggerEventExtraInfo?: DebuggerEventExtraInfo
+) {
+  // spread into array for stabilization
+  for (const effect of isArray(dep) ? dep : [...dep]) {
+    if (effect !== activeEffect || effect.allowRecurse) {
+      if (__DEV__ && effect.onTrigger) {
+        // 触发跟踪响应事件（用户自定义，如watch）
+        effect.onTrigger(extend({ effect }, debuggerEventExtraInfo))
+      }
+      if (effect.scheduler) {
+        effect.scheduler() // 执行组件effect
+      } else {
+        effect.run() // 依次触发key所依赖组件effect列表更新
+      }
+    }
+  }
 }

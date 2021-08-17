@@ -44,7 +44,7 @@ import { convertLegacyVModelProps } from './compat/componentVModel'
 import { defineLegacyVNodeProperties } from './compat/renderFn'
 import { convertLegacyRefInFor } from './compat/ref'
 
-export const Fragment = (Symbol(__DEV__ ? 'Fragment' : undefined) as any) as {
+export const Fragment = Symbol(__DEV__ ? 'Fragment' : undefined) as any as {
   __isFragment: true
   new (): {
     $props: VNodeProps
@@ -78,7 +78,7 @@ export type VNodeNormalizedRefAtom = {
 
 export type VNodeNormalizedRef =
   | VNodeNormalizedRefAtom
-  | (VNodeNormalizedRefAtom)[]
+  | VNodeNormalizedRefAtom[]
 
 type VNodeMountHook = (vnode: VNode) => void
 type VNodeUpdateHook = (vnode: VNode, oldVNode: VNode) => void
@@ -90,7 +90,7 @@ export type VNodeHook =
 
 // https://github.com/microsoft/TypeScript/issues/33099
 export type VNodeProps = {
-  key?: string | number
+  key?: string | number | symbol
   ref?: VNodeRef
 
   // vnode hooks
@@ -136,14 +136,9 @@ export interface VNode<
    */
   [ReactiveFlags.SKIP]: true
 
-  /**
-   * @internal __COMPAT__ only
-   */
-  isCompatRoot?: true
-
   type: VNodeTypes
   props: (VNodeProps & ExtraProps) | null
-  key: string | number | null
+  key: string | number | symbol | null
   ref: VNodeNormalizedRef | null
   /**
    * SFC only. This is assigned on vnode creation using currentScopeId
@@ -155,6 +150,7 @@ export interface VNode<
    * - Slot fragment vnodes with :slotted SFC styles.
    * - Component vnodes (during patch/hydration) so that its root node can
    *   inherit the component's slotScopeIds
+   * @internal
    */
   slotScopeIds: string[] | null
   children: VNodeNormalizedChildren
@@ -167,22 +163,50 @@ export interface VNode<
   anchor: HostNode | null // fragment anchor
   target: HostElement | null // teleport target
   targetAnchor: HostNode | null // teleport target anchor
-  staticCount?: number // number of elements contained in a static vnode
-  staticCache?: HostNode[] // cache of parsed static nodes for faster repeated insertions
+  /**
+   * number of elements contained in a static vnode
+   * @internal
+   */
+  staticCount: number
 
   // suspense
   suspense: SuspenseBoundary | null
+  /**
+   * @internal
+   */
   ssContent: VNode | null
+  /**
+   * @internal
+   */
   ssFallback: VNode | null
 
   // optimization only
   shapeFlag: number
   patchFlag: number
+  /**
+   * @internal
+   */
   dynamicProps: string[] | null
+  /**
+   * @internal
+   */
   dynamicChildren: VNode[] | null
 
   // application root node only
   appContext: AppContext | null
+
+  /**
+   * @internal attached by v-memo
+   */
+  memo?: any[]
+  /**
+   * @internal __COMPAT__ only
+   */
+  isCompatRoot?: true
+  /**
+   * @internal custom element interception hook
+   */
+  ce?: (instance: ComponentInternalInstance) => void
 }
 
 // Since v-if and v-for are the two possible ways node structure can dynamically
@@ -248,7 +272,7 @@ export function closeBlock() {
 // Only tracks when this value is > 0
 // We are not using a simple boolean because this value may need to be
 // incremented/decremented by nested usage of v-once (see below)
-let isBlockTreeEnabled = 1
+export let isBlockTreeEnabled = 1
 
 /**
  * Block tracking sometimes needs to be disabled, for example during the
@@ -270,6 +294,45 @@ export function setBlockTracking(value: number) {
   isBlockTreeEnabled += value
 }
 
+function setupBlock(vnode: VNode) {
+  // save current block children on the block vnode
+  // 动态子节点列表
+  vnode.dynamicChildren =
+    isBlockTreeEnabled > 0 ? currentBlock || (EMPTY_ARR as any) : null
+  // close block
+  closeBlock()
+  // a block is always going to be patched, so track it as a child of its
+  // parent block
+  if (isBlockTreeEnabled > 0 && currentBlock) {
+    currentBlock.push(vnode)
+  }
+  return vnode
+}
+
+/**
+ * @private
+ */
+export function createElementBlock(
+  type: string,
+  props?: Record<string, any> | null,
+  children?: any,
+  patchFlag?: number,
+  dynamicProps?: string[],
+  shapeFlag?: number
+) {
+  return setupBlock(
+    createBaseVNode(
+      type,
+      props,
+      children,
+      patchFlag,
+      dynamicProps,
+      shapeFlag,
+      true /* isBlock */
+    )
+  )
+}
+
 /**
  * Create a block root vnode. Takes the same exact arguments as `createVNode`.
  * A block root keeps track of dynamic nodes within the block in the
@@ -284,28 +347,16 @@ export function createBlock(
   patchFlag?: number,
   dynamicProps?: string[]
 ): VNode {
-  // 创建一个 根vnode
-  const vnode = createVNode(
-    type,
-    props,
-    children,
-    patchFlag,
-    dynamicProps,
-    true /* isBlock: prevent a block from tracking itself */
+  return setupBlock(
+    createVNode(
+      type,
+      props,
+      children,
+      patchFlag,
+      dynamicProps,
+      true /* isBlock: prevent a block from tracking itself */
+    )
   )
-
-  // 动态子节点列表
-  // save current block children on the block vnode
-  vnode.dynamicChildren =
-    isBlockTreeEnabled > 0 ? currentBlock || (EMPTY_ARR as any) : null
-  // close block
-  closeBlock()
-  // a block is always going to be patched, so track it as a child of its
-  // parent block
-  if (isBlockTreeEnabled > 0 && currentBlock) {
-    currentBlock.push(vnode)
-  }
-  return vnode
 }
 
 export function isVNode(value: any): value is VNode {
@@ -359,16 +410,106 @@ const normalizeKey = ({ key }: VNodeProps): VNode['key'] =>
   key != null ? key : null
 
 const normalizeRef = ({ ref }: VNodeProps): VNodeNormalizedRefAtom | null => {
-  return (ref != null
-    ? isString(ref) || isRef(ref) || isFunction(ref)
-      ? { i: currentRenderingInstance, r: ref }
-      : ref
-    : null) as any
+  return (
+    ref != null
+      ? isString(ref) || isRef(ref) || isFunction(ref)
+        ? { i: currentRenderingInstance, r: ref }
+        : ref
+      : null
+  ) as any
 }
 
-export const createVNode = (__DEV__
-  ? createVNodeWithArgsTransform
-  : _createVNode) as typeof _createVNode
+function createBaseVNode(
+  type: VNodeTypes | ClassComponent | typeof NULL_DYNAMIC_COMPONENT,
+  props: (Data & VNodeProps) | null = null,
+  children: unknown = null,
+  patchFlag = 0,
+  dynamicProps: string[] | null = null,
+  shapeFlag = type === Fragment ? 0 : ShapeFlags.ELEMENT,
+  isBlockNode = false,
+  needFullChildrenNormalization = false
+) {
+  const vnode = {
+    __v_isVNode: true,
+    __v_skip: true,
+    type, // vnode节点类型：节点 或 节点标签名 或 组件
+    props, // 传递给组件/节点的props属性列表
+    key: props && normalizeKey(props), // 节点的 key 属性
+    ref: props && normalizeRef(props), // 节点的 ref 属性
+    scopeId: currentScopeId,
+    slotScopeIds: null,
+    children, // vnode 子节点列表
+    component: null, // 组件实例，由挂载阶段的 createComponentInstance 创建
+    suspense: null,
+    ssContent: null,
+    ssFallback: null,
+    dirs: null,
+    transition: null,
+    el: null, // child.el === null ? child : cloneVNode(child)
+    anchor: null,
+    target: null,
+    targetAnchor: null,
+    staticCount: 0,
+    shapeFlag, // vnode 类型
+    patchFlag,
+    dynamicProps, // vnode节点 动态属性列表
+    dynamicChildren: null, // vnode节点 动态子节点列表 currentBlock
+    appContext: null // app上下文
+  } as VNode
+
+  if (needFullChildrenNormalization) {
+    normalizeChildren(vnode, children)
+    // normalize suspense children
+    if (__FEATURE_SUSPENSE__ && shapeFlag & ShapeFlags.SUSPENSE) {
+      ;(type as typeof SuspenseImpl).normalize(vnode)
+    }
+  } else if (children) {
+    // compiled element vnode - if children is passed, only possible types are
+    // string or Array.
+    vnode.shapeFlag |= isString(children)
+      ? ShapeFlags.TEXT_CHILDREN
+      : ShapeFlags.ARRAY_CHILDREN
+  }
+
+  // validate key
+  if (__DEV__ && vnode.key !== vnode.key) {
+    warn(`VNode created with invalid key (NaN). VNode type:`, vnode.type)
+  }
+
+  // 在某个根vnode下，保存当前vnode到 当前vnodes block列表 - block下的动态子节点
+  // track vnode for block tree
+  if (
+    isBlockTreeEnabled > 0 &&
+    // avoid a block node from tracking itself
+    !isBlockNode && // 是否是一个block root节点，只有非block root vnode 才有必要保存
+    // has current parent block
+    currentBlock &&
+    // presence of a patch flag indicates this node needs patching on updates.
+    // component nodes also should always be patched, because even if the
+    // component doesn't need to update, it needs to persist the instance on to
+    // the next vnode so that it can be properly unmounted later.
+    (vnode.patchFlag > 0 || shapeFlag & ShapeFlags.COMPONENT) &&
+    // the EVENTS flag is only for hydration and if it is the only flag, the
+    // vnode should not be considered dynamic due to handler caching.
+    vnode.patchFlag !== PatchFlags.HYDRATE_EVENTS // vnode 只有这一个 patch flag，则不管
+  ) {
+    currentBlock.push(vnode)
+  }
+
+  if (__COMPAT__) {
+    convertLegacyVModelProps(vnode)
+    convertLegacyRefInFor(vnode)
+    defineLegacyVNodeProperties(vnode)
+  }
+
+  return vnode
+}
+
+export { createBaseVNode as createElementVNode }
+
+export const createVNode = (
+  __DEV__ ? createVNodeWithArgsTransform : _createVNode
+) as typeof _createVNode
 
 // 创建vdom
 function _createVNode(
@@ -412,10 +553,7 @@ function _createVNode(
   // class & style normalization.
   if (props) {
     // for reactive or proxy objects, we need to clone it to enable mutation.
-    if (isProxy(props) || InternalObjectKey in props) {
-      // __vInternal
-      props = extend({}, props)
-    }
+    props = guardReactiveProps(props)!
     let { class: klass, style } = props
     if (klass && !isString(klass)) {
       // 规范传递过来的 class 名字格式，空格拼接成字符串
@@ -437,14 +575,14 @@ function _createVNode(
   const shapeFlag = isString(type)
     ? ShapeFlags.ELEMENT // 1 - 如 执行render的 createVNode
     : __FEATURE_SUSPENSE__ && isSuspense(type)
-      ? ShapeFlags.SUSPENSE // 1 << 7 = 64
-      : isTeleport(type)
-        ? ShapeFlags.TELEPORT // 1 << 6 = 32
-        : isObject(type)
-          ? ShapeFlags.STATEFUL_COMPONENT // 1 << 2 = 4  -  vnode 类型
-          : isFunction(type)
-            ? ShapeFlags.FUNCTIONAL_COMPONENT // 1 << 1 = 2
-            : 0
+    ? ShapeFlags.SUSPENSE // 1 << 7 = 64
+    : isTeleport(type)
+    ? ShapeFlags.TELEPORT // 1 << 6 = 32
+    : isObject(type)
+    ? ShapeFlags.STATEFUL_COMPONENT // 1 << 2 = 4  -  vnode 类型
+    : isFunction(type)
+    ? ShapeFlags.FUNCTIONAL_COMPONENT // 1 << 1 = 2
+    : 0
 
   // 注意：组件节点 被转换为 响应式
   if (__DEV__ && shapeFlag & ShapeFlags.STATEFUL_COMPONENT && isProxy(type)) {
@@ -460,76 +598,28 @@ function _createVNode(
     )
   }
 
-  const vnode: VNode = {
-    __v_isVNode: true,
-    __v_skip: true, // __v_skip
-    type, // vnode节点类型：节点 或 节点标签名 或 组件
-    props, // 传递给组件/节点的props属性列表
-    key: props && normalizeKey(props), // 节点的 key 属性
-    ref: props && normalizeRef(props), // 节点的 ref 属性
-    scopeId: currentScopeId,
-    slotScopeIds: null,
-    children: null, // vnode 子节点列表
-    component: null, // 组件实例，由挂载阶段的 createComponentInstance 创建
-    suspense: null,
-    ssContent: null,
-    ssFallback: null,
-    dirs: null,
-    transition: null,
-    el: null, // child.el === null ? child : cloneVNode(child)
-    anchor: null,
-    target: null,
-    targetAnchor: null,
-    shapeFlag, // vnode 类型
+  return createBaseVNode(
+    type,
+    props,
+    children,
     patchFlag,
-    dynamicProps, // vnode节点 动态属性列表
-    dynamicChildren: null, // vnode节点 动态子节点列表 currentBlock
-    appContext: null // app上下文
-  }
+    dynamicProps,
+    shapeFlag,
+    isBlockNode,
+    true
+  )
+}
 
-  // validate key
-  if (__DEV__ && vnode.key !== vnode.key) {
-    warn(`VNode created with invalid key (NaN). VNode type:`, vnode.type)
-  }
-
-  normalizeChildren(vnode, children)
-
-  // normalize suspense children
-  if (__FEATURE_SUSPENSE__ && shapeFlag & ShapeFlags.SUSPENSE) {
-    ;(type as typeof SuspenseImpl).normalize(vnode)
-  }
-
-  // 在某个根vnode下，保存当前vnode到 当前vnodes block列表 - block下的动态子节点
-  if (
-    isBlockTreeEnabled > 0 &&
-    // avoid a block node from tracking itself
-    !isBlockNode && // 是否是一个block root节点，只有非block root vnode 才有必要保存
-    // has current parent block
-    currentBlock &&
-    // presence of a patch flag indicates this node needs patching on updates.
-    // component nodes also should always be patched, because even if the
-    // component doesn't need to update, it needs to persist the instance on to
-    // the next vnode so that it can be properly unmounted later.
-    (patchFlag > 0 || shapeFlag & ShapeFlags.COMPONENT) &&
-    // the EVENTS flag is only for hydration and if it is the only flag, the
-    // vnode should not be considered dynamic due to handler caching.
-    patchFlag !== PatchFlags.HYDRATE_EVENTS // vnode 只有这一个 patch flag，则不管
-  ) {
-    currentBlock.push(vnode)
-  }
-
-  if (__COMPAT__) {
-    convertLegacyVModelProps(vnode)
-    convertLegacyRefInFor(vnode)
-    defineLegacyVNodeProperties(vnode)
-  }
-
-  return vnode
+export function guardReactiveProps(props: (Data & VNodeProps) | null) {
+  if (!props) return null
+  return isProxy(props) || InternalObjectKey in props
+    ? extend({}, props)
+    : props
 }
 
 export function cloneVNode<T, U>(
   vnode: VNode<T, U>,
-  extraProps?: Data & VNodeProps | null,
+  extraProps?: (Data & VNodeProps) | null,
   mergeRef = false
 ): VNode<T, U> {
   // This is intentionally NOT using spread or extend to avoid the runtime
@@ -564,7 +654,6 @@ export function cloneVNode<T, U>(
     target: vnode.target,
     targetAnchor: vnode.targetAnchor,
     staticCount: vnode.staticCount,
-    staticCache: vnode.staticCache,
     shapeFlag: vnode.shapeFlag,
     // if the vnode is cloned with extra props, we can no longer assume its
     // existing patch flag to be reliable and need to add the FULL_PROPS flag.
@@ -701,7 +790,7 @@ export function normalizeVNode(child: VNodeChild): VNode {
 
 // optimized normalization for template-compiled render fns
 export function cloneIfMounted(child: VNode): VNode {
-  return child.el === null ? child : cloneVNode(child)
+  return child.el === null || child.memo ? child : cloneVNode(child)
 }
 
 export function normalizeChildren(vnode: VNode, children: unknown) {
@@ -715,8 +804,7 @@ export function normalizeChildren(vnode: VNode, children: unknown) {
     type = ShapeFlags.ARRAY_CHILDREN // 1 << 4 = 16
   } else if (typeof children === 'object') {
     // 组件的子元素类别 slots: _createSlots({...}, [...])
-
-    if (shapeFlag & ShapeFlags.ELEMENT || shapeFlag & ShapeFlags.TELEPORT) {
+    if (shapeFlag & (ShapeFlags.ELEMENT | ShapeFlags.TELEPORT)) {
       // 是一个dom元素类型 或 teleport 组件
       // Normalize slot to plain children for plain element and Teleport
 
@@ -771,8 +859,8 @@ export function normalizeChildren(vnode: VNode, children: unknown) {
 
 // 合并属性
 export function mergeProps(...args: (Data & VNodeProps)[]) {
-  const ret = extend({}, args[0])
-  for (let i = 1; i < args.length; i++) {
+  const ret: Data = {}
+  for (let i = 0; i < args.length; i++) {
     const toMerge = args[i]
     for (const key in toMerge) {
       if (key === 'class') {

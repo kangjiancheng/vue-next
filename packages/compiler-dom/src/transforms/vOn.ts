@@ -117,14 +117,14 @@ const transformClick = (key: ExpressionNode, event: string) => {
   return isStaticClick
     ? createSimpleExpression(event, true) // 静态指令
     : key.type !== NodeTypes.SIMPLE_EXPRESSION // 动态指令 需要转换为复合codegen节点
-      ? createCompoundExpression([
-          `(`,
-          key,
-          `) === "onClick" ? "${event}" : (`,
-          key,
-          `)`
-        ])
-      : key // 已经是复合（在处理属性名阶段已经进行转换）
+    ? createCompoundExpression([
+        `(`,
+        key,
+        `) === "onClick" ? "${event}" : (`,
+        key,
+        `)`
+      ])
+    : key // 已经是复合（在处理属性名阶段已经进行转换）
 }
 
 // 解析dom节点上的v-on指令
@@ -146,14 +146,14 @@ export const transformOn: DirectiveTransform = (dir, node, context) => {
     if (!modifiers.length) return baseResult
 
     // key 指令属性名节点， value： 指令属性值节点；注意都以经过createSimpleExpression转换处理，且key中没有modifiers信息
-    let { key, value: handlerExp } = baseResult.props[0] // 正在解析的指令属性节点
+    let { key, value: handlerExp } = baseResult.props[0] // 正在解析的指令属性节点\\
 
     // 解析修饰符类型
-    const {
-      keyModifiers, // 具体键盘按键，如回车键修饰符：@keyup.enter，某些按键存在left/right
-      nonKeyModifiers, // 特殊键盘按键 如 shift、ctrl、alt、meta、exec 或 鼠标middle、left、right 或 事件流程 prevent、stop、self
-      eventOptionModifiers // 基本事件流程：passive,once,capture
-    } = resolveModifiers(key, modifiers, context, dir.loc)
+    // keyModifiers, // 具体键盘按键，如回车键修饰符：@keyup.enter，某些按键存在left/right
+    // nonKeyModifiers, // 特殊键盘按键 如 shift、ctrl、alt、meta、exec 或 鼠标middle、left、right 或 事件流程 prevent、stop、self
+    // eventOptionModifiers // 基本事件流程：passive,once,capture
+    const { keyModifiers, nonKeyModifiers, eventOptionModifiers } =
+      resolveModifiers(key, modifiers, context, dir.loc)
 
     // normalize click.right and click.middle since they don't actually fire
     // 调整click.right和click.middle事件，正常情况下并不会触发

@@ -30,6 +30,8 @@ import { SourceMapGenerator, RawSourceMap } from 'source-map'
 import {
   advancePositionWithMutation,
   assert,
+  getVNodeBlockHelper,
+  getVNodeHelper,
   isSimpleIdentifier,
   toValidAssetId
 } from './utils'
@@ -47,7 +49,7 @@ import {
   POP_SCOPE_ID,
   WITH_SCOPE_ID,
   WITH_DIRECTIVES,
-  CREATE_BLOCK,
+  CREATE_ELEMENT_VNODE,
   OPEN_BLOCK,
   CREATE_STATIC,
   WITH_CTX,
@@ -58,7 +60,6 @@ import { ImportItem } from './transform'
 // 注意注意！最好别在源码注释中添加字符串：/*#__PURE__*/
 // 否则！可能会导致源码不能正常调试，浏览器无法执行该注释之后的代码，无法进行断点设置
 const PURE_ANNOTATION = `/*#__PURE__*/` // treeShake 代码优化
-const WITH_ID = `_withId`
 
 type CodegenNode = TemplateChildNode | JSChildNode | SSRCodegenNode
 
@@ -98,7 +99,8 @@ function createCodegenContext(
     runtimeGlobalName = `Vue`,
     runtimeModuleName = `vue`,
     ssr = false,
-    isTS = false
+    isTS = false,
+    inSSR = false
   }: CodegenOptions
 ): CodegenContext {
   const context: CodegenContext = {
@@ -112,6 +114,7 @@ function createCodegenContext(
     runtimeModuleName, // Vue
     ssr, // false
     isTS,
+    inSSR,
     source: ast.loc.source, // 模版template源码
     code: ``, // 渲染源码
     column: 1,
@@ -272,14 +275,7 @@ export function generate(
       ? args.map(arg => `${arg}: any`).join(',')
       : args.join(', ') // '_ctx, _cache'，即 'function render('_ctx, _catch') { ... }'
 
-  if (genScopeId && !isSetupInlined) {
-    // root-level _withId wrapping is no longer necessary after 3.0.8 and is
-    // a noop, it's only kept so that code compiled with 3.0.8+ can run with
-    // runtime < 3.0.8.
-    // TODO: consider removing in 3.1
-    push(`const ${functionName} = ${PURE_ANNOTATION}${WITH_ID}(`)
-  }
-  if (isSetupInlined || genScopeId) {
+  if (isSetupInlined) {
     push(`(${signature}) => {`)
   } else {
     // 'function render(_ctx, _cache) {'
@@ -419,10 +415,6 @@ export function generate(
   deindent()
   push(`}`)
 
-  if (genScopeId && !isSetupInlined) {
-    push(`)`)
-  }
-
   return {
     ast,
     code: context.code,
@@ -497,6 +489,7 @@ function genFunctionPreamble(ast: RootNode, context: CodegenContext) {
 
         const staticHelpers = [
           CREATE_VNODE, // Symbol(__DEV__ ? `createVNode` : ``)  // 静态节点
+          CREATE_ELEMENT_VNODE,
           CREATE_COMMENT, // Symbol(__DEV__ ? `createCommentVNode` : ``) // 静态注释
           CREATE_TEXT, // Symbol(__DEV__ ? `createTextVNode` : ``)  // 静态文本
           CREATE_STATIC // Symbol(__DEV__ ? `createStaticVNode` : ``) // 非Browser, transform stringifyStatic
@@ -546,14 +539,7 @@ function genModulePreamble(
   genScopeId: boolean,
   inline?: boolean
 ) {
-  const {
-    push,
-    newline,
-    optimizeImports,
-    runtimeModuleName,
-    scopeId,
-    helper
-  } = context
+  const { push, newline, optimizeImports, runtimeModuleName } = context
 
   if (genScopeId) {
     ast.helpers.push(WITH_SCOPE_ID)
@@ -602,18 +588,6 @@ function genModulePreamble(
     newline()
   }
 
-  // we technically don't need this anymore since `withCtx` already sets the
-  // correct scopeId, but this is necessary for backwards compat
-  // TODO: consider removing in 3.1
-  if (genScopeId) {
-    push(
-      `const ${WITH_ID} = ${PURE_ANNOTATION}${helper(
-        WITH_SCOPE_ID
-      )}("${scopeId}")`
-    )
-    newline()
-  }
-
   genHoists(ast.hoists, context)
   newline()
 
@@ -633,8 +607,8 @@ function genAssets(
     __COMPAT__ && type === 'filter'
       ? RESOLVE_FILTER
       : type === 'component'
-        ? RESOLVE_COMPONENT
-        : RESOLVE_DIRECTIVE
+      ? RESOLVE_COMPONENT
+      : RESOLVE_DIRECTIVE
   )
   for (let i = 0; i < assets.length; i++) {
     let id = assets[i]
@@ -877,11 +851,11 @@ function genNode(node: CodegenNode | symbol | string, context: CodegenContext) {
     case NodeTypes.JS_CACHE_EXPRESSION:
       genCacheExpression(node, context)
       break
+    case NodeTypes.JS_BLOCK_STATEMENT:
+      genNodeList(node.body, context, true, false)
+      break
 
     // SSR only types
-    case NodeTypes.JS_BLOCK_STATEMENT:
-      !__BROWSER__ && genNodeList(node.body, context, true, false)
-      break
     case NodeTypes.JS_TEMPLATE_LITERAL:
       !__BROWSER__ && genTemplateLiteral(node, context)
       break
@@ -1021,7 +995,8 @@ function genVNodeCall(node: VNodeCall, context: CodegenContext) {
     dynamicProps, // 动态属性，不包括 ref、class、style，如 '<input :class="red" style="..." :placeholder="xxx" @click="handleClick" />' 其中的 placeholder、onClick属性
     directives,
     isBlock,
-    disableTracking
+    disableTracking,
+    isComponent
   } = node
   if (directives) {
     // 需要在运行时，重新处理的指令，如：v-model、v-show、用户自定义指令
@@ -1039,7 +1014,11 @@ function genVNodeCall(node: VNodeCall, context: CodegenContext) {
     push(PURE_ANNOTATION)
   }
   // 如 template: '<div>hello {{ item }}</div>', 则 '_createBlock('
-  push(helper(isBlock ? CREATE_BLOCK : CREATE_VNODE) + `(`, node)
+
+  const callHelper: symbol = isBlock
+    ? getVNodeBlockHelper(context.inSSR, isComponent)
+    : getVNodeHelper(context.inSSR, isComponent)
+  push(helper(callHelper) + `(`, node)
 
   // 生成 标签节点、属性节点、子节点、patchFlag、dynamicProps节点的 渲染代码
   // 如 template: <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
@@ -1164,7 +1143,7 @@ function genObjectExpression(node: ObjectExpression, context: CodegenContext) {
 // 其中，去重合并的prop节点类型为value.type = JS_ARRAY_EXPRESSION， value.elements = [mergeProp1.value, mergeProp2.value, ...]
 // 结果为： code += '[blue, red]'
 function genArrayExpression(node: ArrayExpression, context: CodegenContext) {
-  genNodeListAsArray(node.elements, context) // 数组包裹起来
+  genNodeListAsArray(node.elements as CodegenNode[], context) // 数组包裹起来
 }
 
 // 生成 箭头函数 的渲染源码片段code：
@@ -1181,16 +1160,12 @@ function genFunctionExpression(
   node: FunctionExpression,
   context: CodegenContext
 ) {
-  const { push, indent, deindent, scopeId, mode } = context
+  const { push, indent, deindent } = context
   const { params, returns, body, newline, isSlot } = node
-  // slot functions also need to push scopeId before rendering its content
-  const genScopeId =
-    !__BROWSER__ && isSlot && scopeId != null && mode !== 'function'
-
   if (isSlot) {
     // _withCtx
     // wrap slot functions with owner context
-    push(genScopeId ? `${WITH_ID}(` : `_${helperNameMap[WITH_CTX]}(`)
+    push(`_${helperNameMap[WITH_CTX]}(`)
   }
 
   // 箭头函数

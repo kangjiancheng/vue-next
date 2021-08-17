@@ -3,6 +3,7 @@
 // This can come from explicit usage of v-html or innerHTML as a prop in render
 
 import { warn, DeprecationTypes, compatUtils } from '@vue/runtime-core'
+import { includeBooleanAttr } from '@vue/shared'
 
 // 添加 vnode dom实例el 的属性，如 id、innerHTML
 // functions. The user is responsible for using them with only trusted content.
@@ -46,10 +47,10 @@ export function patchDOMProp(
   // 属性值 为空处理
   if (value === '' || value == null) {
     const type = typeof el[key]
-    if (value === '' && type === 'boolean') {
+    if (type === 'boolean') {
       // boolean 属性
       // e.g. <select multiple> compiles to { multiple: '' }
-      el[key] = true
+      el[key] = includeBooleanAttr(value)
       return
     } else if (value == null && type === 'string') {
       // 字符串 属性
@@ -60,7 +61,10 @@ export function patchDOMProp(
     } else if (type === 'number') {
       // 数字 属性
       // e.g. <img :width="null">
-      el[key] = 0
+      // the value of some IDL attr must be greater than 0, e.g. input.size = 0 -> error
+      try {
+        el[key] = 0
+      } catch {}
       el.removeAttribute(key)
       return
     }

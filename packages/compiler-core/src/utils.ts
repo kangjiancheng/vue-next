@@ -21,7 +21,9 @@ import {
   TextNode,
   InterpolationNode,
   VNodeCall,
-  SimpleExpressionNode
+  SimpleExpressionNode,
+  BlockCodegenNode,
+  MemoExpression
 } from './ast'
 import { TransformContext } from './transform'
 import {
@@ -30,9 +32,18 @@ import {
   SUSPENSE,
   KEEP_ALIVE,
   BASE_TRANSITION,
-  TO_HANDLERS
+  TO_HANDLERS,
+  NORMALIZE_PROPS,
+  GUARD_REACTIVE_PROPS,
+  CREATE_BLOCK,
+  CREATE_ELEMENT_BLOCK,
+  CREATE_VNODE,
+  CREATE_ELEMENT_VNODE,
+  WITH_MEMO,
+  OPEN_BLOCK
 } from './runtimeHelpers'
 import { isString, isObject, hyphenate, extend } from '@vue/shared'
+import { PropsExpression } from './transforms/transformElement'
 
 // 判断一个指令属性节点是否是静态指令;  (动态指令：':[dynamicName]="value"')
 export const isStaticExp = (p: JSChildNode): p is SimpleExpressionNode =>
@@ -74,11 +85,12 @@ export const isSimpleIdentifier = (name: string): boolean =>
 const enum MemberExpLexState {
   inMemberExp,
   inBrackets,
+  inParens,
   inString
 }
 
 const validFirstIdentCharRE = /[A-Za-z_$\xA0-\uFFFF]/
-const validIdentCharRE = /[\.\w$\xA0-\uFFFF]/
+const validIdentCharRE = /[\.\?\w$\xA0-\uFFFF]/
 const whitespaceRE = /\s+[.[]\s*|\s*[.[]\s+/g
 
 /**
@@ -92,8 +104,9 @@ export const isMemberExpression = (path: string): boolean => {
   path = path.trim().replace(whitespaceRE, s => s.trim())
 
   let state = MemberExpLexState.inMemberExp
-  let prevState = MemberExpLexState.inMemberExp
+  let stateStack: MemberExpLexState[] = []
   let currentOpenBracketCount = 0
+  let currentOpenParensCount = 0
   let currentStringType: "'" | '"' | '`' | null = null
 
   for (let i = 0; i < path.length; i++) {
@@ -101,9 +114,13 @@ export const isMemberExpression = (path: string): boolean => {
     switch (state) {
       case MemberExpLexState.inMemberExp:
         if (char === '[') {
-          prevState = state
+          stateStack.push(state)
           state = MemberExpLexState.inBrackets
           currentOpenBracketCount++
+        } else if (char === '(') {
+          stateStack.push(state)
+          state = MemberExpLexState.inParens
+          currentOpenParensCount++
         } else if (
           !(i === 0 ? validFirstIdentCharRE : validIdentCharRE).test(char)
         ) {
@@ -112,26 +129,43 @@ export const isMemberExpression = (path: string): boolean => {
         break
       case MemberExpLexState.inBrackets:
         if (char === `'` || char === `"` || char === '`') {
-          prevState = state
+          stateStack.push(state)
           state = MemberExpLexState.inString
           currentStringType = char
         } else if (char === `[`) {
           currentOpenBracketCount++
         } else if (char === `]`) {
           if (!--currentOpenBracketCount) {
-            state = prevState
+            state = stateStack.pop()!
+          }
+        }
+        break
+      case MemberExpLexState.inParens:
+        if (char === `'` || char === `"` || char === '`') {
+          stateStack.push(state)
+          state = MemberExpLexState.inString
+          currentStringType = char
+        } else if (char === `(`) {
+          currentOpenParensCount++
+        } else if (char === `)`) {
+          // if the exp ends as a call then it should not be considered valid
+          if (i === path.length - 1) {
+            return false
+          }
+          if (!--currentOpenParensCount) {
+            state = stateStack.pop()!
           }
         }
         break
       case MemberExpLexState.inString:
         if (char === currentStringType) {
-          state = prevState
+          state = stateStack.pop()!
           currentStringType = null
         }
         break
     }
   }
-  return !currentOpenBracketCount
+  return !currentOpenBracketCount && !currentOpenParensCount
 }
 
 // 获取节点中的内部某段内容的光标信息
@@ -269,7 +303,7 @@ export function hasDynamicKeyVBind(node: ElementNode): boolean {
       p.type === NodeTypes.DIRECTIVE &&
       p.name === 'bind' &&
       (!p.arg || // v-bind="obj"
-      p.arg.type !== NodeTypes.SIMPLE_EXPRESSION || // v-bind:[_ctx.foo]
+        p.arg.type !== NodeTypes.SIMPLE_EXPRESSION || // v-bind:[_ctx.foo]
         !p.arg.isStatic) // v-bind:[foo]
   )
 }
@@ -312,6 +346,35 @@ export function isSlotOutlet(
 // 则其node，即子节点： <div>...</div> 的codegenNode 在 transformElement节点生成 createVNodeCall
 
 // 场景三：在解析v-if指令时，将if在兄弟节点中的位置key（系统），注入到 如：<div v-if="true" v-for="item in items"></div>
+export function getVNodeHelper(ssr: boolean, isComponent: boolean) {
+  return ssr || isComponent ? CREATE_VNODE : CREATE_ELEMENT_VNODE
+}
+
+export function getVNodeBlockHelper(ssr: boolean, isComponent: boolean) {
+  return ssr || isComponent ? CREATE_BLOCK : CREATE_ELEMENT_BLOCK
+}
+
+const propsHelperSet = new Set([NORMALIZE_PROPS, GUARD_REACTIVE_PROPS])
+
+function getUnnormalizedProps(
+  props: PropsExpression | '{}',
+  callPath: CallExpression[] = []
+): [PropsExpression | '{}', CallExpression[]] {
+  if (
+    props &&
+    !isString(props) &&
+    props.type === NodeTypes.JS_CALL_EXPRESSION
+  ) {
+    const callee = props.callee
+    if (!isString(callee) && propsHelperSet.has(callee)) {
+      return getUnnormalizedProps(
+        props.arguments[0] as PropsExpression,
+        callPath.concat(props)
+      )
+    }
+  }
+  return [props, callPath]
+}
 export function injectProp(
   node: VNodeCall | RenderSlotCall, // 如 slotOutlet.codegenNode as RenderSlotCall，一个 NodeTypes.JS_CALL_EXPRESSION类型节点
   prop: Property, // 如 <span v-for="..." key="..."></span> 中 key属性对应的js节点
@@ -320,12 +383,34 @@ export function injectProp(
   let propsWithInjection: ObjectExpression | CallExpression | undefined
 
   // slot 的属性列表 transformElement buildProps()，或 子节点列表 props = createFunctionExpression([], slot.children, false, false, loc)
-  const props =
+  const originalProps =
     node.type === NodeTypes.VNODE_CALL ? node.props : node.arguments[2] // node.arguments： slotArgs, [2] 保存slot元素的子节点列表
 
   // 如 <template v-for="(item, index) in items" :key="index"><slot name="header"></slot></template>
   // slot 存在name以外的属性，此时 props = slotProps；
   // 在 transformSlotOutlet.ts 处理 slot元素
+
+  /**
+   * 1. mergeProps(...)
+   * 2. toHandlers(...)
+   * 3. normalizeProps(...)
+   * 4. normalizeProps(guardReactiveProps(...))
+   *
+   * we need to get the real props before normalization
+   */
+  let props = originalProps
+  let callPath: CallExpression[] = []
+  let parentCall: CallExpression | undefined
+  if (
+    props &&
+    !isString(props) &&
+    props.type === NodeTypes.JS_CALL_EXPRESSION
+  ) {
+    const ret = getUnnormalizedProps(props)
+    props = ret[0]
+    callPath = ret[1]
+    parentCall = callPath[callPath.length - 1]
+  }
 
   if (props == null || isString(props)) {
     // slot标签元素除name属性外，不存在其它属性
@@ -409,13 +494,28 @@ export function injectProp(
       createObjectExpression([prop]),
       props
     ])
+    // in the case of nested helper call, e.g. `normalizeProps(guardReactiveProps(props))`,
+    // it will be rewritten as `normalizeProps(mergeProps({ key: 0 }, props))`,
+    // the `guardReactiveProps` will no longer be needed
+    if (parentCall && parentCall.callee === GUARD_REACTIVE_PROPS) {
+      parentCall = callPath[callPath.length - 2]
+    }
   }
 
   if (node.type === NodeTypes.VNODE_CALL) {
-    node.props = propsWithInjection
+    if (parentCall) {
+      parentCall.arguments[0] = propsWithInjection
+    } else {
+      node.props = propsWithInjection
+    }
   } else {
     // 如处理 v-for template slot 元素，将template上的key属性加到 slot元素的属性列表中
-    node.arguments[2] = propsWithInjection
+
+    if (parentCall) {
+      parentCall.arguments[0] = propsWithInjection
+    } else {
+      node.arguments[2] = propsWithInjection
+    }
   }
 }
 
@@ -479,5 +579,25 @@ export function hasScopeRef(
         exhaustiveCheck
       }
       return false
+  }
+}
+
+export function getMemoedVNodeCall(node: BlockCodegenNode | MemoExpression) {
+  if (node.type === NodeTypes.JS_CALL_EXPRESSION && node.callee === WITH_MEMO) {
+    return node.arguments[1].returns as VNodeCall
+  } else {
+    return node
+  }
+}
+
+export function makeBlock(
+  node: VNodeCall,
+  { helper, removeHelper, inSSR }: TransformContext
+) {
+  if (!node.isBlock) {
+    node.isBlock = true
+    removeHelper(getVNodeHelper(inSSR, node.isComponent))
+    helper(OPEN_BLOCK)
+    helper(getVNodeBlockHelper(inSSR, node.isComponent))
   }
 }

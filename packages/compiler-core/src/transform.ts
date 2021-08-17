@@ -16,7 +16,8 @@ import {
   createCacheExpression,
   TemplateLiteral,
   createVNodeCall,
-  ConstantTypes
+  ConstantTypes,
+  ArrayExpression
 } from './ast'
 import {
   isString,
@@ -33,12 +34,9 @@ import {
   TO_DISPLAY_STRING,
   FRAGMENT,
   helperNameMap,
-  CREATE_BLOCK,
-  CREATE_COMMENT,
-  OPEN_BLOCK,
-  CREATE_VNODE
+  CREATE_COMMENT
 } from './runtimeHelpers'
-import { isVSlot } from './utils'
+import { isVSlot, makeBlock } from './utils'
 import { hoistStatic, isSingleElementRoot } from './transforms/hoistStatic'
 import { CompilerCompatOptions } from './compat/compatConfig'
 
@@ -107,6 +105,7 @@ export interface TransformContext
   parent: ParentNode | null
   childIndex: number
   currentNode: RootNode | TemplateChildNode | null
+  inVOnce: boolean
   helper<T extends symbol>(name: T): T
   removeHelper<T extends symbol>(name: T): void
   helperString(name: symbol): string
@@ -115,7 +114,7 @@ export interface TransformContext
   onNodeRemoved(): void
   addIdentifiers(exp: ExpressionNode | string): void
   removeIdentifiers(exp: ExpressionNode | string): void
-  hoist(exp: JSChildNode): SimpleExpressionNode
+  hoist(exp: string | JSChildNode | ArrayExpression): SimpleExpressionNode
   cache<T extends JSChildNode>(exp: T, isVNode?: boolean): CacheExpression | T
   constantCache: Map<TemplateChildNode, ConstantTypes>
 
@@ -139,6 +138,7 @@ export function createTransformContext(
     scopeId = null,
     slotted = true,
     ssr = false,
+    inSSR = false,
     ssrCssVars = ``,
     bindingMetadata = EMPTY_OBJ,
     inline = false,
@@ -164,6 +164,7 @@ export function createTransformContext(
     scopeId,
     slotted,
     ssr,
+    inSSR,
     ssrCssVars,
     bindingMetadata,
     inline,
@@ -192,6 +193,7 @@ export function createTransformContext(
     parent: null,
     currentNode: root,
     childIndex: 0,
+    inVOnce: false,
 
     // methods
     helper(name) {
@@ -234,8 +236,8 @@ export function createTransformContext(
       const removalIndex = node
         ? list.indexOf(node)
         : context.currentNode
-          ? context.childIndex
-          : -1
+        ? context.childIndex
+        : -1
       /* istanbul ignore if */
       if (__DEV__ && removalIndex < 0) {
         throw new Error(`node being removed is not a child of current parent`)
@@ -281,6 +283,7 @@ export function createTransformContext(
     },
     hoist(exp) {
       // 静态节点、静态节点属性props、静态文本节点的codegenNode
+      if (isString(exp)) exp = createSimpleExpression(exp)
       context.hoists.push(exp)
 
       // 重新生成节点的codegenNode
@@ -296,7 +299,7 @@ export function createTransformContext(
       return identifier
     },
     cache(exp, isVNode = false) {
-      return createCacheExpression(++context.cached, exp, isVNode)
+      return createCacheExpression(context.cached++, exp, isVNode)
     }
   }
 
@@ -365,7 +368,7 @@ export function transform(root: RootNode, options: TransformOptions) {
 // 1、 vue模版只有一个根元素：（1）element 类型，则选其codegenNode；（2）除 element类型外，如，IfNode、forNode则选其child
 // 2、 vue模版有多个根元素：创建一个fragment节点，作为其codegenNode
 function createRootCodegen(root: RootNode, context: TransformContext) {
-  const { helper, removeHelper } = context
+  const { helper } = context
   const { children } = root
   if (children.length === 1) {
     // vue模版只有一个根元素
@@ -381,14 +384,7 @@ function createRootCodegen(root: RootNode, context: TransformContext) {
       // SimpleExpressionNode
       const codegenNode = child.codegenNode
       if (codegenNode.type === NodeTypes.VNODE_CALL) {
-        if (!codegenNode.isBlock) {
-          removeHelper(CREATE_VNODE)
-          // 如 template: '<div>hello {{ "world" }} !</div>'
-          // 如 组件 - template: '<component-demo>...</component-demo>'
-          codegenNode.isBlock = true
-          helper(OPEN_BLOCK)
-          helper(CREATE_BLOCK)
-        }
+        makeBlock(codegenNode, context)
       }
       root.codegenNode = codegenNode
     } else {
@@ -423,7 +419,9 @@ function createRootCodegen(root: RootNode, context: TransformContext) {
       patchFlag + (__DEV__ ? ` /* ${patchFlagText} */` : ``),
       undefined,
       undefined,
-      true
+      true,
+      undefined,
+      false /* isComponent */
     )
   } else {
     // no children = noop. codegen will return null.

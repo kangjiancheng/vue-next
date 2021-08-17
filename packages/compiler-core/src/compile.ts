@@ -21,6 +21,7 @@ import { transformOnce } from './transforms/vOnce'
 import { transformModel } from './transforms/vModel'
 import { transformFilter } from './compat/transformFilter'
 import { defaultOnError, createCompilerError, ErrorCodes } from './errors'
+import { transformMemo } from './transforms/vMemo'
 
 export type TransformPreset = [
   NodeTransform[],
@@ -35,6 +36,7 @@ export function getBaseTransformPreset(
     [
       transformOnce, // 处理 v-once 指令属性节点，编译一次节点，不进行再次编译，缓存codegenNode
       transformIf, // 处理 v-if 指令属性节点，在添加插件时，会先插件一个新的if branch node分支流节点，将之后的else-f、else节点移进来，创建if codegenNode，并将else-if、else的codegenNode链式绑定到if分支流节点
+      transformMemo,
       transformFor, // 处理 v-for 指令属性节点， 在添加插件时，会先创建一个新的for node 类型节点，并替换当前for类型的节点，之后会处理slot场景下的v-for，和template场景下的v-for，包括对key属性的处理，并生成for节点的codegenNode
       ...(__COMPAT__ ? [transformFilter] : []),
       ...(!__BROWSER__ && prefixIdentifiers
@@ -44,8 +46,8 @@ export function getBaseTransformPreset(
             transformExpression
           ]
         : __BROWSER__ && __DEV__
-          ? [transformExpression] // 处理插值表达式内容，指令属性节点值表达式，排除v-for和v-on:arg属性节点，在浏览器中只需要节点验证表达式值的js语法规则：validateBrowserExpression
-          : []),
+        ? [transformExpression] // 处理插值表达式内容，指令属性节点值表达式，排除v-for和v-on:arg属性节点，在浏览器中只需要节点验证表达式值的js语法规则：validateBrowserExpression
+        : []),
       transformSlotOutlet, // 处理插值表达式内容，指令属性节点值表达式，排除v-for和v-on:arg属性节点，在浏览器中只需要节点验证表达式值的js语法规则：validateBrowserExpression
       transformElement, // 处理html元素节点或组件节点，解析元素节点的prop属性列表（on/bind/model/text/html/show/is）、v-slot指令与默认/具名插槽转换、patchFlag信息、用户定义的指令等，为当前节点的ast生成对应的codegen vnode执行函数节点
       trackSlotScopes, // 处理并跟踪节点的slot指令，通过计数来识别出是否内嵌了slot指令，为transformElement检测是否定义了动态slot，创建对应的patchflag信息
@@ -101,9 +103,8 @@ export function baseCompile(
   // 解析 vue模版源码 => vue模版源码ast
   const ast = isString(template) ? baseParse(template, options) : template
 
-  const [nodeTransforms, directiveTransforms] = getBaseTransformPreset(
-    prefixIdentifiers
-  )
+  const [nodeTransforms, directiveTransforms] =
+    getBaseTransformPreset(prefixIdentifiers)
 
   // 转换 vue模版源码ast => js渲染源码ast
   transform(

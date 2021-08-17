@@ -95,8 +95,9 @@ export const transformOn: DirectiveTransform = (
   if (exp && !exp.content.trim()) {
     exp = undefined
   }
+
   // 是否要缓存指令，不需要重新解析，加快vnode
-  let shouldCache: boolean = context.cacheHandlers && !exp
+  let shouldCache: boolean = context.cacheHandlers && !exp && !context.inVOnce
   if (exp) {
     // 验证是否是有效的函数名调用方式
     // 匹配一个指令属性值的表达式： 以 [A-Za-z_$] 开头，如 <button @keyup="handleKeyup" @click="$_abc[foo][bar]" @change="abc  . foo . (可以换行)  bar"></button>
@@ -126,6 +127,8 @@ export const transformOn: DirectiveTransform = (
       // to scope variables.
       shouldCache =
         context.cacheHandlers &&
+        // unnecessary to cache inside v-once
+        !context.inVOnce &&
         // runtime constants don't need to be cached
         // (this is analyzed by compileScript in SFC <script setup>)
         !(exp.type === NodeTypes.SIMPLE_EXPRESSION && exp.constType > 0) &&
@@ -212,5 +215,7 @@ export const transformOn: DirectiveTransform = (
     ret.props[0].value = context.cache(ret.props[0].value)
   }
 
+  // mark the key as handler for props normalization check
+  ret.props.forEach(p => (p.key.isHandlerKey = true))
   return ret
 }

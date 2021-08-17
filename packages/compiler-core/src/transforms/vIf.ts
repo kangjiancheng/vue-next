@@ -22,20 +22,22 @@ import {
   AttributeNode,
   locStub,
   CacheExpression,
-  ConstantTypes
+  ConstantTypes,
+  MemoExpression
 } from '../ast'
 import { createCompilerError, ErrorCodes } from '../errors'
 import { processExpression } from './transformExpression'
 import { validateBrowserExpression } from '../validateExpression'
+import { FRAGMENT, CREATE_COMMENT } from '../runtimeHelpers'
 import {
-  CREATE_BLOCK,
-  FRAGMENT,
-  CREATE_COMMENT,
-  OPEN_BLOCK,
-  CREATE_VNODE
-} from '../runtimeHelpers'
-import { injectProp, findDir, findProp, isBuiltInType } from '../utils'
+  injectProp,
+  findDir,
+  findProp,
+  isBuiltInType,
+  makeBlock
+} from '../utils'
 import { PatchFlags, PatchFlagNames } from '@vue/shared'
+import { getMemoedVNodeCall } from '..'
 
 /**
  * 创建v-if解析插件时，原理是基于 if分支流节点 来解析的，如一个分支流中可能是：if节点、else节点、else-if节点，构成的一个逻辑判断流程。
@@ -251,7 +253,7 @@ function createCodegenNodeForBranch(
   branch: IfBranchNode, // 当前节点（if/else/else-if）对应的branch节点
   keyIndex: number, // // 从前边的if系列开始计数
   context: TransformContext
-): IfConditionalExpression | BlockCodegenNode {
+): IfConditionalExpression | BlockCodegenNode | MemoExpression {
   if (branch.condition) {
     // 创建 if/else-if 条件表达式 codegenNode: NodeTypes.JS_CONDITIONAL_EXPRESSION,
     return createConditionalExpression(
@@ -275,8 +277,8 @@ function createChildrenCodegenNode(
   branch: IfBranchNode, // 节点（if/else/else-if）对应的branch节点
   keyIndex: number, // // 当前节点branch，在所有if/else/else-if 节点中的位置
   context: TransformContext
-): BlockCodegenNode {
-  const { helper, removeHelper } = context
+): BlockCodegenNode | MemoExpression {
+  const { helper } = context
   const keyProperty = createObjectProperty(
     `key`,
     createSimpleExpression(
@@ -330,25 +332,25 @@ function createChildrenCodegenNode(
         undefined,
         true,
         false,
+        false /* isComponent */,
         branch.loc
       )
     }
   } else {
     // 纯的节点，if/else/else-if节点，直接
-    const vnodeCall = (firstChild as ElementNode)
-      .codegenNode as BlockCodegenNode
+    const ret = (firstChild as ElementNode).codegenNode as
+      | BlockCodegenNode
+      | MemoExpression
+    const vnodeCall = getMemoedVNodeCall(ret)
     // Change createVNode to createBlock.
-    if (vnodeCall.type === NodeTypes.VNODE_CALL && !vnodeCall.isBlock) {
+    if (vnodeCall.type === NodeTypes.VNODE_CALL) {
       // VNODE_CALL 在transformElement阶段创建
-      removeHelper(CREATE_VNODE)
-      vnodeCall.isBlock = true
-      helper(OPEN_BLOCK)
-      helper(CREATE_BLOCK)
+      makeBlock(vnodeCall, context)
     }
     // 注入if分支流的key到branch的prop属性列表中
     // inject branch key
     injectProp(vnodeCall, keyProperty, context)
-    return vnodeCall
+    return ret
   }
 }
 
@@ -372,8 +374,8 @@ function isSameKey(
     }
     if (
       exp.type !== NodeTypes.SIMPLE_EXPRESSION ||
-      (exp.isStatic !== (branchExp as SimpleExpressionNode).isStatic ||
-        exp.content !== (branchExp as SimpleExpressionNode).content)
+      exp.isStatic !== (branchExp as SimpleExpressionNode).isStatic ||
+      exp.content !== (branchExp as SimpleExpressionNode).content
     ) {
       return false
     }

@@ -59,25 +59,6 @@ const bar = 1
   props: propsModel,`)
   })
 
-  test('defineEmit() (deprecated)', () => {
-    const { content, bindings } = compile(`
-<script setup>
-const myEmit = defineEmit(['foo', 'bar'])
-</script>
-  `)
-    assertCode(content)
-    expect(bindings).toStrictEqual({
-      myEmit: BindingTypes.SETUP_CONST
-    })
-    // should remove defineOptions import and call
-    expect(content).not.toMatch(/defineEmits?/)
-    // should generate correct setup signature
-    expect(content).toMatch(`setup(__props, { expose, emit: myEmit }) {`)
-    // should include context options in default export
-    expect(content).toMatch(`export default {
-  emits: ['foo', 'bar'],`)
-  })
-
   test('defineEmits()', () => {
     const { content, bindings } = compile(`
 <script setup>
@@ -204,7 +185,7 @@ defineExpose({ foo: 123 })
         `
       <script setup>
       import { ref } from 'vue'
-      ref: foo = 1
+      let foo = $ref(1)
       </script>
       `,
         { refSugar: true }
@@ -227,6 +208,34 @@ defineExpose({ foo: 123 })
       expect(content.indexOf(`import { x }`)).toEqual(
         content.lastIndexOf(`import { x }`)
       )
+    })
+
+    test('imports not used in <template> should not be exposed', () => {
+      const { content } = compile(`
+        <script setup lang="ts">
+        import { FooBar, FooBaz, FooQux, vMyDir, x, y, z, x$y, VAR, VAR2, VAR3, Last } from './x'
+        const fooBar: FooBar = 1
+        </script>
+        <template>
+          <FooBaz v-my-dir>{{ x }} {{ yy }} {{ x$y }}</FooBaz>
+          <foo-qux/>
+          <div :id="z + 'y'">FooBar</div>
+          {{ \`\${VAR}VAR2\${VAR3}\` }}
+          <Last/>
+        </template>
+        `)
+      // FooBar: should not be matched by plain text
+      // FooBaz: used as PascalCase component
+      // FooQux: used as kebab-case component
+      // vMyDir: used as directive v-my-dir
+      // x: used in interpolation
+      // y: should not be matched by {{ yy }} or 'y' in binding exps
+      // x$y: #4274 should escape special chars when creating Regex
+      // VAR & VAR3: #4340 interpolations in tempalte strings
+      expect(content).toMatch(
+        `return { fooBar, FooBaz, FooQux, vMyDir, x, z, x$y, VAR, VAR3, Last }`
+      )
+      assertCode(content)
     })
   })
 
@@ -476,32 +485,6 @@ defineExpose({ foo: 123 })
       expect(content).toMatch(`ssrInterpolate`)
       assertCode(content)
     })
-
-    // _withId is only generated for backwards compat and is a noop when called
-    // in module scope.
-    // when inside setup(), currentInstance will be non-null and _withId will
-    // no longer be noop and cause scopeId errors.
-    // TODO: this test should no longer be necessary if we remove _withId
-    // codegen in 3.1
-    test('should not wrap render fn with withId when having scoped styles', async () => {
-      const { content } = compile(
-        `
-        <script setup>
-        const msg = 1
-        </script>
-        <template><h1>{{ msg }}</h1></template>
-        <style scoped>
-        h1 { color: red; }
-        </style>
-        `,
-        {
-          inlineTemplate: true
-        }
-      )
-      expect(content).toMatch(`return (_ctx, _cache`)
-      expect(content).not.toMatch(`_withId(`)
-      assertCode(content)
-    })
   })
 
   describe('with TypeScript', () => {
@@ -557,8 +540,10 @@ const emit = defineEmits(['a', 'b'])
 
         union: string | number
         literalUnion: 'foo' | 'bar'
+        literalUnionNumber: 1 | 2 | 3 | 4 | 5
         literalUnionMixed: 'foo' | 1 | boolean
         intersection: Test & {}
+        foo: ((item: any) => boolean) | null
       }>()
       </script>`)
       assertCode(content)
@@ -583,13 +568,15 @@ const emit = defineEmits(['a', 'b'])
       expect(content).toMatch(
         `union: { type: [String, Number], required: true }`
       )
+      expect(content).toMatch(`literalUnion: { type: String, required: true }`)
       expect(content).toMatch(
-        `literalUnion: { type: [String, String], required: true }`
+        `literalUnionNumber: { type: Number, required: true }`
       )
       expect(content).toMatch(
         `literalUnionMixed: { type: [String, Number, Boolean], required: true }`
       )
       expect(content).toMatch(`intersection: { type: Object, required: true }`)
+      expect(content).toMatch(`foo: { type: [Function, null], required: true }`)
       expect(bindings).toStrictEqual({
         string: BindingTypes.PROPS,
         number: BindingTypes.PROPS,
@@ -611,8 +598,10 @@ const emit = defineEmits(['a', 'b'])
         method: BindingTypes.PROPS,
         union: BindingTypes.PROPS,
         literalUnion: BindingTypes.PROPS,
+        literalUnionNumber: BindingTypes.PROPS,
         literalUnionMixed: BindingTypes.PROPS,
-        intersection: BindingTypes.PROPS
+        intersection: BindingTypes.PROPS,
+        foo: BindingTypes.PROPS
       })
     })
 
@@ -836,6 +825,18 @@ const emit = defineEmits(['a', 'b'])
         Foo: BindingTypes.SETUP_CONST
       })
     })
+
+    test('const Enum', () => {
+      const { content, bindings } = compile(
+        `<script setup lang="ts">
+        const enum Foo { A = 123 }
+        </script>`
+      )
+      assertCode(content)
+      expect(bindings).toStrictEqual({
+        Foo: BindingTypes.SETUP_CONST
+      })
+    })
   })
 
   describe('async/await detection', () => {
@@ -874,7 +875,7 @@ const emit = defineEmits(['a', 'b'])
 
     test('ref', () => {
       assertAwaitDetection(
-        `ref: a = 1 + (await foo)`,
+        `let a = $ref(1 + (await foo))`,
         `1 + ((([__temp,__restore]=_withAsyncContext(()=>(foo))),__temp=await __temp,__restore(),__temp))`
       )
     })

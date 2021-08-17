@@ -13,7 +13,7 @@ import {
   compatUtils
 } from '@vue/runtime-core'
 import { nodeOps } from './nodeOps'
-import { patchProp, forcePatchProp } from './patchProp'
+import { patchProp } from './patchProp'
 // Importing from the compiler, will be tree-shaken in prod
 import { isFunction, isString, isHTMLTag, isSVGTag, extend } from '@vue/shared'
 
@@ -25,17 +25,20 @@ declare module '@vue/reactivity' {
 }
 
 // 初始化默认选项，准备渲染基本环境
-const rendererOptions = extend({ patchProp, forcePatchProp }, nodeOps)
+const rendererOptions = extend({ patchProp }, nodeOps)
 
 // lazy create the renderer - this makes core renderer logic tree-shakable
 // in case the user only imports reactivity utilities from Vue.
-let renderer: Renderer<Element> | HydrationRenderer
+let renderer: Renderer<Element | ShadowRoot> | HydrationRenderer
 
 let enabledHydration = false
 
 // 初始化 renderer 渲染器，返回 render() 与 createApp() 函数
 function ensureRenderer() {
-  return renderer || (renderer = createRenderer<Node, Element>(rendererOptions))
+  return (
+    renderer ||
+    (renderer = createRenderer<Node, Element | ShadowRoot>(rendererOptions))
+  )
 }
 
 function ensureHydrationRenderer() {
@@ -50,7 +53,7 @@ function ensureHydrationRenderer() {
 // use explicit type casts here to avoid import() calls in rolled-up d.ts
 export const render = ((...args) => {
   ensureRenderer().render(...args)
-}) as RootRenderFunction<Element>
+}) as RootRenderFunction<Element | ShadowRoot>
 
 export const hydrate = ((...args) => {
   ensureHydrationRenderer().hydrate(...args)
@@ -205,6 +208,7 @@ function normalizeContainer(
   }
   if (
     __DEV__ &&
+    window.ShadowRoot &&
     container instanceof window.ShadowRoot &&
     container.mode === 'closed'
   ) {
@@ -214,6 +218,14 @@ function normalizeContainer(
   }
   return container as any
 }
+
+// Custom element support
+export {
+  defineCustomElement,
+  defineSSRCustomElement,
+  VueElement,
+  VueElementConstructor
+} from './apiCustomElement'
 
 // SFC CSS utilities
 export { useCssModule } from './helpers/useCssModule'

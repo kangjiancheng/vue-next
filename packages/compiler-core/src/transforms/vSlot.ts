@@ -436,8 +436,8 @@ export function buildSlots(
   const slotFlag = hasDynamicSlots // 是否存在动态 slot，如 动态v-slot:[xxx]、或 v-if/v-for、或 嵌套v-if/v-for
     ? SlotFlags.DYNAMIC // 2
     : hasForwardedSlots(node.children) // 组件子孙节点中 是否存在 slot 标签元素
-      ? SlotFlags.FORWARDED // 3
-      : SlotFlags.STABLE // 1
+    ? SlotFlags.FORWARDED // 3
+    : SlotFlags.STABLE // 1
 
   // 创建 静态slots节点列表 的js对象格式：将数组转换为对象
   let slots = createObjectExpression(
@@ -495,8 +495,7 @@ function hasForwardedSlots(children: TemplateChildNode[]): boolean {
       case NodeTypes.ELEMENT:
         if (
           child.tagType === ElementTypes.SLOT || // slot标签元素
-          (child.tagType === ElementTypes.ELEMENT && // 继续递归
-            hasForwardedSlots(child.children))
+          hasForwardedSlots(child.children) // 继续递归
         ) {
           return true
         }

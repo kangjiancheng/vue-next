@@ -1,12 +1,12 @@
 import {
-  effect,
-  stop,
   isRef,
   Ref,
   ComputedRef,
-  ReactiveEffectOptions,
+  ReactiveEffect,
   isReactive,
-  ReactiveFlags
+  ReactiveFlags,
+  EffectScheduler,
+  DebuggerOptions
 } from '@vue/reactivity'
 import { SchedulerJob, queuePreFlushCb } from './scheduler'
 import {
@@ -26,7 +26,8 @@ import {
   currentInstance,
   ComponentInternalInstance,
   isInSSRComponentSetup,
-  recordInstanceBoundEffect
+  setCurrentInstance,
+  unsetCurrentInstance
 } from './component'
 import {
   ErrorCodes,
@@ -51,18 +52,20 @@ export type WatchCallback<V = any, OV = any> = (
 
 type MapSources<T, Immediate> = {
   [K in keyof T]: T[K] extends WatchSource<infer V>
-    ? Immediate extends true ? (V | undefined) : V
+    ? Immediate extends true
+      ? V | undefined
+      : V
     : T[K] extends object
-      ? Immediate extends true ? (T[K] | undefined) : T[K]
-      : never
+    ? Immediate extends true
+      ? T[K] | undefined
+      : T[K]
+    : never
 }
 
 type InvalidateCbRegistrator = (cb: () => void) => void
 
-export interface WatchOptionsBase {
+export interface WatchOptionsBase extends DebuggerOptions {
   flush?: 'pre' | 'post' | 'sync'
-  onTrack?: ReactiveEffectOptions['onTrack']
-  onTrigger?: ReactiveEffectOptions['onTrigger']
 }
 
 export interface WatchOptions<Immediate = boolean> extends WatchOptionsBase {
@@ -78,6 +81,32 @@ export function watchEffect(
   options?: WatchOptionsBase
 ): WatchStopHandle {
   return doWatch(effect, null, options)
+}
+
+export function watchPostEffect(
+  effect: WatchEffect,
+  options?: DebuggerOptions
+) {
+  return doWatch(
+    effect,
+    null,
+    (__DEV__
+      ? Object.assign(options || {}, { flush: 'post' })
+      : { flush: 'post' }) as WatchOptionsBase
+  )
+}
+
+export function watchSyncEffect(
+  effect: WatchEffect,
+  options?: DebuggerOptions
+) {
+  return doWatch(
+    effect,
+    null,
+    (__DEV__
+      ? Object.assign(options || {}, { flush: 'sync' })
+      : { flush: 'sync' }) as WatchOptionsBase
+  )
 }
 
 // initial value for watchers to trigger on undefined initial values
@@ -110,7 +139,7 @@ export function watch<
 // overload: single source + cb
 export function watch<T, Immediate extends Readonly<boolean> = false>(
   source: WatchSource<T>,
-  cb: WatchCallback<T, Immediate extends true ? (T | undefined) : T>,
+  cb: WatchCallback<T, Immediate extends true ? T | undefined : T>,
   options?: WatchOptions<Immediate>
 ): WatchStopHandle
 
@@ -120,7 +149,7 @@ export function watch<
   Immediate extends Readonly<boolean> = false
 >(
   source: T,
-  cb: WatchCallback<T, Immediate extends true ? (T | undefined) : T>,
+  cb: WatchCallback<T, Immediate extends true ? T | undefined : T>,
   options?: WatchOptions<Immediate>
 ): WatchStopHandle
 
@@ -147,8 +176,7 @@ export function watch<T = any, Immediate extends Readonly<boolean> = false>(
 function doWatch(
   source: WatchSource | WatchSource[] | WatchEffect | object,
   cb: WatchCallback | null,
-  { immediate, deep, flush, onTrack, onTrigger }: WatchOptions = EMPTY_OBJ,
-  instance = currentInstance // 在执行组件的setup函数期间，会执行watch，所以instance为当前组件实例
+  { immediate, deep, flush, onTrack, onTrigger }: WatchOptions = EMPTY_OBJ
 ): WatchStopHandle {
   if (__DEV__ && !cb) {
     // 当使用：watchEffect(effect, options)，immediate、deep 就不需要了
@@ -179,6 +207,7 @@ function doWatch(
     )
   }
 
+  const instance = currentInstance // 在执行组件的setup函数期间，会执行watch，所以instance为当前组件实例
   let getter: () => any // ref、reactive、数组、getter => ...
   let forceTrigger = false
   let isMultiSource = false
@@ -258,7 +287,7 @@ function doWatch(
 
   let cleanup: () => void
   let onInvalidate: InvalidateCbRegistrator = (fn: () => void) => {
-    cleanup = runner.options.onStop = () => {
+    cleanup = effect.onStop = () => {
       callWithErrorHandling(fn, instance, ErrorCodes.WATCH_CLEANUP)
     }
   }
@@ -273,7 +302,7 @@ function doWatch(
     } else if (immediate) {
       callWithAsyncErrorHandling(cb, instance, ErrorCodes.WATCH_CALLBACK, [
         getter(),
-        undefined,
+        isMultiSource ? [] : undefined,
         onInvalidate
       ])
     }
@@ -284,13 +313,13 @@ function doWatch(
   let oldValue = isMultiSource ? [] : INITIAL_WATCHER_VALUE
   // 执行runner
   const job: SchedulerJob = () => {
-    if (!runner.active) {
+    if (!effect.active) {
       // 当执行stop后
       return
     }
     if (cb) {
       // watch(source, cb)
-      const newValue = runner() // 执行source的effect函数 - 对监听目标进行依赖跟踪与收集
+      const newValue = effect.run() // 执行source的effect函数 - 对监听目标进行依赖跟踪与收集
       if (
         deep ||
         forceTrigger ||
@@ -318,7 +347,7 @@ function doWatch(
       }
     } else {
       // watchEffect
-      runner()
+      effect.run()
     }
   }
 
@@ -327,7 +356,7 @@ function doWatch(
   job.allowRecurse = !!cb
 
   // 任务调度机：修改watch监听目标值时，trigger触发更新任务列表
-  let scheduler: ReactiveEffectOptions['scheduler']
+  let scheduler: EffectScheduler
   if (flush === 'sync') {
     // 同步执行：当监听目标值改变时，立刻执行
     scheduler = job as any // the scheduler function gets called directly
@@ -349,38 +378,37 @@ function doWatch(
     }
   }
 
-  // 创建监听目标getter的effect函数 - runner
-  // 当执行effect函数时，会开启对 getter函数里的依赖项 进行跟踪与收集
-  const runner = effect(getter, {
-    lazy: true, // 不马上执行getter，只返回getter的effect函数
-    onTrack,
-    onTrigger,
-    scheduler // 修改getter值时，在trigger中触发更新订阅目标cb
-  })
+  // 创建监听目标getter的effect函数
+  const effect = new ReactiveEffect(getter, scheduler) //scheduler: 修改getter值时，在trigger中触发更新订阅目标cb
 
-  // 记录组件执行setup期间，组件实例所依赖的effect函数
-  recordInstanceBoundEffect(runner, instance)
+  if (__DEV__) {
+    effect.onTrack = onTrack
+    effect.onTrigger = onTrigger
+  }
 
   // initial run
   if (cb) {
     if (immediate) {
       job() // 立刻执行任务job，执行其中watch cb回调函数
     } else {
-      oldValue = runner() // 一开始只记录旧值：在之后 触发更新值时，执行job时，会进行比较
+      oldValue = effect.run() // 一开始只记录旧值：在之后 触发更新值时，执行job时，会进行比较
     }
   } else if (flush === 'post') {
     // 初次运行时，渲染函数后即挂载组件之后 执行
-    queuePostRenderEffect(runner, instance && instance.suspense)
+    queuePostRenderEffect(
+      effect.run.bind(effect),
+      instance && instance.suspense
+    )
   } else {
     // watchEffect，会立刻执行getter，同时会进行依赖收集
-    runner()
+    effect.run()
   }
 
   // 返回一个可以停止监听的函数
   return () => {
-    stop(runner) // 停止active，并在此effect的依赖列表中deps - 移除 对此监听目标依赖项数据 的该依赖effect
-    if (instance) {
-      remove(instance.effects!, runner)
+    effect.stop() // 停止active，并在此effect的依赖列表中deps - 移除 对此监听目标依赖项数据 的该依赖effect
+    if (instance && instance.scope) {
+      remove(instance.scope.effects!, effect)
     }
   }
 }
@@ -405,7 +433,15 @@ export function instanceWatch(
     cb = value.handler as Function
     options = value
   }
-  return doWatch(getter, cb.bind(publicThis), options, this)
+  const cur = currentInstance
+  setCurrentInstance(this)
+  const res = doWatch(getter, cb.bind(publicThis), options)
+  if (cur) {
+    setCurrentInstance(cur)
+  } else {
+    unsetCurrentInstance()
+  }
+  return res
 }
 
 // 遍历访问数据，并进行依赖收集
@@ -420,12 +456,12 @@ export function createPathGetter(ctx: any, path: string) {
   }
 }
 
-function traverse(value: unknown, seen: Set<unknown> = new Set()) {
-  if (
-    !isObject(value) ||
-    seen.has(value) ||
-    (value as any)[ReactiveFlags.SKIP]
-  ) {
+export function traverse(value: unknown, seen: Set<unknown> = new Set()) {
+  if (!isObject(value) || (value as any)[ReactiveFlags.SKIP]) {
+    return value
+  }
+  seen = seen || new Set()
+  if (seen.has(value)) {
     return value
   }
   seen.add(value)
