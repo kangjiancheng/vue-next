@@ -47,7 +47,6 @@ import {
   CREATE_TEXT,
   PUSH_SCOPE_ID,
   POP_SCOPE_ID,
-  WITH_SCOPE_ID,
   WITH_DIRECTIVES,
   CREATE_ELEMENT_VNODE,
   OPEN_BLOCK,
@@ -98,6 +97,7 @@ function createCodegenContext(
     optimizeImports = false,
     runtimeGlobalName = `Vue`,
     runtimeModuleName = `vue`,
+    ssrRuntimeModuleName = 'vue/server-renderer',
     ssr = false,
     isTS = false,
     inSSR = false
@@ -112,6 +112,7 @@ function createCodegenContext(
     optimizeImports, // false
     runtimeGlobalName, // Vue
     runtimeModuleName, // Vue
+    ssrRuntimeModuleName,
     ssr, // false
     isTS,
     inSSR,
@@ -432,7 +433,8 @@ function genFunctionPreamble(ast: RootNode, context: CodegenContext) {
     push, // function (code) { context.code += code }
     newline, // function
     runtimeModuleName, // 'Vue'
-    runtimeGlobalName // 'Vue'
+    runtimeGlobalName, // 'Vue'
+    ssrRuntimeModuleName
   } = context
   // 绑定变量Vue，如：const _Vue = Vue
   const VueBinding =
@@ -513,7 +515,7 @@ function genFunctionPreamble(ast: RootNode, context: CodegenContext) {
     push(
       `const { ${ast.ssrHelpers
         .map(aliasHelper)
-        .join(', ')} } = require("@vue/server-renderer")\n`
+        .join(', ')} } = require("${ssrRuntimeModuleName}")\n`
     )
   }
 
@@ -539,13 +541,16 @@ function genModulePreamble(
   genScopeId: boolean,
   inline?: boolean
 ) {
-  const { push, newline, optimizeImports, runtimeModuleName } = context
+  const {
+    push,
+    newline,
+    optimizeImports,
+    runtimeModuleName,
+    ssrRuntimeModuleName
+  } = context
 
-  if (genScopeId) {
-    ast.helpers.push(WITH_SCOPE_ID)
-    if (ast.hoists.length) {
-      ast.helpers.push(PUSH_SCOPE_ID, POP_SCOPE_ID)
-    }
+  if (genScopeId && ast.hoists.length) {
+    ast.helpers.push(PUSH_SCOPE_ID, POP_SCOPE_ID)
   }
 
   // generate import statements for helpers
@@ -579,7 +584,7 @@ function genModulePreamble(
     push(
       `import { ${ast.ssrHelpers
         .map(s => `${helperNameMap[s]} as _${helperNameMap[s]}`)
-        .join(', ')} } from "@vue/server-renderer"\n`
+        .join(', ')} } from "${ssrRuntimeModuleName}"\n`
     )
   }
 
@@ -646,31 +651,38 @@ function genHoists(hoists: (JSChildNode | null)[], context: CodegenContext) {
   const genScopeId = !__BROWSER__ && scopeId != null && mode !== 'function'
   newline() // 换行 context.code + '\n'
 
-  // TODO: analyze cfs - !__BROWSER__
-  // push scope Id before initializing hoisted vnodes so that these vnodes
-  // get the proper scopeId as well.
+  // generate inlined withScopeId helper
   if (genScopeId) {
-    push(`${helper(PUSH_SCOPE_ID)}("${scopeId}")`)
+    push(
+      `const _withScopeId = n => (${helper(
+        PUSH_SCOPE_ID
+      )}("${scopeId}"),n=n(),${helper(POP_SCOPE_ID)}(),n)`
+    )
     newline()
   }
 
   // exp: 静态节点的codegenNode、节点的静态属性列表props、静态纯文本节点的codegenNode
-  hoists.forEach((exp, i) => {
+  for (let i = 0; i < hoists.length; i++) {
+    const exp = hoists[i]
     if (exp) {
       // exp 为节点的codegenNode，注意此codegenNode为静态提升前的codegenNode，不是静态提升后的ast节点的codegenNode
-      push(`const _hoisted_${i + 1} = `) // 'const _hoisted_1 = ' 按添加顺序命名
+      const needScopeIdWrapper = genScopeId && exp.type === NodeTypes.VNODE_CALL
+      push(
+        `const _hoisted_${i + 1} = ${
+          // 'const _hoisted_1 = ' 按添加顺序命名
+          needScopeIdWrapper ? `${PURE_ANNOTATION} _withScopeId(() => ` : ``
+        }`
+      )
       genNode(exp, context) // 生成静态节点的渲染源码
+      if (needScopeIdWrapper) {
+        push(`)`)
+      }
       newline()
     }
     // 解析其中静态提升文本节点abc，即得到了vnode节点: 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")\n'
     // 在之后ast生成该节点的渲染片段时，可以直接用这个变量替换对应位置的渲染片段，同时生成渲染函数时，可以先执行这个静态节点，得到对应vnode，在执行渲染函数时，不必花时间去执行生成这个vnode
-  })
-
-  // TODO: analyze cfs - !__BROWSER__
-  if (genScopeId) {
-    push(`${helper(POP_SCOPE_ID)}()`)
-    newline()
   }
+
   context.pure = false
 }
 

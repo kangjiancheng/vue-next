@@ -174,6 +174,16 @@ export function processIf(
       if (sibling && sibling.type === NodeTypes.IF) {
         // 匹配前边的if节点
         // 然后将当前的else/else-if节点归并到前边if节点对应的branches里
+        // Check if v-else was followed by v-else-if
+        if (
+          dir.name === 'else-if' &&
+          sibling.branches[sibling.branches.length - 1].condition === undefined
+        ) {
+          context.onError(
+            createCompilerError(ErrorCodes.X_V_ELSE_NO_ADJACENT_IF, node.loc)
+          )
+        }
+
         // move the node to the if node's branches
         context.removeNode()
 

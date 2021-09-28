@@ -576,22 +576,23 @@ export function exposeSetupStateOnRenderContext(
 
   // toRaw: 设置 setupState.__v_raw = setupState
   Object.keys(toRaw(setupState)).forEach(key => {
-    if (!setupState.__isScriptSetup && (key[0] === '$' || key[0] === '_')) {
-      // setup方法的返回值属性里不能以 $、_ 开头，这些是Vue的 内部属性预留前置代表
-      warn(
-        `setup() return property ${JSON.stringify(
-          key
-        )} should not start with "$" or "_" ` +
-          `which are reserved prefixes for Vue internals.`
-      )
-      return
+    if (!setupState.__isScriptSetup) {
+      if (key[0] === '$' || key[0] === '_') {
+        // setup方法的返回值属性里不能以 $、_ 开头，这些是Vue的 内部属性预留前置代表
+        warn(
+          `setup() return property ${JSON.stringify(
+            key
+          )} should not start with "$" or "_" ` +
+            `which are reserved prefixes for Vue internals.`
+        )
+        return
+      }
+      Object.defineProperty(ctx, key, {
+        enumerable: true,
+        configurable: true,
+        get: () => setupState[key],
+        set: NOOP
+      })
     }
-
-    Object.defineProperty(ctx, key, {
-      enumerable: true,
-      configurable: true,
-      get: () => setupState[key],
-      set: NOOP
-    })
   })
 }

@@ -19,7 +19,10 @@ import {
   TemplateTextChildNode,
   DirectiveArguments,
   createVNodeCall,
-  ConstantTypes
+  ConstantTypes,
+  JSChildNode,
+  createFunctionExpression,
+  createBlockStatement
 } from '../ast'
 import {
   PatchFlags,
@@ -45,7 +48,8 @@ import {
   KEEP_ALIVE,
   SUSPENSE,
   UNREF,
-  GUARD_REACTIVE_PROPS
+  GUARD_REACTIVE_PROPS,
+  IS_REF
 } from '../runtimeHelpers'
 import {
   getInnerRange,
@@ -571,7 +575,13 @@ export function buildProps(
       // dom 静态属性，节点光标位置、属性名、属性值
       // 注意 静态style 已经被转换为动态style，即 style="color: blue;" 转换为 :style='{"color": "blue"}'
       const { loc, name, value } = prop
-      let isStatic = true
+      // objProp.value: {type, loc, content, isStatic, constType }
+      let valueNode = createSimpleExpression(
+        // 创建 属性值表达式对象 （形如ast指令属性值节点的结构）
+        value ? value.content : '',
+        true,
+        value ? value.loc : loc
+      ) as JSChildNode
       if (name === 'ref') {
         // 存在ref属性
         hasRef = true
@@ -579,9 +589,12 @@ export function buildProps(
         // TODO: analyze cfs
         // in inline mode there is no setupState object, so we can't use string
         // keys to set the ref. Instead, we need to transform it to pass the
-        // acrtual ref instead.
-        if (!__BROWSER__ && context.inline) {
-          isStatic = false
+        // actual ref instead.
+        if (!__BROWSER__ && context.inline && value?.content) {
+          valueNode = createFunctionExpression(['_value', '_refs'])
+          valueNode.body = createBlockStatement(
+            processInlineRef(context, value.content)
+          )
         }
       }
       // skip is on <component>, or is="vue:xxx"
@@ -610,13 +623,7 @@ export function buildProps(
             true, // 静态属性
             getInnerRange(loc, 0, name.length) // 获取属性名的模版解析的光标位置信息
           ),
-          // objProp.value: {type, loc, content, isStatic, constType }
-          createSimpleExpression(
-            // 创建 属性值表达式对象 （形如ast指令属性值节点的结构）
-            value ? value.content : '',
-            isStatic,
-            value ? value.loc : loc
-          )
+          valueNode
         )
       )
     } else {
@@ -1008,8 +1015,7 @@ function dedupeProperties(properties: Property[]): Property[] {
 
     const existing = knownProps.get(name) // 属性名js表达式对象
     if (existing) {
-      // 如果已经存在，则创建新属性值节点并合并属性值
-      if (name === 'style' || name === 'class' || name.startsWith('on')) {
+      if (name === 'style' || name === 'class' || isOn(name)) {
         // 合并属性值内容：existing.value = {
         //   type: NodeTypes.JS_ARRAY_EXPRESSION,
         //   loc,
@@ -1144,4 +1150,31 @@ function stringifyDynamicPropNames(props: string[]): string {
 
 function isComponentTag(tag: string) {
   return tag[0].toLowerCase() + tag.slice(1) === 'component'
+}
+
+function processInlineRef(
+  context: TransformContext,
+  raw: string
+): JSChildNode[] {
+  const body = [createSimpleExpression(`_refs['${raw}'] = _value`)]
+  const { bindingMetadata, helperString } = context
+  const type = bindingMetadata[raw]
+  if (type === BindingTypes.SETUP_REF) {
+    body.push(createSimpleExpression(`${raw}.value = _value`))
+  } else if (type === BindingTypes.SETUP_MAYBE_REF) {
+    body.push(
+      createSimpleExpression(
+        `${helperString(IS_REF)}(${raw}) && (${raw}.value = _value)`
+      )
+    )
+  } else if (type === BindingTypes.SETUP_LET) {
+    body.push(
+      createSimpleExpression(
+        `${helperString(
+          IS_REF
+        )}(${raw}) ? ${raw}.value = _value : ${raw} = _value`
+      )
+    )
+  }
+  return body
 }

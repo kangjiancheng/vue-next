@@ -350,11 +350,11 @@ function baseCreateRenderer(
   }
 
   // 全局 this
+  const target = getGlobalThis()
+  target.__VUE__ = true
   if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
-    const target = getGlobalThis()
-    target.__VUE__ = true
     // devtools = __VUE_DEVTOOLS_GLOBAL_HOOK__
-    setDevtoolsHook(target.__VUE_DEVTOOLS_GLOBAL_HOOK__)
+    setDevtoolsHook(target.__VUE_DEVTOOLS_GLOBAL_HOOK__, target)
   }
 
   const {
@@ -1608,6 +1608,10 @@ function baseCreateRenderer(
           pushWarningContext(next || instance.vnode)
         }
 
+        // 在更新执行渲染函数前
+        // Disallow component effect recursion during pre-lifecycle hooks.
+        effect.allowRecurse = false
+
         if (next) {
           // 后：响应式更新 继续，在 updateComponent()中 触发创建并更新组件新的effect
           next.el = vnode.el
@@ -1617,9 +1621,6 @@ function baseCreateRenderer(
           next = vnode
         }
 
-        // 在更新执行渲染函数前
-        // Disallow component effect recursion during pre-lifecycle hooks.
-        effect.allowRecurse = false
         // beforeUpdate hook
         if (bu) {
           invokeArrayFns(bu)
@@ -1634,6 +1635,7 @@ function baseCreateRenderer(
         ) {
           instance.emit('hook:beforeUpdate')
         }
+
         effect.allowRecurse = true
 
         // render

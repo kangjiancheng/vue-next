@@ -106,6 +106,13 @@ export function baseCompile(
   const [nodeTransforms, directiveTransforms] =
     getBaseTransformPreset(prefixIdentifiers)
 
+  if (!__BROWSER__ && options.isTS) {
+    const { expressionPlugins } = options
+    if (!expressionPlugins || !expressionPlugins.includes('typescript')) {
+      options.expressionPlugins = [...(expressionPlugins || []), 'typescript']
+    }
+  }
+
   // 转换 vue模版源码ast => js渲染源码ast
   transform(
     ast,

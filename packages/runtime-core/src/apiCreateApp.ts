@@ -3,7 +3,8 @@ import {
   Data,
   validateComponentName,
   Component,
-  ComponentInternalInstance
+  ComponentInternalInstance,
+  getExposeProxy
 } from './component'
 import {
   ComponentOptions,
@@ -325,7 +326,7 @@ export function createAppAPI<HostElement>(
           }
 
           // 组件实例上下文ctx
-          return vnode.component!.proxy // ts 类型断言：后缀 '!' 排除null或undefined
+          return getExposeProxy(vnode.component!) || vnode.component!.proxy // ts 类型断言：后缀 '!' 排除null或undefined
         } else if (__DEV__) {
           // 开发环境下，如开发库（非*.prod.js）vue.global.js 或构建构建的 env != production
           warn(

@@ -31,7 +31,7 @@ type Style = string | Record<string, string | string[]> | null
 // 更新时：删除style空属性null
 export function patchStyle(el: Element, prev: Style, next: Style) {
   const style = (el as HTMLElement).style // vnode el实例style属性
-
+  const currentDisplay = style.display
   if (!next) {
     // style 属性值为空
     // template: <div style=""></div>
@@ -39,18 +39,8 @@ export function patchStyle(el: Element, prev: Style, next: Style) {
   } else if (isString(next)) {
     // 字符串格式，如用户通过render 创建的vnode，可能传入了字符串style
     if (prev !== next) {
-      const current = style.display
-
       // 直接修改el的行内style值
-      // 如：document.body.style.cssText = 'color: red; width: 10px !important;'
       style.cssText = next
-
-      // indicates that the `display` of the element is controlled by `v-show`,
-      // so we always keep the current `display` value regardless of the `style` value,
-      // thus handing over control to `v-show`.
-      if ('_vod' in el) {
-        style.display = current
-      }
     }
   } else {
     // 对象格式，如：(模版编译会自动转换为对象格式)
@@ -70,6 +60,12 @@ export function patchStyle(el: Element, prev: Style, next: Style) {
         }
       }
     }
+  }
+  // indicates that the `display` of the element is controlled by `v-show`,
+  // so we always keep the current `display` value regardless of the `style` value,
+  // thus handing over control to `v-show`.
+  if ('_vod' in el) {
+    style.display = currentDisplay
   }
 }
 

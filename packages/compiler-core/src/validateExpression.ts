@@ -50,7 +50,7 @@ export function validateBrowserExpression(
         : `return ${asParams ? `(${exp}) => {}` : `(${exp})`}` // 如 '<button @click="count++"></button>'， exp = node.content='count++' 转换后为 (function anonymous() { return (count++) })
     )
     // 注意
-  } catch (e) {
+  } catch (e: any) {
     let message = e.message
     const keywordMatch = exp
       .replace(stripStringRE, '')

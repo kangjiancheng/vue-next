@@ -4,8 +4,11 @@ import { isFunction, NOOP } from '@vue/shared'
 import { ReactiveFlags, toRaw } from './reactive'
 import { Dep } from './dep'
 
+declare const ComoutedRefSymbol: unique symbol
+
 export interface ComputedRef<T = any> extends WritableComputedRef<T> {
   readonly value: T
+  [ComoutedRefSymbol]: true
 }
 
 export interface WritableComputedRef<T> extends Ref<T> {
@@ -87,7 +90,8 @@ export function computed<T>(
   let getter: ComputedGetter<T>
   let setter: ComputedSetter<T>
 
-  if (isFunction(getterOrOptions)) {
+  const onlyGetter = isFunction(getterOrOptions)
+  if (onlyGetter) {
     getter = getterOrOptions
     // 开发环境下，set修改computed值无效
     setter = __DEV__
@@ -100,11 +104,7 @@ export function computed<T>(
     setter = getterOrOptions.set
   }
 
-  const cRef = new ComputedRefImpl(
-    getter,
-    setter,
-    isFunction(getterOrOptions) || !getterOrOptions.set // 仅可读: 传入函数 或 未设置set
-  )
+  const cRef = new ComputedRefImpl(getter, setter, onlyGetter || !setter) // 仅可读: 传入函数 或 未设置set
 
   if (__DEV__ && debugOptions) {
     cRef.effect.onTrack = debugOptions.onTrack

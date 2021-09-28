@@ -58,7 +58,10 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
 
   // 必须有值，不可为空，如：v-model=""
   // 或者 v-model绑定的应该是一个变量或某个对象属性，如：$_abc[foo][bar] 或 $_abc.foo.bar
-  if (!expString.trim() || (!isMemberExpression(expString) && !maybeRef)) {
+  if (
+    !expString.trim() ||
+    (!isMemberExpression(expString, context) && !maybeRef)
+  ) {
     context.onError(
       // v-model value must be a valid JavaScript member expression
       createCompilerError(ErrorCodes.X_V_MODEL_MALFORMED_EXPRESSION, exp.loc)
@@ -102,9 +105,9 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
     if (bindingType === BindingTypes.SETUP_REF) {
       // v-model used on known ref.
       assignmentExp = createCompoundExpression([
-        `${eventArg} => (`,
+        `${eventArg} => ((`,
         createSimpleExpression(rawExp, false, exp.loc),
-        `.value = $event)`
+        `).value = $event)`
       ])
     } else {
       // v-model used on a potentially ref binding in <script setup> inline mode.
@@ -112,17 +115,17 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
       const altAssignment =
         bindingType === BindingTypes.SETUP_LET ? `${rawExp} = $event` : `null`
       assignmentExp = createCompoundExpression([
-        `${eventArg} => (${context.helperString(IS_REF)}(${rawExp}) ? `,
+        `${eventArg} => (${context.helperString(IS_REF)}(${rawExp}) ? (`,
         createSimpleExpression(rawExp, false, exp.loc),
-        `.value = $event : ${altAssignment})`
+        `).value = $event : ${altAssignment})`
       ])
     }
   } else {
     // ['($event: any) => (', exp, ' = $event)']
     assignmentExp = createCompoundExpression([
-      `${eventArg} => (`,
+      `${eventArg} => ((`,
       exp,
-      ` = $event)`
+      `) = $event)`
     ])
   }
 

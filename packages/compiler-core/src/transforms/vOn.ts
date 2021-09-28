@@ -24,7 +24,8 @@ import { TO_HANDLER_KEY } from '../runtimeHelpers'
 // 匹配函数语句结构
 // 'param => '  或 '(param1, param2) => '
 // 或 'function foo ('
-const fnExpRE = /^\s*([\w$_]+|\([^)]*?\))\s*=>|^\s*function(?:\s+[\w$]+)?\s*\(/
+const fnExpRE =
+  /^\s*([\w$_]+|(async\s*)?\([^)]*?\))\s*=>|^\s*(async\s+)?function(?:\s+[\w$]+)?\s*\(/
 
 export interface VOnDirectiveNode extends DirectiveNode {
   // v-on without arg is handled directly in ./transformElements.ts due to it affecting
@@ -101,8 +102,7 @@ export const transformOn: DirectiveTransform = (
   if (exp) {
     // 验证是否是有效的函数名调用方式
     // 匹配一个指令属性值的表达式： 以 [A-Za-z_$] 开头，如 <button @keyup="handleKeyup" @click="$_abc[foo][bar]" @change="abc  . foo . (可以换行)  bar"></button>
-    const isMemberExp = isMemberExpression(exp.content)
-
+    const isMemberExp = isMemberExpression(exp.content, context)
     // 验证是行内声明执行表达式，即非函数声明：不是函数名赋值也不是函数定义
     // 如： <button @click="count ++; total --" @change="handleChange()">{{ count }}</button>
     const isInlineStatement = !(isMemberExp || fnExpRE.test(exp.content))

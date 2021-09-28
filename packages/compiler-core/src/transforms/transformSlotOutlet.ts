@@ -26,21 +26,24 @@ export const transformSlotOutlet: NodeTransform = (node, context) => {
     // codegen 的参数
     const slotArgs: CallExpression['arguments'] = [
       context.prefixIdentifiers ? `_ctx.$slots` : `$slots`,
-      slotName
+      slotName,
+      '{}',
+      'undefined',
+      'true'
     ]
+    let expectedLen = 2
 
     // 处理属性列表
     if (slotProps) {
       // 向父组件传递props
-      slotArgs.push(slotProps)
+      slotArgs[2] = slotProps
+      expectedLen = 3
     }
 
     // 处理子节点列表
     if (children.length) {
-      if (!slotProps) {
-        slotArgs.push(`{}`) // 默认子节点
-      }
-      slotArgs.push(createFunctionExpression([], children, false, false, loc))
+      slotArgs[3] = createFunctionExpression([], children, false, false, loc)
+      expectedLen = 4
     }
 
     // 返回codegen代码
@@ -49,15 +52,10 @@ export const transformSlotOutlet: NodeTransform = (node, context) => {
     //         item: "hello world",
     //         dataText: '123'
     //       })
-    if (context.slotted && !context.slotted) {
-      if (!slotProps) {
-        slotArgs.push(`{}`)
-      }
-      if (!children.length) {
-        slotArgs.push(`undefined`)
-      }
-      slotArgs.push(`true`)
+    if (context.scopeId && !context.slotted) {
+      expectedLen = 5
     }
+    slotArgs.splice(expectedLen) // remove unused arguments
 
     node.codegenNode = createCallExpression(
       context.helper(RENDER_SLOT), // RENDER_SLOT = Symbol(__DEV__ ? `renderSlot` : ``)

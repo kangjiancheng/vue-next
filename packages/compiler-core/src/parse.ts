@@ -904,6 +904,17 @@ function parseAttributes(
 
     // 解析标签每个属性，返回html普通元素属性节点 或 指令属性节点
     const attr = parseAttribute(context, attributeNames)
+
+    // Trim whitespace between class
+    // https://github.com/vuejs/vue-next/issues/4251
+    if (
+      attr.type === NodeTypes.ATTRIBUTE &&
+      attr.value &&
+      attr.name === 'class'
+    ) {
+      attr.value.content = attr.value.content.replace(/\s+/g, ' ').trim()
+    }
+
     if (type === TagType.Start) {
       props.push(attr)
     }
@@ -1002,7 +1013,7 @@ function parseAttribute(
 
   // 指令开头必须是：v-、:、@、#
   // context.inVPre 即指令列表存在v-pre指令，则不需要解析（触发时机：当解析完所有指令之后，会判断指令列表中是否有v-pre指令，有则会重新解析一遍所有属性，且把指令属性当做普通html标签属性处理）
-  if (!context.inVPre && /^(v-|:|\.|@|#)/.test(name)) {
+  if (!context.inVPre && /^(v-[A-Za-z0-9-]|:|\.|@|#)/.test(name)) {
     // 指令分类：v-xxx指令、v-xxx:xxx指令、 :[xxx]（参数形式的指令）、:xxx指令
     // 还有：@[xxx]指令、@xxx指令、#[xxx]、#xxx
     // 注意 ':'、 '@'、'#' 后边 不能马上跟 '.'，如：'<span @.click="someHandler"></span>'，此时 match[2] = undefined，match[3] = '@.click'，即只符合 (.+)?
@@ -1073,10 +1084,11 @@ function parseAttribute(
             context,
             ErrorCodes.X_MISSING_DYNAMIC_DIRECTIVE_ARGUMENT_END
           )
+          content = content.substr(1)
+        } else {
+          // 去掉双括号： [ 和 ]
+          content = content.substr(1, content.length - 2)
         }
-
-        // 去掉双括号： [ 和 ]
-        content = content.substr(1, content.length - 2)
       } else if (isSlot) {
         // #1241 special case for v-slot: vuetify relies extensively on slot
         // names containing dots. v-slot doesn't have any modifiers and Vue 2.x
@@ -1155,6 +1167,11 @@ function parseAttribute(
   }
 
   // 返回普通html元素 attr属性 信息
+  // missing directive name or illegal directive name
+  if (!context.inVPre && startsWith(name, 'v-')) {
+    emitError(context, ErrorCodes.X_MISSING_DIRECTIVE_NAME)
+  }
+
   return {
     type: NodeTypes.ATTRIBUTE,
     name,
@@ -1292,12 +1309,9 @@ function parseInterpolation(
 function parseText(context: ParserContext, mode: TextModes): TextNode {
   __TEST__ && assert(context.source.length > 0)
 
-  // 结束边界：<、{{、]]
-  const endTokens = ['<', context.options.delimiters[0]]
-  if (mode === TextModes.CDATA) {
-    // xhtml
-    endTokens.push(']]>')
-  }
+  // 结束边界：<、{{、]] , xhtml
+  const endTokens =
+    mode === TextModes.CDATA ? [']]>'] : ['<', context.options.delimiters[0]]
 
   // 查找文本结束的位置，以 ['<', '{{'] 为结束边界，且优先以后边为准，如 '{{' 优先级高
   let endIndex = context.source.length
