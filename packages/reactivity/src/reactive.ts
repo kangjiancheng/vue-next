@@ -109,14 +109,20 @@ export function reactive(target: object) {
   )
 }
 
+export declare const ShallowReactiveMarker: unique symbol
+
+export type ShallowReactive<T> = T & { [ShallowReactiveMarker]?: true }
+
 /**
  * Return a shallowly-reactive copy of the original object, where only the root
  * level properties are reactive. It also does not auto-unwrap refs (even at the
  * root level).
  */
 // 不进行深层次代理响应：即如果访问该对象的属性时，如果属性值为对象，则直接返回结果，而不是进行响应转换该属性值，但会进行跟踪并收集依赖
-export function shallowReactive<T extends object>(target: T): T {
+export function shallowReactive<T extends object>(
   // 创建target 代理proxy响应式d对象
+  target: T
+): ShallowReactive<T> {
   return createReactiveObject(
     target,
     false, // reactiveMap
@@ -144,6 +150,8 @@ export type DeepReadonly<T> = T extends Builtin
   ? WeakSet<DeepReadonly<U>>
   : T extends Promise<infer U>
   ? Promise<DeepReadonly<U>>
+  : T extends Ref<infer U>
+  ? Ref<DeepReadonly<U>>
   : T extends {}
   ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
   : Readonly<T>

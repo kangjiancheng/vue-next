@@ -1323,7 +1323,7 @@ function baseCreateRenderer(
 
     // 同时也将组件实例绑定到 vnode.component
     // 规范组件的props选项属性格式
-    // 2.x compat may pre-creaate the component instance before actually
+    // 2.x compat may pre-create the component instance before actually
     // mounting
     const compatMountInstance =
       __COMPAT__ && initialVNode.isCompatRoot && initialVNode.component

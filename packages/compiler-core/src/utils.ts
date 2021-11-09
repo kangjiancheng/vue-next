@@ -42,14 +42,7 @@ import {
   WITH_MEMO,
   OPEN_BLOCK
 } from './runtimeHelpers'
-import {
-  isString,
-  isObject,
-  hyphenate,
-  extend,
-  babelParserDefaultPlugins,
-  NOOP
-} from '@vue/shared'
+import { isString, isObject, hyphenate, extend, NOOP } from '@vue/shared'
 import { PropsExpression } from './transforms/transformElement'
 import { parseExpression } from '@babel/parser'
 import { Expression } from '@babel/types'
@@ -183,7 +176,7 @@ export const isMemberExpressionNode = __BROWSER__
   : (path: string, context: TransformContext): boolean => {
       try {
         let ret: Expression = parseExpression(path, {
-          plugins: [...context.expressionPlugins, ...babelParserDefaultPlugins]
+          plugins: context.expressionPlugins
         })
         if (ret.type === 'TSAsExpression' || ret.type === 'TSTypeAssertion') {
           ret = ret.expression
@@ -205,10 +198,10 @@ export const isMemberExpression = __BROWSER__
 export function getInnerRange(
   loc: SourceLocation, // 此节点在模版中的位置信息
   offset: number, // 某段内容 的偏移量
-  length?: number // 某段内容 的长度
+  length: number // 某段内容 的长度
 ): SourceLocation {
   __TEST__ && assert(offset <= loc.source.length)
-  const source = loc.source.substr(offset, length)
+  const source = loc.source.slice(offset, offset + length)
   const newLoc: SourceLocation = {
     source,
     start: advancePositionWithClone(loc.start, loc.source, offset), // 移动offset距离

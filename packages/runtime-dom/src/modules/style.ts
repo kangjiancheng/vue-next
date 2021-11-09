@@ -31,23 +31,11 @@ type Style = string | Record<string, string | string[]> | null
 // 更新时：删除style空属性null
 export function patchStyle(el: Element, prev: Style, next: Style) {
   const style = (el as HTMLElement).style // vnode el实例style属性
-  const currentDisplay = style.display
-  if (!next) {
-    // style 属性值为空
-    // template: <div style=""></div>
-    el.removeAttribute('style') // 移除style
-  } else if (isString(next)) {
-    // 字符串格式，如用户通过render 创建的vnode，可能传入了字符串style
-    if (prev !== next) {
-      // 直接修改el的行内style值
-      style.cssText = next
-    }
-  } else {
+  const isCssString = isString(next)
+  if (next && !isCssString) {
     // 对象格式，如：(模版编译会自动转换为对象格式)
     // template 如：<span style="color: red; box-align: center;"></span>
     // VNode 则：const _hoisted_1 = /*#__PURE__*/_createVNode("span", { style: {"color":"red","box-align":"center"} }, null, -1 /* HOISTED */)
-
-    // 设置style属性列表
     for (const key in next) {
       setStyle(style, key, next[key])
     }
@@ -60,12 +48,25 @@ export function patchStyle(el: Element, prev: Style, next: Style) {
         }
       }
     }
-  }
-  // indicates that the `display` of the element is controlled by `v-show`,
-  // so we always keep the current `display` value regardless of the `style` value,
-  // thus handing over control to `v-show`.
-  if ('_vod' in el) {
-    style.display = currentDisplay
+  } else {
+    const currentDisplay = style.display
+    if (isCssString) {
+      // 字符串格式，如用户通过render 创建的vnode，可能传入了字符串style
+      if (prev !== next) {
+        // 直接修改el的行内style值
+        style.cssText = next as string
+      }
+    } else if (prev) {
+      // style 属性值为空
+      // template: <div style=""></div>
+      el.removeAttribute('style')
+    }
+    // indicates that the `display` of the element is controlled by `v-show`,
+    // so we always keep the current `display` value regardless of the `style`
+    // value, thus handing over control to `v-show`.
+    if ('_vod' in el) {
+      style.display = currentDisplay
+    }
   }
 }
 

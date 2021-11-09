@@ -762,6 +762,7 @@ function parseTag(
           context,
           getSelection(context, start)
         )
+        break
       }
     }
   }
@@ -1084,10 +1085,10 @@ function parseAttribute(
             context,
             ErrorCodes.X_MISSING_DYNAMIC_DIRECTIVE_ARGUMENT_END
           )
-          content = content.substr(1)
+          content = content.slice(1)
         } else {
           // 去掉双括号： [ 和 ]
-          content = content.substr(1, content.length - 2)
+          content = content.slice(1, content.length - 1)
         }
       } else if (isSlot) {
         // #1241 special case for v-slot: vuetify relies extensively on slot
@@ -1119,7 +1120,7 @@ function parseAttribute(
       valueLoc.source = valueLoc.source.slice(1, -1) // 调整loc 中的source，去掉引号
     }
 
-    const modifiers = match[3] ? match[3].substr(1).split('.') : []
+    const modifiers = match[3] ? match[3].slice(1).split('.') : []
     if (isPropShorthand) modifiers.push('prop')
 
     // 2.x compat v-bind:foo.sync -> v-model:foo
@@ -1510,7 +1511,7 @@ function startsWithEndTagOpen(source: string, tag: string): boolean {
   //  // source='</span>', tag = 'span'
   return (
     startsWith(source, '</') && // 结束标签 标志
-    source.substr(2, tag.length).toLowerCase() === tag.toLowerCase() && // 结束标签名 与开始标签名一致
+    source.slice(2, 2 + tag.length).toLowerCase() === tag.toLowerCase() && // 结束标签名 与开始标签名一致
     /[\t\r\n\f />]/.test(source[2 + tag.length] || '>') // 判断结束标签 最后一个字符，必须关闭
   )
 }
