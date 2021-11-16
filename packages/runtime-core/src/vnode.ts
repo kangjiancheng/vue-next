@@ -875,7 +875,10 @@ export function mergeProps(...args: (Data & VNodeProps)[]) {
         // on 开头，添加或合并事件
         const existing = ret[key]
         const incoming = toMerge[key]
-        if (existing !== incoming) {
+        if (
+          existing !== incoming &&
+          !(isArray(existing) && existing.includes(incoming))
+        ) {
           ret[key] = existing
             ? [].concat(existing as any, incoming as any) // 如果事件已经存在，则合并事件
             : incoming // 事件不存在，添加进来
