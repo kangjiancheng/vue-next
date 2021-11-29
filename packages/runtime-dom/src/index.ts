@@ -72,6 +72,7 @@ export const hydrate = ((...args) => {
 export const createApp = ((...args) => {
   // ensureRenderer：初始化渲染函数render、初始化createApp 方法
   // createApp: 初始化app基本配置和方法
+  console.log('args1111111:', args)
   const app = ensureRenderer().createApp(...args)
 
   // 开发库，如：vue.global.js

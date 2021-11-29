@@ -1,3 +1,14 @@
+<template>
+  <Header :store="store" />
+  <Repl
+    :store="store"
+    :showCompileOutput="true"
+    :autoResize="true"
+    :sfcOptions="sfcOptions"
+    :clearConsole="false"
+  />
+</template>
+
 <script setup lang="ts">
 import Header from './Header.vue'
 import { Repl, ReplStore } from '@vue/repl'
@@ -27,17 +38,6 @@ const sfcOptions = {
 // persist state
 watchEffect(() => history.replaceState({}, '', store.serialize()))
 </script>
-
-<template>
-  <Header :store="store" />
-  <Repl
-    :store="store"
-    :showCompileOutput="true"
-    :autoResize="true"
-    :sfcOptions="sfcOptions"
-    :clearConsole="false"
-  />
-</template>
 
 <style>
 body {
