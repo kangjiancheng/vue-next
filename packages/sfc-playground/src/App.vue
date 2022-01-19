@@ -1,14 +1,3 @@
-<template>
-  <Header :store="store" />
-  <Repl
-    :store="store"
-    :showCompileOutput="true"
-    :autoResize="true"
-    :sfcOptions="sfcOptions"
-    :clearConsole="false"
-  />
-</template>
-
 <script setup lang="ts">
 import Header from './Header.vue'
 import { Repl, ReplStore } from '@vue/repl'
@@ -30,8 +19,7 @@ const store = new ReplStore({
 // enable experimental features
 const sfcOptions = {
   script: {
-    refTransform: true,
-    propsDestructureTransform: true
+    reactivityTransform: true
   }
 }
 
@@ -39,6 +27,18 @@ const sfcOptions = {
 watchEffect(() => history.replaceState({}, '', store.serialize()))
 </script>
 
+<template>
+  <Header :store="store" />
+  <Repl
+      @keydown.ctrl.s.prevent
+      @keydown.meta.s.prevent
+      :store="store"
+      :showCompileOutput="true"
+      :autoResize="true"
+      :sfcOptions="sfcOptions"
+      :clearConsole="false"
+  />
+</template>
 <style>
 body {
   font-size: 13px;

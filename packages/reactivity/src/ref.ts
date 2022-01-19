@@ -1,6 +1,6 @@
 import { isTracking, trackEffects, triggerEffects } from './effect'
 import { TrackOpTypes, TriggerOpTypes } from './operations'
-import { isArray, hasChanged } from '@vue/shared'
+import { isArray, hasChanged, IfAny } from '@vue/shared'
 import { isProxy, toRaw, isReactive, toReactive } from './reactive'
 import type { ShallowReactiveMarker } from './reactive'
 import { CollectionTypes } from './collectionHandlers'
@@ -16,10 +16,6 @@ export interface Ref<T = any> {
    * autocomplete, so we use a private Symbol instead.
    */
   [RefSymbol]: true
-  /**
-   * @internal
-   */
-  _shallow?: boolean
 }
 
 type RefBase<T> = {
@@ -77,7 +73,7 @@ export function ref(value?: unknown) {
 
 declare const ShallowRefMarker: unique symbol
 
-type ShallowRef<T = any> = Ref<T> & { [ShallowRefMarker]?: true }
+export type ShallowRef<T = any> = Ref<T> & { [ShallowRefMarker]?: true }
 
 export function shallowRef<T extends object>(
   value: T
@@ -109,10 +105,11 @@ class RefImpl<T> {
 
   public dep?: Dep = undefined
   public readonly __v_isRef = true // 标记为 ref
-  // _shallow: 转换对象时，只考虑value值，不进行其它属性响应转换
-  constructor(value: T, public readonly _shallow: boolean) {
-    this._rawValue = _shallow ? value : toRaw(value)
-    this._value = _shallow ? value : toReactive(value)
+
+    // _shallow: 转换对象时，只考虑value值，不进行其它属性响应转换
+  constructor(value: T, public readonly __v_isShallow: boolean) {
+    this._rawValue = __v_isShallow ? value : toRaw(value)
+    this._value = __v_isShallow ? value : toReactive(value)
   }
 
   get value() {
@@ -122,12 +119,12 @@ class RefImpl<T> {
   }
 
   set value(newVal) {
-    newVal = this._shallow ? newVal : toRaw(newVal)
+    newVal = this.__v_isShallow ? newVal : toRaw(newVal)
     if (hasChanged(newVal, this._rawValue)) {
       // 判断 value值 是否改变
       // 重新赋值
       this._rawValue = newVal
-      this._value = this._shallow ? newVal : toReactive(newVal) // isObject(value) ? reactive(value) : value
+      this._value = this.__v_isShallow ? newVal : toReactive(newVal)
       // 触发 响应式依赖更新组件
       triggerRefValue(this, newVal)
     }
@@ -173,7 +170,7 @@ export function proxyRefs<T extends object>(
     : new Proxy(objectWithRefs, shallowUnwrapHandlers)
 }
 
-type CustomRefFactory<T> = (
+export type CustomRefFactory<T> = (
   track: () => void,
   trigger: () => void
 ) => {
@@ -228,10 +225,15 @@ export function toRefs<T extends object>(object: T): ToRefs<T> {
 class ObjectRefImpl<T extends object, K extends keyof T> {
   public readonly __v_isRef = true
 
-  constructor(private readonly _object: T, private readonly _key: K) {}
+  constructor(
+    private readonly _object: T,
+    private readonly _key: K,
+    private readonly _defaultValue?: T[K]
+  ) {}
 
   get value() {
-    return this._object[this._key]
+    const val = this._object[this._key]
+    return val === undefined ? (this._defaultValue as T[K]) : val
   }
 
   set value(newVal) {
@@ -239,14 +241,28 @@ class ObjectRefImpl<T extends object, K extends keyof T> {
   }
 }
 
-export type ToRef<T> = [T] extends [Ref] ? T : Ref<T>
+export type ToRef<T> = IfAny<T, Ref<T>, [T] extends [Ref] ? T : Ref<T>>
 
 export function toRef<T extends object, K extends keyof T>(
   object: T,
   key: K
+): ToRef<T[K]>
+
+export function toRef<T extends object, K extends keyof T>(
+  object: T,
+  key: K,
+  defaultValue: T[K]
+): ToRef<Exclude<T[K], undefined>>
+
+export function toRef<T extends object, K extends keyof T>(
+  object: T,
+  key: K,
+  defaultValue?: T[K]
 ): ToRef<T[K]> {
   const val = object[key]
-  return isRef(val) ? val : (new ObjectRefImpl(object, key) as any)
+  return isRef(val)
+    ? val
+    : (new ObjectRefImpl(object, key, defaultValue) as any)
 }
 
 // corner case when use narrows type

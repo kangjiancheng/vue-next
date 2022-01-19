@@ -37,7 +37,8 @@ class ComputedRefImpl<T> {
   constructor(
     getter: ComputedGetter<T>,
     private readonly _setter: ComputedSetter<T>,
-    isReadonly: boolean // 仅可读: 传入函数 或 未设置set
+    isReadonly: boolean, // 仅可读: 传入函数 或 未设置set
+    isSSR: boolean
   ) {
     // 创建effect函数
     this.effect = new ReactiveEffect(getter, () => {
@@ -48,6 +49,7 @@ class ComputedRefImpl<T> {
         triggerRefValue(this)
       }
     })
+    this.effect.active = !isSSR
     this[ReactiveFlags.IS_READONLY] = isReadonly // 仅可读: 传入函数 或 未设置set
   }
 
@@ -85,7 +87,8 @@ export function computed<T>(
 // 实现
 export function computed<T>(
   getterOrOptions: ComputedGetter<T> | WritableComputedOptions<T>,
-  debugOptions?: DebuggerOptions
+  debugOptions?: DebuggerOptions,
+  isSSR = false
 ) {
   let getter: ComputedGetter<T>
   let setter: ComputedSetter<T>
@@ -104,9 +107,9 @@ export function computed<T>(
     setter = getterOrOptions.set
   }
 
-  const cRef = new ComputedRefImpl(getter, setter, onlyGetter || !setter) // 仅可读: 传入函数 或 未设置set
+  const cRef = new ComputedRefImpl(getter, setter, onlyGetter || !setter, isSSR) // 仅可读: 传入函数 或 未设置set
 
-  if (__DEV__ && debugOptions) {
+  if (__DEV__ && debugOptions && !isSSR) {
     cRef.effect.onTrack = debugOptions.onTrack
     cRef.effect.onTrigger = debugOptions.onTrigger
   }

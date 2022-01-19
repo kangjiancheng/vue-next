@@ -15,7 +15,7 @@ import {
   advancePositionWithMutation,
   advancePositionWithClone,
   isCoreComponent,
-  isBindKey
+  isStaticArgOf
 } from './utils'
 import {
   Namespaces,
@@ -859,7 +859,7 @@ function isComponent(
       } else if (
         // :is on plain element - only treat as component in compat mode
         p.name === 'bind' &&
-        isBindKey(p.arg, 'is') &&
+        isStaticArgOf(p.arg, 'is') &&
         __COMPAT__ &&
         checkCompatEnabled(
           CompilerDeprecationTypes.COMPILER_IS_ON_ELEMENT,
@@ -907,7 +907,7 @@ function parseAttributes(
     const attr = parseAttribute(context, attributeNames)
 
     // Trim whitespace between class
-    // https://github.com/vuejs/vue-next/issues/4251
+    // https://github.com/vuejs/core/issues/4251
     if (
       attr.type === NodeTypes.ATTRIBUTE &&
       attr.value &&

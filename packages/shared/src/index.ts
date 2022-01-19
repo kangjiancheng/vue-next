@@ -12,6 +12,7 @@ export * from './domAttrConfig'
 export * from './escapeHtml'
 export * from './looseEqual'
 export * from './toDisplayString'
+export * from './typeUtils'
 
 export const EMPTY_OBJ: { readonly [key: string]: any } = __DEV__
   ? Object.freeze({})
@@ -88,8 +89,7 @@ export const isIntegerKey = (key: unknown) =>
 
 export const isReservedProp = /*#__PURE__*/ makeMap(
   // the leading comma is intentional so empty string "" is also included
-  // 也禁止 空key: ''
-  ',key,ref,' +
+  ',key,ref,ref_for,ref_key,' +
     'onVnodeBeforeMount,onVnodeMounted,' +
     'onVnodeBeforeUpdate,onVnodeUpdated,' +
     'onVnodeBeforeUnmount,onVnodeUnmounted'

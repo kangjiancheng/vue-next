@@ -51,6 +51,7 @@ import Sun from './icons/Sun.vue'
 import Moon from './icons/Moon.vue'
 import Share from './icons/Share.vue'
 import Download from './icons/Download.vue'
+import GitHub from './icons/GitHub.vue'
 
 // @ts-ignore
 const { store } = defineProps(['store'])
@@ -102,7 +103,7 @@ onMounted(async () => {
 
 async function fetchVersions(): Promise<string[]> {
   const res = await fetch(
-    `https://api.github.com/repos/vuejs/vue-next/releases?per_page=100`
+    `https://api.github.com/repos/vuejs/core/releases?per_page=100`
   )
   const releases: any[] = await res.json()
   const versions = releases.map(r =>
@@ -129,6 +130,66 @@ async function fetchVersions(): Promise<string[]> {
 }
 </script>
 
+<<<<<<< HEAD
+=======
+<template>
+  <nav>
+    <h1>
+      <img alt="logo" src="/logo.svg" />
+      <span>Vue SFC Playground</span>
+    </h1>
+    <div class="links">
+      <div class="version" @click.stop>
+        <span class="active-version" @click="toggle">
+          Version: {{ activeVersion }}
+        </span>
+        <ul class="versions" :class="{ expanded }">
+          <li v-if="!publishedVersions"><a>loading versions...</a></li>
+          <li v-for="version of publishedVersions">
+            <a @click="setVueVersion(version)">v{{ version }}</a>
+          </li>
+          <li>
+            <a @click="resetVueVersion">This Commit ({{ currentCommit }})</a>
+          </li>
+          <li>
+            <a
+              href="https://app.netlify.com/sites/vue-sfc-playground/deploys"
+              target="_blank"
+              >Commits History</a
+            >
+          </li>
+        </ul>
+      </div>
+      <button title="Toggle dark mode" class="toggle-dark" @click="toggleDark">
+        <Sun class="light" />
+        <Moon class="dark" />
+      </button>
+      <button title="Copy sharable URL" class="share" @click="copyLink">
+        <Share />
+      </button>
+      <button
+        title="Download project files"
+        class="download"
+        @click="downloadProject(store)"
+      >
+        <Download />
+      </button>
+      <button
+          title="View on GitHub"
+          class="github"
+      >
+        <a
+            href="https://github.com/vuejs/core/tree/main/packages/sfc-playground"
+            target="_blank"
+        >
+          <GitHub />
+        </a>
+      </button>
+    </div>
+  </nav>
+</template>
+
+>>>>>>> ae4b0783d78670b6e942ae2a4e3ec6efbbffa158
 <style>
 nav {
   --bg: #fff;
@@ -179,7 +240,7 @@ h1 img {
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 520px) {
   h1 span {
     display: none;
   }
@@ -272,7 +333,8 @@ h1 img {
 }
 
 .share,
-.download {
+.download,
+.github {
   margin: 0 2px;
 }
 </style>

@@ -17,6 +17,7 @@ export const enum ReactiveFlags {
   SKIP = '__v_skip',
   IS_REACTIVE = '__v_isReactive',
   IS_READONLY = '__v_isReadonly',
+  IS_SHALLOW = '__v_isShallow',
   RAW = '__v_raw'
 }
 
@@ -24,6 +25,7 @@ export interface Target {
   [ReactiveFlags.SKIP]?: boolean
   [ReactiveFlags.IS_REACTIVE]?: boolean
   [ReactiveFlags.IS_READONLY]?: boolean
+  [ReactiveFlags.IS_SHALLOW]?: boolean
   [ReactiveFlags.RAW]?: any
 }
 
@@ -96,7 +98,7 @@ export type UnwrapNestedRefs<T> = T extends Ref ? T : UnwrapRefSimple<T>
 export function reactive<T extends object>(target: T): UnwrapNestedRefs<T>
 export function reactive(target: object) {
   // if trying to observe a readonly proxy, return the readonly version.
-  if (target && (target as Target)[ReactiveFlags.IS_READONLY]) {
+  if (isReadonly(target)) {
     return target
   }
   // 创建响应式对象
@@ -179,9 +181,7 @@ export function readonly<T extends object>(
  * This is used for creating the props proxy object for stateful components.
  */
 // 不进行深层次代理响应：即如果访问该对象的属性时，不会进行跟踪并收集依赖
-export function shallowReadonly<T extends object>(
-  target: T
-): Readonly<{ [K in keyof T]: UnwrapNestedRefs<T[K]> }> {
+export function shallowReadonly<T extends object>(target: T): Readonly<T> {
   // setup (props = shallowReadonly(instance.props))
   return createReactiveObject(
     target,
@@ -248,6 +248,10 @@ export function isReactive(value: unknown): boolean {
 
 export function isReadonly(value: unknown): boolean {
   return !!(value && (value as Target)[ReactiveFlags.IS_READONLY]) // __v_isReadonly
+}
+
+export function isShallow(value: unknown): boolean {
+  return !!(value && (value as Target)[ReactiveFlags.IS_SHALLOW])
 }
 
 export function isProxy(value: unknown): boolean {

@@ -1,5 +1,6 @@
 import {
   isRef,
+  isShallow,
   Ref,
   ComputedRef,
   ReactiveEffect,
@@ -40,14 +41,14 @@ import { DeprecationTypes } from './compat/compatConfig'
 import { checkCompatEnabled, isCompatEnabled } from './compat/compatConfig'
 import { ObjectWatchOptionItem } from './componentOptions'
 
-export type WatchEffect = (onInvalidate: InvalidateCbRegistrator) => void
+export type WatchEffect = (onCleanup: OnCleanup) => void
 
 export type WatchSource<T = any> = Ref<T> | ComputedRef<T> | (() => T)
 
 export type WatchCallback<V = any, OV = any> = (
   value: V,
   oldValue: OV,
-  onInvalidate: InvalidateCbRegistrator
+  onCleanup: OnCleanup
 ) => any
 
 type MapSources<T, Immediate> = {
@@ -62,7 +63,7 @@ type MapSources<T, Immediate> = {
     : never
 }
 
-type InvalidateCbRegistrator = (cb: () => void) => void
+type OnCleanup = (cleanupFn: () => void) => void
 
 export interface WatchOptionsBase extends DebuggerOptions {
   flush?: 'pre' | 'post' | 'sync'
@@ -215,7 +216,7 @@ function doWatch(
   if (isRef(source)) {
     // ref 引用 __v_isRef
     getter = () => source.value // 访问时，依赖项value被跟踪
-    forceTrigger = !!source._shallow
+    forceTrigger = isShallow(source)
   } else if (isReactive(source)) {
     // reactive 响应对象 __v_isReactive
     getter = () => source
@@ -254,7 +255,7 @@ function doWatch(
           source, // getter
           instance,
           ErrorCodes.WATCH_CALLBACK,
-          [onInvalidate]
+          [onCleanup]
         )
       }
     }
@@ -286,7 +287,7 @@ function doWatch(
   }
 
   let cleanup: () => void
-  let onInvalidate: InvalidateCbRegistrator = (fn: () => void) => {
+  let onCleanup: OnCleanup = (fn: () => void) => {
     cleanup = effect.onStop = () => {
       callWithErrorHandling(fn, instance, ErrorCodes.WATCH_CLEANUP)
     }
@@ -296,14 +297,14 @@ function doWatch(
   // unless it's eager
   if (__SSR__ && isInSSRComponentSetup) {
     // we will also not call the invalidate callback (+ runner is not set up)
-    onInvalidate = NOOP
+    onCleanup = NOOP
     if (!cb) {
       getter()
     } else if (immediate) {
       callWithAsyncErrorHandling(cb, instance, ErrorCodes.WATCH_CALLBACK, [
         getter(),
         isMultiSource ? [] : undefined,
-        onInvalidate
+        onCleanup
       ])
     }
     return NOOP
@@ -341,7 +342,7 @@ function doWatch(
           newValue,
           // pass undefined as the old value when it's changed for the first time
           oldValue === INITIAL_WATCHER_VALUE ? undefined : oldValue, // 首次改变时
-          onInvalidate // 当执行监听目标getter的effect函数时，调用effect stop事件时
+          onCleanup
         ])
         oldValue = newValue // 执行完回调后，该值变为旧值，为下一次更新做准备
       }

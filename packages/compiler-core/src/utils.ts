@@ -311,7 +311,7 @@ export function findProp(
     } else if (
       p.name === 'bind' && // v-bind 指令属性，如 ':is'
       (p.exp || allowEmpty) && // p.exp 为指令值节点
-      isBindKey(p.arg, name) // 是否静态bind某个指令， p.arg 为指令名表达式节点，如 ':is' 指令中的 'is' 字符串表达式信息节点
+      isStaticArgOf(p.arg, name) // 是否静态bind某个指令， p.arg 为指令名表达式节点，如 ':is' 指令中的 'is' 字符串表达式信息节点
     ) {
       return p
     }
@@ -319,7 +319,10 @@ export function findProp(
 }
 
 // 静态bind某个指令，如 ':is' 绑定了is指令
-export function isBindKey(arg: DirectiveNode['arg'], name: string): boolean {
+export function isStaticArgOf(
+  arg: DirectiveNode['arg'],
+  name: string
+): boolean {
   return !!(arg && isStaticExp(arg) && arg.content === name)
 }
 
@@ -407,15 +410,6 @@ export function injectProp(
   context: TransformContext
 ) {
   let propsWithInjection: ObjectExpression | CallExpression | undefined
-
-  // slot 的属性列表 transformElement buildProps()，或 子节点列表 props = createFunctionExpression([], slot.children, false, false, loc)
-  const originalProps =
-    node.type === NodeTypes.VNODE_CALL ? node.props : node.arguments[2] // node.arguments： slotArgs, [2] 保存slot元素的子节点列表
-
-  // 如 <template v-for="(item, index) in items" :key="index"><slot name="header"></slot></template>
-  // slot 存在name以外的属性，此时 props = slotProps；
-  // 在 transformSlotOutlet.ts 处理 slot元素
-
   /**
    * 1. mergeProps(...)
    * 2. toHandlers(...)
@@ -424,9 +418,15 @@ export function injectProp(
    *
    * we need to get the real props before normalization
    */
-  let props = originalProps
+  // slot 的属性列表 transformElement buildProps()，或 子节点列表 props = createFunctionExpression([], slot.children, false, false, loc)
+  let props =
+    node.type === NodeTypes.VNODE_CALL ? node.props : node.arguments[2] // node.arguments： slotArgs, [2] 保存slot元素的子节点列表
   let callPath: CallExpression[] = []
   let parentCall: CallExpression | undefined
+
+  // 如 <template v-for="(item, index) in items" :key="index"><slot name="header"></slot></template>
+  // slot 存在name以外的属性，此时 props = slotProps；
+  // 在 transformSlotOutlet.ts 处理 slot元素
   if (
     props &&
     !isString(props) &&

@@ -57,7 +57,11 @@ export const transformOn: DirectiveTransform = (
   if (arg.type === NodeTypes.SIMPLE_EXPRESSION) {
     if (arg.isStatic) {
       // 静态指令，如 '<button @click="handleClick"></button>'
-      const rawName = arg.content // 指令名内容：'click'
+      let rawName = arg.content // 指令名内容：'click'
+      // TODO deprecate @vnodeXXX usage
+      if (rawName.startsWith('vue:')) {
+        rawName = `vnode-${rawName.slice(4)}`
+      }
       // for all event listeners, auto convert it to camelCase. See issue #2249
       // 创建指令名 对应的简单表达式节点
       // 如：eventName.content = 'onClick'

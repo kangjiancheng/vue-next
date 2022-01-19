@@ -32,6 +32,17 @@ export const enum PatchFlags {
   //    style="color: red" and :style="{ color: 'red' }"
   //    const style = { color: 'red' }
   //    render() { return e('div', { style }) }
+  /**
+   * Indicates an element with dynamic style
+   * The compiler pre-compiles static string styles into static objects
+   * + detects and hoists inline static objects
+   * e.g. `style="color: red"` and `:style="{ color: 'red' }"` both get hoisted
+   * as:
+   * ```js
+   * const style = { color: 'red' }
+   * render() { return e('div', { style }) }
+   * ```
+   */
   STYLE = 1 << 2,
 
   // 当检测到节点 props 变更（不包括class/style）

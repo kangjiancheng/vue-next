@@ -7,7 +7,8 @@ import {
   EffectScope,
   markRaw,
   track,
-  TrackOpTypes
+  TrackOpTypes,
+  ReactiveEffect
 } from '@vue/reactivity'
 import {
   ComponentPublicInstance,
@@ -60,7 +61,11 @@ import { markAttrsAccessed } from './componentRenderUtils'
 import { currentRenderingInstance } from './componentRenderContext'
 import { startMeasure, endMeasure } from './profiling'
 import { convertLegacyRenderFn } from './compat/renderFn'
-import { globalCompatConfig, validateCompatConfig } from './compat/compatConfig'
+import {
+  CompatConfig,
+  globalCompatConfig,
+  validateCompatConfig
+} from './compat/compatConfig'
 import { SchedulerJob } from './scheduler'
 
 export type Data = Record<string, unknown>
@@ -111,6 +116,7 @@ export interface FunctionalComponent<P = {}, E extends EmitsOptions = {}>
   emits?: E | (keyof E)[]
   inheritAttrs?: boolean
   displayName?: string
+  compatConfig?: CompatConfig
 }
 
 export interface ClassComponent {
@@ -219,6 +225,10 @@ export interface ComponentInternalInstance {
    * Root vnode of this component's own vdom tree
    */
   subTree: VNode
+  /**
+   * Render effect instance
+   */
+  effect: ReactiveEffect
   /**
    * Bound effect runner to be passed to schedulers
    */
@@ -458,6 +468,7 @@ export function createComponentInstance(
     root: null!, // to be immediately set
     next: null, // 更新组件时：组件新的渲染模版vnode
     subTree: null!, // 组件渲染模版的vnode， will be set synchronously right after creation
+    effect: null!,
     update: null!, // will be set synchronously right after creation
     scope: new EffectScope(true /* detached */),
     render: null,

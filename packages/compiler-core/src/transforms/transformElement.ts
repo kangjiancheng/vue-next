@@ -19,10 +19,7 @@ import {
   TemplateTextChildNode,
   DirectiveArguments,
   createVNodeCall,
-  ConstantTypes,
-  JSChildNode,
-  createFunctionExpression,
-  createBlockStatement
+  ConstantTypes
 } from '../ast'
 import {
   PatchFlags,
@@ -48,15 +45,14 @@ import {
   KEEP_ALIVE,
   SUSPENSE,
   UNREF,
-  GUARD_REACTIVE_PROPS,
-  IS_REF
+  GUARD_REACTIVE_PROPS
 } from '../runtimeHelpers'
 import {
   getInnerRange,
   toValidAssetId,
   findProp,
   isCoreComponent,
-  isBindKey,
+  isStaticArgOf,
   findDir,
   isStaticExp
 } from '../utils'
@@ -139,13 +135,10 @@ export const transformElement: NodeTransform = (node, context) => {
         // updates inside get proper isSVG flag at runtime. (#639, #643)
         // This is technically web-specific, but splitting the logic out of core
         // leads to too much unnecessary complexity.
-        (tag === 'svg' || // web规范的一些特殊标签
-          tag === 'foreignObject' ||
-          // #938: elements with dynamic keys should be forced into blocks
-          findProp(node, 'key', true))) //  绑定了key指令： ':key'，非静态属性
+        // web规范的一些特殊标签
+        (tag === 'svg' || tag === 'foreignObject'))
 
     // 节点 props
-
     if (props.length > 0) {
       // 解析属性列表：静态属性、指令属性
       // 指令属性：v-bind、v-on、v-model、v-html、v-text、v-show、v-cloak、用户自定义指令; 跳过解析：slot、once、is、ssr下的on
@@ -164,6 +157,10 @@ export const transformElement: NodeTransform = (node, context) => {
               directives.map(dir => buildDirectiveArgs(dir, context)) // 进一步解析 buildProps() 中的 runtimeDirectives：v-show、v-model、用户自定义指令；处理要运行的指令的参数、值、修饰符
             ) as DirectiveArguments)
           : undefined
+
+      if (propsBuildResult.shouldUseBlock) {
+        shouldUseBlock = true
+      }
     }
 
     // 节点 children
@@ -475,12 +472,15 @@ export function buildProps(
   directives: DirectiveNode[]
   patchFlag: number
   dynamicPropNames: string[]
+  shouldUseBlock: boolean
 } {
-  const { tag, loc: elementLoc } = node
+  const { tag, loc: elementLoc, children } = node
   const isComponent = node.tagType === ElementTypes.COMPONENT // 是否是组件
   let properties: ObjectExpression['properties'] = [] // createObjectProperty(key, value) 存储props中经过转换的属性值节点/属性名节点
   const mergeArgs: PropsExpression[] = [] // 配合v-on/v-bind（无参数指令） 合并去重属性
-  const runtimeDirectives: DirectiveNode[] = [] // 如运行时指令，如 v-model，v-show
+  const runtimeDirectives: DirectiveNode[] = []// 如运行时指令，如 v-model，v-show
+  const hasChildren = children.length > 0
+  let shouldUseBlock = false
 
   // 依据相关信息，生成对应的patchFlag
   let patchFlag = 0
@@ -575,25 +575,33 @@ export function buildProps(
       // dom 静态属性，节点光标位置、属性名、属性值
       // 注意 静态style 已经被转换为动态style，即 style="color: blue;" 转换为 :style='{"color": "blue"}'
       const { loc, name, value } = prop
-      // objProp.value: {type, loc, content, isStatic, constType }
-      let valueNode = createSimpleExpression(
-        // 创建 属性值表达式对象 （形如ast指令属性值节点的结构）
-        value ? value.content : '',
-        true,
-        value ? value.loc : loc
-      ) as JSChildNode
+      let isStatic = true
       if (name === 'ref') {
         // 存在ref属性
         hasRef = true
-
-        // TODO: analyze cfs
+        if (context.scopes.vFor > 0) {
+          properties.push(
+            createObjectProperty(
+              createSimpleExpression('ref_for', true),
+              createSimpleExpression('true')
+            )
+          )
+        }
         // in inline mode there is no setupState object, so we can't use string
         // keys to set the ref. Instead, we need to transform it to pass the
         // actual ref instead.
-        if (!__BROWSER__ && context.inline && value?.content) {
-          valueNode = createFunctionExpression(['_value', '_refs'])
-          valueNode.body = createBlockStatement(
-            processInlineRef(context, value.content)
+        if (
+          !__BROWSER__ &&
+          value &&
+          context.inline &&
+          context.bindingMetadata[value.content]
+        ) {
+          isStatic = false
+          properties.push(
+            createObjectProperty(
+              createSimpleExpression('ref_key', true),
+              createSimpleExpression(value.content, true, value.loc)
+            )
           )
         }
       }
@@ -623,7 +631,11 @@ export function buildProps(
             true, // 静态属性
             getInnerRange(loc, 0, name.length) // 获取属性名的模版解析的光标位置信息
           ),
-          valueNode
+          createSimpleExpression(
+            value ? value.content : '',
+            isStatic,
+            value ? value.loc : loc
+          )
         )
       )
     } else {
@@ -654,7 +666,7 @@ export function buildProps(
       if (
         name === 'is' ||
         (isVBind &&
-          isBindKey(arg, 'is') && // 绑定静态is属性，如 <component :is='HelloWold' />
+        isStaticArgOf(arg, 'is') && // 绑定静态is属性，如 <component :is='HelloWold' />
           (isComponentTag(tag) ||
             (__COMPAT__ &&
               isCompatEnabled(
@@ -674,6 +686,25 @@ export function buildProps(
 
       // 分析 v-on 与 v-bind 指令，v-on/v-bind 不带指令名表达式参数
       // 如 template: '<button v-bind="{name: 'btn-name', class: 'btn-class'}" v-on="{ mousedown: handleDown, mouseup: handleUp }"></button>'
+      if (
+        // #938: elements with dynamic keys should be forced into blocks
+        (isVBind && isStaticArgOf(arg, 'key')) ||
+        // inline before-update hooks need to force block so that it is invoked
+        // before children
+        (isVOn && hasChildren && isStaticArgOf(arg, 'vue:before-update'))
+      ) {
+        shouldUseBlock = true
+      }
+
+      if (isVBind && isStaticArgOf(arg, 'ref') && context.scopes.vFor > 0) {
+        properties.push(
+          createObjectProperty(
+            createSimpleExpression('ref_for', true),
+            createSimpleExpression('true')
+          )
+        )
+      }
+
       // special case for v-bind and v-on with no argument
       if (!arg && (isVBind || isVOn)) {
         hasDynamicKeys = true // 存在动态绑定参数指令
@@ -813,26 +844,12 @@ export function buildProps(
         // 用户自定义指令列表
         // no built-in transform, this is a user custom directive.
         runtimeDirectives.push(prop)
+        // custom dirs may use beforeUpdate so they need to force blocks
+        // to ensure before-update gets called before children update
+        if (hasChildren) {
+          shouldUseBlock = true
+        }
       }
-    }
-
-    if (
-      __COMPAT__ &&
-      prop.type === NodeTypes.ATTRIBUTE &&
-      prop.name === 'ref' &&
-      context.scopes.vFor > 0 &&
-      checkCompatEnabled(
-        CompilerDeprecationTypes.COMPILER_V_FOR_REF,
-        context,
-        prop.loc
-      )
-    ) {
-      properties.push(
-        createObjectProperty(
-          createSimpleExpression('refInFor', true),
-          createSimpleExpression('true', false)
-        )
-      )
     }
   }
 
@@ -901,6 +918,7 @@ export function buildProps(
     }
   }
   if (
+    !shouldUseBlock &&
     (patchFlag === 0 || patchFlag === PatchFlags.HYDRATE_EVENTS) &&
     (hasRef || hasVnodeHook || runtimeDirectives.length > 0)
   ) {
@@ -985,7 +1003,8 @@ export function buildProps(
     props: propsExpression, // 属性列表节点， 已处理所有属性包括静态属性、静态/动态指令属性，并进行了合并去重处理
     directives: runtimeDirectives, // 运行时的指令
     patchFlag,
-    dynamicPropNames // 静态指令属性名列表，且非 ref、style、class，且该指令没有被设置缓存
+    dynamicPropNames, // 静态指令属性名列表，且非 ref、style、class，且该指令没有被设置缓存,
+    shouldUseBlock
   }
 }
 
@@ -1150,31 +1169,4 @@ function stringifyDynamicPropNames(props: string[]): string {
 
 function isComponentTag(tag: string) {
   return tag === 'component' || tag === 'Component'
-}
-
-function processInlineRef(
-  context: TransformContext,
-  raw: string
-): JSChildNode[] {
-  const body = [createSimpleExpression(`_refs['${raw}'] = _value`)]
-  const { bindingMetadata, helperString } = context
-  const type = bindingMetadata[raw]
-  if (type === BindingTypes.SETUP_REF) {
-    body.push(createSimpleExpression(`${raw}.value = _value`))
-  } else if (type === BindingTypes.SETUP_MAYBE_REF) {
-    body.push(
-      createSimpleExpression(
-        `${helperString(IS_REF)}(${raw}) && (${raw}.value = _value)`
-      )
-    )
-  } else if (type === BindingTypes.SETUP_LET) {
-    body.push(
-      createSimpleExpression(
-        `${helperString(
-          IS_REF
-        )}(${raw}) ? ${raw}.value = _value : ${raw} = _value`
-      )
-    )
-  }
-  return body
 }

@@ -7,7 +7,7 @@ import {
   SlotOutletNode,
   createFunctionExpression
 } from '../ast'
-import { isSlotOutlet, isBindKey, isStaticExp } from '../utils'
+import { isSlotOutlet, isStaticArgOf, isStaticExp } from '../utils'
 import { buildProps, PropsExpression } from './transformElement'
 import { createCompilerError, ErrorCodes } from '../errors'
 import { RENDER_SLOT } from '../runtimeHelpers'
@@ -97,7 +97,7 @@ export function processSlotOutlet(
       }
     } else {
       // 动态属性
-      if (p.name === 'bind' && isBindKey(p.arg, 'name')) {
+      if (p.name === 'bind' && isStaticArgOf(p.arg, 'name')) {
         // 动态 name，如: '<slot :name="slotName"></slot>'
         if (p.exp) slotName = p.exp
       } else {
