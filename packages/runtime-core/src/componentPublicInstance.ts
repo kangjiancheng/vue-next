@@ -418,8 +418,10 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
     const { data, setupState, ctx } = instance
     if (setupState !== EMPTY_OBJ && hasOwn(setupState, key)) {
       setupState[key] = value
+      return true
     } else if (data !== EMPTY_OBJ && hasOwn(data, key)) {
       data[key] = value
+      return true
     } else if (hasOwn(instance.props, key)) {
       // 禁止修改 props 属性
       __DEV__ &&
@@ -471,6 +473,20 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
       hasOwn(publicPropertiesMap, key) ||
       hasOwn(appContext.config.globalProperties, key)
     )
+  },
+
+  defineProperty(
+    target: ComponentRenderContext,
+    key: string,
+    descriptor: PropertyDescriptor
+  ) {
+    if (descriptor.get != null) {
+      // invalidate key cache of a getter based property #5417
+      target.$.accessCache[key] = 0;
+    } else if (hasOwn(descriptor,'value')) {
+      this.set!(target, key, descriptor.value, null)
+    }
+    return Reflect.defineProperty(target, key, descriptor)
   }
 }
 

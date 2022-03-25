@@ -663,7 +663,7 @@ export function cloneVNode<T, U>(
     shapeFlag: vnode.shapeFlag,
     // if the vnode is cloned with extra props, we can no longer assume its
     // existing patch flag to be reliable and need to add the FULL_PROPS flag.
-    // note: perserve flag for fragments since they use the flag for children
+    // note: preserve flag for fragments since they use the flag for children
     // fast paths only.
     // 如果存在合并属性，因为无法确定合并属性内容，所以需要全部更新vnode属性，如 组件模版根vnode合并组件节点vnode，在更新时，需要全部更新。
     patchFlag:
@@ -882,6 +882,7 @@ export function mergeProps(...args: (Data & VNodeProps)[]) {
         const existing = ret[key]
         const incoming = toMerge[key]
         if (
+          incoming &&
           existing !== incoming &&
           !(isArray(existing) && existing.includes(incoming))
         ) {

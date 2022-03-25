@@ -9,6 +9,7 @@ import {
   newTracked,
   wasTracked
 } from './dep'
+import { ComputedRefImpl } from './computed'
 
 // The main WeakMap that stores {target -> key -> dep} connections.
 // Conceptually, it's easier to think of a dependency as a Dep class
@@ -44,10 +45,8 @@ export type DebuggerEventExtraInfo = {
   oldTarget?: Map<any, any> | Set<any>
 }
 
-// effect 栈列
-const effectStack: ReactiveEffect[] = []
 // 当前激活的 effect
-let activeEffect: ReactiveEffect | undefined
+export let activeEffect: ReactiveEffect | undefined
 
 export const ITERATE_KEY = Symbol(__DEV__ ? 'iterate' : '')
 export const MAP_KEY_ITERATE_KEY = Symbol(__DEV__ ? 'Map key iterate' : '')
@@ -55,10 +54,18 @@ export const MAP_KEY_ITERATE_KEY = Symbol(__DEV__ ? 'Map key iterate' : '')
 export class ReactiveEffect<T = any> {
   active = true
   deps: Dep[] = [] // 组件/watch 每个响应式依赖项 被订阅的组件effect 的集合 （即记录该effect 依赖的数据 的effect列表）
+  parent: ReactiveEffect | undefined = undefined
 
-  // can be attached after creation
-  computed?: boolean
+  /**
+   * Can be attached after creation
+   * @internal
+   */
+  computed?: ComputedRefImpl<T>
+  /**
+   * @internal
+   */
   allowRecurse?: boolean
+
   onStop?: () => void
   // dev only
   onTrack?: (event: DebuggerEvent) => void
@@ -68,7 +75,7 @@ export class ReactiveEffect<T = any> {
   constructor(
     public fn: () => T,
     public scheduler: EffectScheduler | null = null,
-    scope?: EffectScope | null
+    scope?: EffectScope
   ) {
     recordEffectScope(this, scope)
   }
@@ -77,33 +84,38 @@ export class ReactiveEffect<T = any> {
     if (!this.active) {
       return this.fn()
     }
-    if (!effectStack.includes(this)) {
-      try {
-        effectStack.push((activeEffect = this))
-        enableTracking()
-
-        trackOpBit = 1 << ++effectTrackDepth
-
-        if (effectTrackDepth <= maxMarkerBits) {
-          initDepMarkers(this)
-        } else {
-          cleanupEffect(this)
-        }
-        // 执行fn，并返回结果
-        return this.fn()
-      } finally {
-        if (effectTrackDepth <= maxMarkerBits) {
-          finalizeDepMarkers(this)
-        }
-
-        trackOpBit = 1 << --effectTrackDepth
-
-        resetTracking()
-        // 执行完 fn() 后，停止对当前对effect跟踪
-        effectStack.pop()
-        const n = effectStack.length
-        activeEffect = n > 0 ? effectStack[n - 1] : undefined // 当前正在渲染的组件 - effect
+    let parent: ReactiveEffect | undefined = activeEffect
+    let lastShouldTrack = shouldTrack
+    while (parent) {
+      if (parent === this) {
+        return
       }
+      parent = parent.parent
+    }
+    try {
+      this.parent = activeEffect
+      activeEffect = this
+      shouldTrack = true
+
+      trackOpBit = 1 << ++effectTrackDepth
+
+      if (effectTrackDepth <= maxMarkerBits) {
+        initDepMarkers(this)
+      } else {
+        cleanupEffect(this)
+      }
+      // 执行fn，并返回结果
+      return this.fn()
+    } finally {
+      if (effectTrackDepth <= maxMarkerBits) {
+        finalizeDepMarkers(this)
+      }
+
+      trackOpBit = 1 << --effectTrackDepth
+
+      activeEffect = this.parent
+      shouldTrack = lastShouldTrack
+      this.parent = undefined
     }
   }
 
@@ -173,7 +185,7 @@ export function stop(runner: ReactiveEffectRunner) {
   runner.effect.stop()
 }
 
-let shouldTrack = true // 默认需要跟踪
+export let shouldTrack = true // 默认需要跟踪
 const trackStack: boolean[] = []
 
 // 暂停跟踪 vue组件数据状态
@@ -197,12 +209,6 @@ export function resetTracking() {
 // 跟踪某个响应对象的某个属性 所依赖的组件effect（执行组件渲染函数期间、或执行watch/computed期间）
 // 如 const count = ref(1); track(toRaw(count), TrackOpTypes.GET, 'value')
 export function track(target: object, type: TrackOpTypes, key: unknown) {
-  if (!isTracking()) {
-    // 即直接在setup 函数中进行读取时，没必要跟踪
-    // 如 let count = ref(1) 然后直接读：console.log(count.value) 这时候，并不是在渲染期间，所以不需要跟踪
-    return
-  }
-
   // targetMap: {
   //    target - 响应式对象: {
   //        key - 响应式对象属性: [
@@ -210,28 +216,24 @@ export function track(target: object, type: TrackOpTypes, key: unknown) {
   //        ]
   //    }
   // }
+  if (shouldTrack && activeEffect) {
+    // 收集响应式对象，如 响应式ref对象 const = count=ref(1)
+    let depsMap = targetMap.get(target) // ref 数据，如 ref(1)
+    if (!depsMap) {
+      targetMap.set(target, (depsMap = new Map()))
+    }
+    // 收集响应式对象 实际被依赖的属性（如ref对象的value属性）
+    let dep = depsMap.get(key)
+    if (!dep) {
+      depsMap.set(key, (dep = createDep()))
+    }
 
-  // 收集响应式对象，如 响应式ref对象 const = count=ref(1)
-  let depsMap = targetMap.get(target) // ref 数据，如 ref(1)
-  if (!depsMap) {
-    targetMap.set(target, (depsMap = new Map()))
+    const eventInfo = __DEV__
+      ? { effect: activeEffect, target, type, key }
+      : undefined
+
+    trackEffects(dep, eventInfo)
   }
-
-  // 收集响应式对象 实际被依赖的属性（如ref对象的value属性）
-  let dep = depsMap.get(key)
-  if (!dep) {
-    depsMap.set(key, (dep = createDep()))
-  }
-
-  const eventInfo = __DEV__
-    ? { effect: activeEffect, target, type, key }
-    : undefined
-
-  trackEffects(dep, eventInfo)
-}
-
-export function isTracking() {
-  return shouldTrack && activeEffect !== undefined
 }
 
 export function trackEffects(

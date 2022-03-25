@@ -1,8 +1,9 @@
+/* eslint-disable no-restricted-globals */
 import { ComponentInternalInstance, formatComponentName } from './component'
 import { devtoolsPerfEnd, devtoolsPerfStart } from './devtools'
 
 let supported: boolean
-let perf: any
+let perf: Performance
 
 // 性能检测 如果设 performance：true，且window.performance存在
 export function startMeasure(
@@ -14,7 +15,7 @@ export function startMeasure(
   }
 
   if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
-    devtoolsPerfStart(instance, type, supported ? perf.now() : Date.now())
+    devtoolsPerfStart(instance, type, isSupported() ? perf.now() : Date.now())
   }
 }
 
@@ -33,7 +34,7 @@ export function endMeasure(instance: ComponentInternalInstance, type: string) {
   }
 
   if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
-    devtoolsPerfEnd(instance, type, supported ? perf.now() : Date.now())
+    devtoolsPerfEnd(instance, type, isSupported() ? perf.now() : Date.now())
   }
 }
 
@@ -41,13 +42,11 @@ function isSupported() {
   if (supported !== undefined) {
     return supported
   }
-  /* eslint-disable no-restricted-globals */
   if (typeof window !== 'undefined' && window.performance) {
     supported = true
     perf = window.performance
   } else {
     supported = false
   }
-  /* eslint-enable no-restricted-globals */
   return supported
 }

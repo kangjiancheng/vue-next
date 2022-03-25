@@ -29,7 +29,8 @@ import {
   isObject,
   isReservedProp,
   capitalize,
-  camelize
+  camelize,
+  isBuiltInDirective
 } from '@vue/shared'
 import { createCompilerError, ErrorCodes } from '../errors'
 import {
@@ -840,7 +841,7 @@ export function buildProps(
             directiveImportMap.set(prop, needRuntime)
           }
         }
-      } else {
+      } else if (!isBuiltInDirective(name)) {
         // 用户自定义指令列表
         // no built-in transform, this is a user custom directive.
         runtimeDirectives.push(prop)
@@ -1076,8 +1077,8 @@ function mergeAsArray(existing: Property, incoming: Property) {
 
 // 解析构建指令节点，v-show、v-model、用户自定义指令
 // 解析其中： 指令名、指令值、指令参数、参数修饰符
-function buildDirectiveArgs(
-  dir: DirectiveNode, // 解析后的指令节点：key/value
+export function buildDirectiveArgs(// 解析后的指令节点：key/value
+  dir: DirectiveNode,
   context: TransformContext
 ): ArrayExpression {
   const dirArgs: ArrayExpression['elements'] = []
