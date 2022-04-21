@@ -92,7 +92,7 @@ export function watchPostEffect(
     effect,
     null,
     (__DEV__
-      ? Object.assign(options || {}, { flush: 'post' })
+      ? { ...options, flush: 'post' }
       : { flush: 'post' }) as WatchOptionsBase
   )
 }
@@ -105,7 +105,7 @@ export function watchSyncEffect(
     effect,
     null,
     (__DEV__
-      ? Object.assign(options || {}, { flush: 'sync' })
+      ? { ...options, flush: 'sync' }
       : { flush: 'sync' }) as WatchOptionsBase
   )
 }
@@ -365,18 +365,7 @@ function doWatch(
     // 更新时：同步任务后，在组件执行渲染函数effect任务之后
     scheduler = () => queuePostRenderEffect(job, instance && instance.suspense)
   } else {
-    // default: 'pre' // 更新组件时：同步任务后，在执行组件渲染函数effect任务之前，触发watch
-    scheduler = () => {
-      if (!instance || instance.isMounted) {
-        // 组件已挂载，更新监听目标依赖项
-        queuePreFlushCb(job) // 渲染函数之前
-      } else {
-        // 首次挂载组件时，默认先执行该组件setup中watch目标的effect函数，之后在执行组件渲染函数的effect函数
-        // with 'pre' option, the first call must happen before
-        // the component is mounted so it is called synchronously.
-        job()
-      }
-    }
+    scheduler = () => queuePreFlushCb(job)
   }
 
   // 创建监听目标getter的effect函数

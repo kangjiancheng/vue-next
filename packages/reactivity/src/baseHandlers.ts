@@ -30,10 +30,12 @@ import {
   makeMap
 } from '@vue/shared'
 import { isRef } from './ref'
+import { warn } from './warning'
 
 const isNonTrackableKeys = /*#__PURE__*/ makeMap(`__proto__,__v_isRef,__isVue`)
 
 const builtInSymbols = new Set(
+  /*#__PURE__*/
   Object.getOwnPropertyNames(Symbol)
     .map(key => (Symbol as any)[key])
     .filter(isSymbol) // typeof val === 'symbol'
@@ -247,7 +249,7 @@ export const readonlyHandlers: ProxyHandler<object> = {
   get: readonlyGet, // createGetter(true)
   set(target, key) {
     if (__DEV__) {
-      console.warn(
+      warn(
         `Set operation on key "${String(key)}" failed: target is readonly.`, // 如不可在setup在中修改props属性
         target
       )
@@ -256,7 +258,7 @@ export const readonlyHandlers: ProxyHandler<object> = {
   },
   deleteProperty(target, key) {
     if (__DEV__) {
-      console.warn(
+      warn(
         `Delete operation on key "${String(key)}" failed: target is readonly.`,
         target
       )

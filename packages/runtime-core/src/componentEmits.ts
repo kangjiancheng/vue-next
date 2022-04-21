@@ -75,6 +75,7 @@ export function emit(
   event: string,
   ...rawArgs: any[] // $emit('update:user-name', '小明')
 ) {
+  if (instance.isUnmounted) return
   // vnode props
   //
   // <hello-world v-model:user-name.trim="user.name" />

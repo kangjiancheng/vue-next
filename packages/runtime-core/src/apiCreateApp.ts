@@ -181,6 +181,10 @@ export function createAppAPI<HostElement>(
 ): CreateAppFunction<HostElement> {
   // 返回 一个 createApp() 函数，实际项目的入口， rootComponent 基本组件 App， rootProps将传递给根组件的props
   return function createApp(rootComponent, rootProps = null) {
+    if (!isFunction(rootComponent)) {
+      rootComponent = { ...rootComponent }
+    }
+
     if (rootProps != null && !isObject(rootProps)) {
       __DEV__ && warn(`root props passed to app.mount() must be an object.`)
       rootProps = null

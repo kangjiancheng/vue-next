@@ -81,6 +81,7 @@ function setStyle(
   if (isArray(val)) {
     val.forEach(v => setStyle(style, name, v))
   } else {
+    if (val == null) val = ''
     if (name.startsWith('--')) {
       // 自定义style属性，如： <span style="--user-info"></span>
       // custom property definition

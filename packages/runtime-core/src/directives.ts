@@ -14,7 +14,7 @@ return withDirectives(h(comp), [
 import { VNode } from './vnode'
 import { isFunction, EMPTY_OBJ, isBuiltInDirective } from '@vue/shared'
 import { warn } from './warning'
-import { ComponentInternalInstance, Data } from './component'
+import { ComponentInternalInstance, Data, getExposeProxy } from './component'
 import { currentRenderingInstance } from './componentRenderContext'
 import { callWithAsyncErrorHandling, ErrorCodes } from './errorHandling'
 import { ComponentPublicInstance } from './componentPublicInstance'
@@ -113,8 +113,9 @@ export function withDirectives<T extends VNode>(
     __DEV__ && warn(`withDirectives can only be used inside render functions.`)
     return vnode
   }
-  const instance = internalInstance.proxy // （父）组件实例ctx
-
+  const instance =
+    (getExposeProxy(internalInstance) as ComponentPublicInstance) ||
+    internalInstance.proxy // （父）组件实例ctx
   const bindings: DirectiveBinding[] = vnode.dirs || (vnode.dirs = [])
   for (let i = 0; i < directives.length; i++) {
     // 指令内容、指令属性值、指令属性参数、指令属性修饰符
