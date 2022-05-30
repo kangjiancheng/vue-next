@@ -37,6 +37,10 @@ const isNonTrackableKeys = /*#__PURE__*/ makeMap(`__proto__,__v_isRef,__isVue`)
 const builtInSymbols = new Set(
   /*#__PURE__*/
   Object.getOwnPropertyNames(Symbol)
+    // ios10.x Object.getOwnPropertyNames(Symbol) can enumerate 'arguments' and 'caller'
+    // but accessing them on Symbol leads to TypeError because Symbol is a strict mode
+    // function
+    .filter(key => key !== 'arguments' && key !== 'caller')
     .map(key => (Symbol as any)[key])
     .filter(isSymbol) // typeof val === 'symbol'
 )
@@ -145,9 +149,8 @@ function createGetter(isReadonly = false, shallow = false) {
 
     if (isRef(res)) {
       // key的value 为 通过 ref() 创建的响应式对象
-      // ref unwrapping - does not apply for Array + integer key.
-      const shouldUnwrap = !targetIsArray || !isIntegerKey(key) // 非数组 或 非整数
-      return shouldUnwrap ? res.value : res
+      // ref unwrapping - skip unwrap for Array + integer key.
+      return targetIsArray && isIntegerKey(key) ? res : res.value
     }
 
     // 对象深层次响应转换：如果key的value 为对象，需要进一步响应转换

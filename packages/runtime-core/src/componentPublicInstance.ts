@@ -240,8 +240,8 @@ export const publicPropertiesMap: PublicPropertiesMap =
     $root: i => getPublicInstance(i.root),
     $emit: i => i.emit,
     $options: i => (__FEATURE_OPTIONS_API__ ? resolveMergedOptions(i) : i.type),
-    $forceUpdate: i => () => queueJob(i.update),
-    $nextTick: i => nextTick.bind(i.proxy!),
+    $forceUpdate: i => i.f || (i.f = () => queueJob(i.update)),
+    $nextTick: i => i.n || (i.n = nextTick.bind(i.proxy!)),
     $watch: i => (__FEATURE_OPTIONS_API__ ? instanceWatch.bind(i) : NOOP)
   } as PublicPropertiesMap)
 
@@ -261,6 +261,8 @@ export interface ComponentRenderContext {
   [key: string]: any
   _: ComponentInternalInstance
 }
+
+export const isReservedPrefix = (key: string) => key === '_' || key === '$'
 
 // 拦截组件实例的上下文：instance.ctx，并返回给instance.proxy
 // ctx 为组件实例的上下文，包括了实例方法，实例data属性、实例props等
@@ -387,11 +389,7 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
         key.indexOf('__v') !== 0)
     ) {
       // key 不是字符串 或 不是以 '__v' 开头
-      if (
-        data !== EMPTY_OBJ &&
-        (key[0] === '$' || key[0] === '_') &&
-        hasOwn(data, key)
-      ) {
+      if (data !== EMPTY_OBJ && isReservedPrefix(key[0]) && hasOwn(data, key)) {
         // 如果在data中定义了 $xxx，在模板中使用时，则只能通过$data.$xxx访问
         // $id: '001' // 在模版中访问：$data.$id
         warn(
@@ -595,7 +593,7 @@ export function exposeSetupStateOnRenderContext(
   // toRaw: 设置 setupState.__v_raw = setupState
   Object.keys(toRaw(setupState)).forEach(key => {
     if (!setupState.__isScriptSetup) {
-      if (key[0] === '$' || key[0] === '_') {
+      if (isReservedPrefix(key[0])) {
         // setup方法的返回值属性里不能以 $、_ 开头，这些是Vue的 内部属性预留前置代表
         warn(
           `setup() return property ${JSON.stringify(

@@ -145,12 +145,16 @@ export const transformElement: NodeTransform = (node, context) => {
       // 指令属性：v-bind、v-on、v-model、v-html、v-text、v-show、v-cloak、用户自定义指令; 跳过解析：slot、once、is、ssr下的on
       // 属性去重合并，转换key/value
       // 设置node的 patchFlag
-      const propsBuildResult = buildProps(node, context)
-
-      vnodeProps = propsBuildResult.props // 解析后的props列表
+      const propsBuildResult = buildProps(
+        node,
+        context,
+        undefined,
+        isComponent,
+        isDynamicComponent
+      )
+      vnodeProps = propsBuildResult.props// 解析后的props列表
       patchFlag = propsBuildResult.patchFlag // 根据相关prop信息，进行二进制运算设置patchFlag
       dynamicPropNames = propsBuildResult.dynamicPropNames // 静态prop key的name列表，且非 ref、style、class，且该指令没有被设置缓存，如：v-bind、 v-model、 v-on
-
       const directives = propsBuildResult.directives // 需要在运行时，重新处理的：v-model、v-show、用户自定义指令
       vnodeDirectives =
         directives && directives.length
@@ -435,7 +439,9 @@ function resolveSetupReference(name: string, context: TransformContext) {
     }
   }
 
-  const fromConst = checkType(BindingTypes.SETUP_CONST)
+  const fromConst =
+    checkType(BindingTypes.SETUP_CONST) ||
+    checkType(BindingTypes.SETUP_REACTIVE_CONST)
   if (fromConst) {
     return context.inline
       ? // in inline mode, const setup bindings (e.g. imports) can be used as-is
@@ -467,6 +473,8 @@ export function buildProps(
   node: ElementNode, // dom元素节点 或组件节点 或 slot标签节点（在transformSlot中）
   context: TransformContext,
   props: ElementNode['props'] = node.props, // 节点上的属性列表
+  isComponent: boolean,
+  isDynamicComponent: boolean,
   ssr = false
 ): {
   props: PropsExpression | undefined
@@ -476,7 +484,6 @@ export function buildProps(
   shouldUseBlock: boolean
 } {
   const { tag, loc: elementLoc, children } = node
-  const isComponent = node.tagType === ElementTypes.COMPONENT // 是否是组件
   let properties: ObjectExpression['properties'] = [] // createObjectProperty(key, value) 存储props中经过转换的属性值节点/属性名节点
   const mergeArgs: PropsExpression[] = [] // 配合v-on/v-bind（无参数指令） 合并去重属性
   const runtimeDirectives: DirectiveNode[] = []// 如运行时指令，如 v-model，v-show
@@ -503,8 +510,8 @@ export function buildProps(
       const name = key.content // （属性名/属性值/修饰符）节点名内容
       const isEventHandler = isOn(name) // /^on[^a-z]/  on 事件
       if (
-        !isComponent && // 非组件节点，即dom节点
         isEventHandler &&
+        (!isComponent || isDynamicComponent) &&
         // omit the flag for click handlers because hydration gives click
         // dedicated fast path.
         name.toLowerCase() !== 'onclick' &&
@@ -962,10 +969,11 @@ export function buildProps(
           }
           if (
             styleProp &&
-            !isStaticExp(styleProp.value) &&
             // the static style is compiled into an object,
             // so use `hasStyleBinding` to ensure that it is a dynamic style binding
             (hasStyleBinding ||
+              (styleProp.value.type === NodeTypes.SIMPLE_EXPRESSION &&
+                styleProp.value.content.trim()[0] === `[`) ||
               // v-bind:style and style both exist,
               // v-bind:style with static literal object
               styleProp.value.type === NodeTypes.JS_ARRAY_EXPRESSION)

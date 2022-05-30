@@ -38,6 +38,8 @@ export function markAttrsAccessed() {
   accessedAttrs = true
 }
 
+type SetRootFn = ((root: VNode) => void) | undefined
+
 export function renderComponentRoot(
   instance: ComponentInternalInstance
 ): VNode {
@@ -150,7 +152,7 @@ export function renderComponentRoot(
   // in dev mode, comments are preserved, and it's possible for a template
   // to have comments along side the root element which makes it a fragment
   let root = result
-  let setRoot: ((root: VNode) => void) | undefined = undefined
+  let setRoot: SetRootFn = undefined
   if (
     __DEV__ &&
     result.patchFlag > 0 &&
@@ -248,6 +250,8 @@ export function renderComponentRoot(
           `The directives will not function as intended.`
       )
     }
+    // clone before mutating since the root may be a hoisted vnode
+    root = cloneVNode(root)
     root.dirs = root.dirs ? root.dirs.concat(vnode.dirs) : vnode.dirs
   }
   // inherit transition data
@@ -280,9 +284,7 @@ export function renderComponentRoot(
  * template into a fragment root, but we need to locate the single element
  * root for attrs and scope id processing.
  */
-const getChildRoot = (
-  vnode: VNode
-): [VNode, ((root: VNode) => void) | undefined] => {
+const getChildRoot = (vnode: VNode): [VNode, SetRootFn] => {
   const rawChildren = vnode.children as VNodeArrayChildren
   const dynamicChildren = vnode.dynamicChildren
   const childRoot = filterSingleRoot(rawChildren)
@@ -291,7 +293,7 @@ const getChildRoot = (
   }
   const index = rawChildren.indexOf(childRoot)
   const dynamicIndex = dynamicChildren ? dynamicChildren.indexOf(childRoot) : -1
-  const setRoot = (updatedRoot: VNode) => {
+  const setRoot: SetRootFn = (updatedRoot: VNode) => {
     rawChildren[index] = updatedRoot
     if (dynamicChildren) {
       if (dynamicIndex > -1) {

@@ -137,7 +137,8 @@ export function emit(
     if (trim) {
       // <hello-world v-model:user-name.trim="user.name" />
       args = rawArgs.map(a => a.trim())
-    } else if (number) {
+    }
+    if (number) {
       // <hello-world v-model:user-name.number="user.name" />
       args = rawArgs.map(toNumber)
     }

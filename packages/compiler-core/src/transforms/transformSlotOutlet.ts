@@ -114,7 +114,13 @@ export function processSlotOutlet(
 
   if (nonNameProps.length > 0) {
     // 解析slot节点的 prop属性列表，包括指令属性等
-    const { props, directives } = buildProps(node, context, nonNameProps)
+    const { props, directives } = buildProps(
+      node,
+      context,
+      nonNameProps,
+      false,
+      false
+    )
     slotProps = props // 解析后的props列表
 
     if (directives.length) {

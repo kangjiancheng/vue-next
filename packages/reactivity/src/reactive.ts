@@ -11,7 +11,7 @@ import {
   shallowCollectionHandlers,
   shallowReadonlyCollectionHandlers
 } from './collectionHandlers'
-import { UnwrapRefSimple, Ref } from './ref'
+import type { UnwrapRefSimple, Ref, RawSymbol } from './ref'
 
 export const enum ReactiveFlags {
   SKIP = '__v_skip',
@@ -265,7 +265,9 @@ export function toRaw<T>(observed: T): T {
 }
 
 // 标记为 __v_skip
-export function markRaw<T extends object>(value: T): T {
+export function markRaw<T extends object>(
+  value: T
+): T & { [RawSymbol]?: true } {
   // Object.defineProperty =》 value.__v_skip = true
   def(value, ReactiveFlags.SKIP, true)
   return value

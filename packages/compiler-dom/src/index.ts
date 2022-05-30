@@ -19,7 +19,7 @@ import { transformVText } from './transforms/vText'
 import { transformModel } from './transforms/vModel'
 import { transformOn } from './transforms/vOn'
 import { transformShow } from './transforms/vShow'
-import { warnTransitionChildren } from './transforms/warnTransitionChildren'
+import { transformTransition } from './transforms/Transition'
 import { stringifyStatic } from './transforms/stringifyStatic'
 import { ignoreSideEffectTags } from './transforms/ignoreSideEffectTags'
 import { extend } from '@vue/shared'
@@ -29,7 +29,7 @@ export { parserOptions }
 // 生成ast语法树后，transform阶段，其中dom节点需要进一步调整的内容
 export const DOMNodeTransforms: NodeTransform[] = [
   transformStyle, // 转换ast语法树中的静态style属性节点为指令属性节点
-  ...(__DEV__ ? [warnTransitionChildren] : []) // transition 组件下只能接收一个子元素/子组件
+  ...(__DEV__ ? [transformTransition] : []) // transition 组件下只能接收一个子元素/子组件
 ]
 
 // 在解析ast语法树后，在transform阶段中，执行转换transformElement时，会解析以下指令

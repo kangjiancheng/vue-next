@@ -224,6 +224,7 @@ function doWatch(
   } else if (isArray(source)) {
     isMultiSource = true
     forceTrigger = source.some(isReactive)
+    forceTrigger = source.some(s => isReactive(s) || isShallow(s))
     // 数组 转换为 getter函数
     getter = () =>
       source.map(s => {

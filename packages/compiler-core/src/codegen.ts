@@ -60,6 +60,8 @@ import { ImportItem } from './transform'
 // 否则！可能会导致源码不能正常调试，浏览器无法执行该注释之后的代码，无法进行断点设置
 const PURE_ANNOTATION = `/*#__PURE__*/` // treeShake 代码优化
 
+const aliasHelper = (s: symbol) => `${helperNameMap[s]}: _${helperNameMap[s]}`
+
 type CodegenNode = TemplateChildNode | JSChildNode | SSRCodegenNode
 
 export interface CodegenResult {
@@ -295,11 +297,7 @@ export function generate(
     // function mode const declarations should be inside with block
     // also they should be renamed to avoid collision with user properties
     if (hasHelpers) {
-      push(
-        `const { ${ast.helpers
-          .map(s => `${helperNameMap[s]}: _${helperNameMap[s]}`)
-          .join(', ')} } = _Vue`
-      )
+      push(`const { ${ast.helpers.map(aliasHelper).join(', ')} } = _Vue`)
       push(`\n`)
       newline() // 换行并保持缩进
     }
@@ -441,15 +439,6 @@ function genFunctionPreamble(ast: RootNode, context: CodegenContext) {
     !__BROWSER__ && ssr
       ? `require(${JSON.stringify(runtimeModuleName)})` // TODO: cfs - !BROWSER
       : runtimeGlobalName // 'Vue'
-
-  // 重新赋值helpers的名字，e.g: CREATE_TEXT 对应的 Symbol('createTextVNode') 则 '{createTextVNode: _createTextVNode} = _Vue'
-  const aliasHelper = (s: symbol) => `${helperNameMap[s]}: _${helperNameMap[s]}`
-
-  // 静态部分：引入 函数变量 的代码 ast code:
-  // 'const _Vue = Vue'
-  // 'const { createVNode: _createVNode, createTextVNode: _createTextVNode } = _Vue'
-
-  // 生成 定义辅助函数 的代码，如：'{createTextVNode: _createTextVNode} = _Vue'
   // Generate const declaration for helpers
   // In prefix mode, we place the const declaration at top so it's done
   // only once; But if we not prefixing, we place the declaration inside the

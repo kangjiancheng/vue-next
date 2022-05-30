@@ -5,7 +5,8 @@ import {
   createCallExpression,
   CallExpression,
   ElementTypes,
-  ConstantTypes
+  ConstantTypes,
+  createCompoundExpression
 } from '../ast'
 import { isText } from '../utils'
 import { CREATE_TEXT } from '../runtimeHelpers'
@@ -52,11 +53,10 @@ export const transformText: NodeTransform = (node, context) => {
               // 如果下一个也是文本/插值节点
               if (!currentContainer) {
                 // 将当前文本节点添加到 合并节点 列表中去，同时修改原ast对应的当前在处理的ast节点的子节点列表
-                currentContainer = children[i] = {
-                  type: NodeTypes.COMPOUND_EXPRESSION, // 合成表达式节点
-                  loc: child.loc, // 第一个信息
-                  children: [child] // NodeTypes.INTERPOLATION 、 NodeTypes.TEXT
-                }
+                currentContainer = children[i] = createCompoundExpression( // 合成表达式节点
+                  [child], // NodeTypes.INTERPOLATION 、 NodeTypes.TEXT
+                  child.loc // 第一个信息
+                )
               }
               // merge adjacent text node into current
               currentContainer.children.push(` + `, next) // 将下一个文本节点添加到 合并节点 的子节点列表中，注意数组中还加入了一个 '+' 加号元素，currentContainer.children: [{...}, ' + ', {...}, ...]

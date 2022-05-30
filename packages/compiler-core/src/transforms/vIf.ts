@@ -245,16 +245,16 @@ export function processIf(
 
 // 创建 v-if系列分支节点（包括else、else-if）
 function createIfBranch(node: ElementNode, dir: DirectiveNode): IfBranchNode {
+  const isTemplateIf = node.tagType === ElementTypes.TEMPLATE
   return {
     type: NodeTypes.IF_BRANCH,
     loc: node.loc,
     condition: dir.name === 'else' ? undefined : dir.exp, // 条件表达式
-    // 当前if 或 else 节点
-    children:
-      node.tagType === ElementTypes.TEMPLATE && !findDir(node, 'for')
-        ? node.children // <template v-if、else、else-if></template>
-        : [node], // <template v-if v-for>...</template> 或 <div v-if>...</div>
-    userKey: findProp(node, `key`) // 获取 :key 指令节点
+    // <template v-if、else、else-if></template>
+    // <template v-if v-for>...</template> 或 <div v-if>...</div>
+    children: isTemplateIf && !findDir(node, 'for') ? node.children : [node], // 当前if 或 else 节点
+    userKey: findProp(node, `key`), // 获取 :key 指令节点
+    isTemplateIf
   }
 }
 
@@ -326,6 +326,7 @@ function createChildrenCodegenNode(
       // the rest being comments
       if (
         __DEV__ &&
+        !branch.isTemplateIf &&
         children.filter(c => c.type !== NodeTypes.COMMENT).length === 1
       ) {
         patchFlag |= PatchFlags.DEV_ROOT_FRAGMENT
