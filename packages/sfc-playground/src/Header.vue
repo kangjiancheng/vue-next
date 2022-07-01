@@ -100,6 +100,11 @@ onMounted(async () => {
   window.addEventListener('click', () => {
     expanded.value = false
   })
+  window.addEventListener('blur', () => {
+    if (document.activeElement?.tagName === 'IFRAME') {
+      expanded.value = false
+    }
+  });
 })
 
 async function fetchVersions(): Promise<string[]> {

@@ -1,6 +1,6 @@
 {
   "private": true,
-  "version": "3.2.36",
+  "version": "3.2.37",
   "packageManager": "pnpm@7.1.0",
   "scripts": {
     "dev": "node scripts/dev.js",
@@ -46,7 +46,7 @@
     ]
   },
   "engines": {
-    "node": ">=16.5.0"
+    "node": ">=16.11.0"
   },
   "devDependencies": {
     "@babel/types": "^7.12.0",

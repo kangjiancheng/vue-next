@@ -81,6 +81,10 @@ function toggleSSR() {
   />
 </template>
 <style>
+.dark {
+  color-scheme: dark;
+}
+
 body {
   font-size: 13px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
