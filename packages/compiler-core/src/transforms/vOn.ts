@@ -25,7 +25,7 @@ import { TO_HANDLER_KEY } from '../runtimeHelpers'
 // 'param => '  或 '(param1, param2) => '
 // 或 'function foo ('
 const fnExpRE =
-  /^\s*([\w$_]+|(async\s*)?\([^)]*?\))\s*=>|^\s*(async\s+)?function(?:\s+[\w$]+)?\s*\(/
+  /^\s*([\w$_]+|(async\s*)?\([^)]*?\))\s*(:[^=]+)?=>|^\s*(async\s+)?function(?:\s+[\w$]+)?\s*\(/
 
 export interface VOnDirectiveNode extends DirectiveNode {
   // v-on without arg is handled directly in ./transformElements.ts due to it affecting
@@ -62,14 +62,21 @@ export const transformOn: DirectiveTransform = (
       if (rawName.startsWith('vue:')) {
         rawName = `vnode-${rawName.slice(4)}`
       }
-      // for all event listeners, auto convert it to camelCase. See issue #2249
+
+      const eventString =
+        node.tagType !== ElementTypes.ELEMENT ||
+        rawName.startsWith('vnode') ||
+        !/[A-Z]/.test(rawName)
+          ? // for non-element and vnode lifecycle event listeners, auto convert
+            // it to camelCase. See issue #2249
+            toHandlerKey(camelize(rawName)) // 添加事件前缀 on，同时大写第一个字母，区分之后的原生事件属性
+          : // preserve case for plain element listeners that have uppercase
+            // letters, as these may be custom elements' custom events
+            `on:${rawName}`
+
       // 创建指令名 对应的简单表达式节点
       // 如：eventName.content = 'onClick'
-      eventName = createSimpleExpression(
-        toHandlerKey(camelize(rawName)), // 添加事件前缀 on，同时大写第一个字母，区分之后的原生事件属性
-        true,
-        arg.loc
-      )
+      eventName = createSimpleExpression(eventString, true, arg.loc)
     } else {
       // #2388
       // 动态指令，如 '<button @[eventName]="handleClick"></button>'，其中变量eventName='click'

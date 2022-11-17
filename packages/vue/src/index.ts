@@ -47,22 +47,23 @@ function compileToFunction(
     template = el ? el.innerHTML : ``
   }
 
-  // 编译阶段：解析 vue模版源码template 得到对应的 js渲染源码code
-  const { code } = compile(
-    template,
-    extend(
-      {
-        hoistStatic: true, // 静态提升
-        // 解析失败时，比如解析注释失败，当 template = 'abc<!--123' 错误提示：'Template compilation error: Unexpected EOF in comment.'
-        onError: __DEV__ ? onError : undefined,
-        onWarn: __DEV__ ? e => onError(e, true) : NOOP
-      } as CompilerOptions,
-      options
-    )
+  const opts = extend(
+    {
+      hoistStatic: true, // 静态提升
+      // 解析失败时，比如解析注释失败，当 template = 'abc<!--123' 错误提示：'Template compilation error: Unexpected EOF in comment.'
+      onError: __DEV__ ? onError : undefined,
+      onWarn: __DEV__ ? e => onError(e, true) : NOOP
+    } as CompilerOptions,
+    options
   )
 
-  // 执行渲染源码 生成 渲染函数
-  // 同时也会执行静态节点的vnode
+  if (!opts.isCustomElement && typeof customElements !== 'undefined') {
+    opts.isCustomElement = tag => !!customElements.get(tag)
+  }
+
+  // 编译阶段：解析 vue模版源码template 得到对应的 js渲染源码code
+  const { code } = compile(template, opts)
+
   function onError(err: CompilerError, asWarning = false) {
     const message = asWarning
       ? err.message
@@ -78,6 +79,9 @@ function compileToFunction(
     // 控制台输出错误信息
     warn(codeFrame ? `${message}\n${codeFrame}` : message)
   }
+
+  // 执行渲染源码 生成 渲染函数
+  // 同时也会执行静态节点的vnode
 
   // The wildcard import results in a huge object with every export
   // with keys that cannot be mangled, and can be quite heavy size-wise.

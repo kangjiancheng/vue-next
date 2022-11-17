@@ -326,38 +326,50 @@ function parseChildren(
     const shouldCondense = context.options.whitespace !== 'preserve' // 收缩空格
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i]
-      if (!context.inPre && node.type === NodeTypes.TEXT) {
-        // 文本节点，且当前上下文并不在pre标签里，即不去掉pre元素的文本内容的空白
-        if (!/[^\t\r\n\f ]/.test(node.content)) {
-          // 内容只有：换行、空白
-          const prev = nodes[i - 1] // 前后相邻元素
-          const next = nodes[i + 1]
-          // Remove if:
-          // - the whitespace is the first or last node, or:
-          // - (condense mode) the whitespace is adjacent to a comment, or:
-          // - (condense mode) the whitespace is between two elements AND contains newline
-          if (
-            !prev || // 前边没有相邻元素（首个元素）
-            !next || // 后边没有相邻元素（最后元素）
-            (shouldCondense &&
-              (prev.type === NodeTypes.COMMENT || // 前边为注释元素
-                next.type === NodeTypes.COMMENT || // 后边为注释元素
-                (prev.type === NodeTypes.ELEMENT && // 前后都有相邻元素，且内容为换行
-                  next.type === NodeTypes.ELEMENT &&
-                  /[\r\n]/.test(node.content))))
-          ) {
-            removedWhitespace = true // 移除空白
-            nodes[i] = null as any // 删除此节点
-          } else {
-            // Otherwise, the whitespace is condensed into a single space
-            // 如过一行内的两个元素之间的连续空白，如： template: '{{ foo }}   {{ bar }}'，两个插值节点间的空白
-            node.content = ' '
+      if (node.type === NodeTypes.TEXT) {
+        if (!context.inPre) {
+          // 文本节点，且当前上下文并不在pre标签里，即不去掉pre元素的文本内容的空白
+          if (!/[^\t\r\n\f ]/.test(node.content)) {
+            // 内容只有：换行、空白
+            const prev = nodes[i - 1] // 前后相邻元素
+            const next = nodes[i + 1]
+            // Remove if:
+            // - the whitespace is the first or last node, or:
+            // - (condense mode) the whitespace is between twos comments, or:
+            // - (condense mode) the whitespace is between comment and element, or:
+            // - (condense mode) the whitespace is between two elements AND contains newline
+            if (
+              !prev || // 前边没有相邻元素（首个元素）
+              !next || // 后边没有相邻元素（最后元素）
+              (shouldCondense &&
+                ((prev.type === NodeTypes.COMMENT && // 前边为注释元素、// 后边为注释元素
+                  next.type === NodeTypes.COMMENT) ||
+                  (prev.type === NodeTypes.COMMENT &&
+                    next.type === NodeTypes.ELEMENT) ||
+                  (prev.type === NodeTypes.ELEMENT &&
+                    next.type === NodeTypes.COMMENT) ||
+                  (prev.type === NodeTypes.ELEMENT && // 前后都有相邻元素，且内容为换行
+                    next.type === NodeTypes.ELEMENT &&
+                    /[\r\n]/.test(node.content))))
+            ) {
+              removedWhitespace = true // 移除空白
+              nodes[i] = null as any // 删除此节点
+            } else {
+              // Otherwise, the whitespace is condensed into a single space
+              // 如过一行内的两个元素之间的连续空白，如： template: '{{ foo }}   {{ bar }}'，两个插值节点间的空白
+              node.content = ' '
+            }
+          } else if (shouldCondense) {
+            // in condense mode, consecutive whitespaces in text are condensed
+            // down to a single space.
+            // 将文本内容中的连续空格替换成一个空格
+            node.content = node.content.replace(/[\t\r\n\f ]+/g, ' ')
           }
-        } else if (shouldCondense) {
-          // 将文本内容中的连续空格替换成一个空格
-          // in condense mode, consecutive whitespaces in text are condensed
-          // down to a single space.
-          node.content = node.content.replace(/[\t\r\n\f ]+/g, ' ')
+        } else {
+          // #6410 normalize windows newlines in <pre>:
+          // in SSR, browsers normalize server-rendered \r\n into a single \n
+          // in the DOM
+          node.content = node.content.replace(/\r\n/g, '\n')
         }
       }
       // 默认去掉下的注释节点

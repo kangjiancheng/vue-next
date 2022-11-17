@@ -62,11 +62,8 @@ export function renderSlot(
       isAsyncWrapper(currentRenderingInstance!.parent) &&
       currentRenderingInstance!.parent.isCE)
   ) {
-    return createVNode(
-      'slot',
-      name === 'default' ? null : { name },
-      fallback && fallback()
-    )
+    if (name !== 'default') props.name = name
+    return createVNode('slot', props, fallback && fallback())
   }
 
   let slot = slots[name] // 得到slots节点渲染方法
@@ -94,7 +91,14 @@ export function renderSlot(
   // 通过fragement片段 封装slot vnode节点
   const rendered = createBlock(
     Fragment,
-    { key: props.key || `_${name}` },
+    {
+      key:
+        props.key ||
+        // slot content array of a dynamic conditional slot may have a branch
+        // key attached in the `createSlots` helper, respect that
+        (validSlotContent && (validSlotContent as any).key) ||
+        `_${name}`
+    },
     validSlotContent || (fallback ? fallback() : []),
     validSlotContent && (slots as RawSlots)._ === SlotFlags.STABLE
       ? PatchFlags.STABLE_FRAGMENT

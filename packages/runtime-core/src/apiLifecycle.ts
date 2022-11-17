@@ -76,7 +76,7 @@ export const createHook =
   ) =>
     // post-create lifecycle registrations are noops during SSR (except for serverPrefetch)
     (!isInSSRComponentSetup || lifecycle === LifecycleHooks.SERVER_PREFETCH) &&
-    injectHook(lifecycle, hook, target) // 向组件实例添加生命周期函数
+    injectHook(lifecycle, (...args: unknown[]) => hook(...args), target) // 向组件实例添加生命周期函数
 
 // 执行组件的渲染函数之前
 export const onBeforeMount = createHook(LifecycleHooks.BEFORE_MOUNT)

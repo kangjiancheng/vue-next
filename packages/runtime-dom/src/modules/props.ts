@@ -40,7 +40,7 @@ export function patchDOMProp(
     el._value = value
     const newValue = value == null ? '' : value
     if (
-      el.value !== newValue ||      // 如果属性值不一样，旧替换
+      el.value !== newValue || // 如果属性值不一样，旧替换
       // #4956: always set for OPTION elements because its value falls back to
       // textContent if no value attribute is present. And setting .value for
       // OPTION has no side effect
@@ -70,7 +70,6 @@ export function patchDOMProp(
     } else if (type === 'number') {
       // 数字 属性
       // e.g. <img :width="null">
-      // the value of some IDL attr must be greater than 0, e.g. input.size = 0 -> error
       value = 0
       needRemove = true
     }
@@ -103,7 +102,8 @@ export function patchDOMProp(
   try {
     el[key] = value
   } catch (e: any) {
-    if (__DEV__) {
+    // do not warn if value is auto-coerced from nullish values
+    if (__DEV__ && !needRemove) {
       warn(
         `Failed setting prop "${key}" on <${el.tagName.toLowerCase()}>: ` +
           `value ${value} is invalid.`,

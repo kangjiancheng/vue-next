@@ -350,7 +350,7 @@ export function transform(root: RootNode, options: TransformOptions) {
 
   // 补充设置root的相关信息
   // finalize meta information
-  root.helpers = [...context.helpers.keys()] // 此root的helper 列表
+  root.helpers = new Set([...context.helpers.keys()]) // 此root的helper 列表
   root.components = [...context.components] // 保存用户自定义的组件标签名，transformElement
   root.directives = [...context.directives] // 用户自定义的指令名，transformElement - buildDirectiveArgs
   root.imports = context.imports

@@ -473,8 +473,11 @@ export function injectProp(
       // 在 transformElement 中buildProps会处理属性的合并，在分析 v-bind/v-on（无参数）阶段
       // 此时 first 表示合并后的class属性节点
 
-      // 将 v-for key 属性加到前边
-      first.properties.unshift(prop)
+      // #6631
+      if (!hasProp(prop, first)) {
+        // 将 v-for key 属性加到前边
+        first.properties.unshift(prop)
+      }
     } else {
       if (props.callee === TO_HANDLERS) {
         // mergeArgs 第一个是 v-on 指令
@@ -497,19 +500,8 @@ export function injectProp(
   } else if (props.type === NodeTypes.JS_OBJECT_EXPRESSION) {
     // 没有v-bind/v-on(无参数)指令，如：<template v-for="(item, index) in items" :key="index"><slot name="header" data-txt="hello world"></slot></template>
     // 普通属性节点
-    let alreadyExists = false
-    // check existing key to avoid overriding user provided keys
-    if (prop.key.type === NodeTypes.SIMPLE_EXPRESSION) {
-      //  !__BROWSER__ && context.prefixIdentifiers && keyProperty
-      const propKeyName = prop.key.content
-      alreadyExists = props.properties.some(
-        p =>
-          p.key.type === NodeTypes.SIMPLE_EXPRESSION &&
-          p.key.content === propKeyName
-      )
-    }
-    // 添加到props列表
-    if (!alreadyExists) {
+    if (!hasProp(prop, props)) {
+      // 添加到props列表
       props.properties.unshift(prop)
     }
     propsWithInjection = props
@@ -543,6 +535,20 @@ export function injectProp(
       node.arguments[2] = propsWithInjection
     }
   }
+}
+
+// check existing key to avoid overriding user provided keys
+function hasProp(prop: Property, props: ObjectExpression) {
+  let result = false
+  if (prop.key.type === NodeTypes.SIMPLE_EXPRESSION) {
+    const propKeyName = prop.key.content
+    result = props.properties.some(
+      p =>
+        p.key.type === NodeTypes.SIMPLE_EXPRESSION &&
+        p.key.content === propKeyName
+    )
+  }
+  return result
 }
 
 export function toValidAssetId(

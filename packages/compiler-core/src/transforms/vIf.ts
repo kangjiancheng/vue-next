@@ -155,9 +155,9 @@ export function processIf(
 
       // 移除之前相邻的 注释节点 ，追加到注释列表中
       const sibling = siblings[i]
-      if (__DEV__ && sibling && sibling.type === NodeTypes.COMMENT) {
+      if (sibling && sibling.type === NodeTypes.COMMENT) {
         context.removeNode(sibling)
-        comments.unshift(sibling)
+        __DEV__ && comments.unshift(sibling)
         continue
       }
 

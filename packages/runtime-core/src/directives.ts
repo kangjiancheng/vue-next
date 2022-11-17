@@ -71,10 +71,10 @@ export function validateDirectiveName(name: string) {
 
 // Directive, value, argument, modifiers
 export type DirectiveArguments = Array<
-  | [Directive]
-  | [Directive, any]
-  | [Directive, any, string]
-  | [Directive, any, string, DirectiveModifiers]
+  | [Directive | undefined]
+  | [Directive | undefined, any]
+  | [Directive | undefined, any, string]
+  | [Directive | undefined, any, string, DirectiveModifiers]
 >
 
 /**
@@ -120,24 +120,26 @@ export function withDirectives<T extends VNode>(
   for (let i = 0; i < directives.length; i++) {
     // 指令内容、指令属性值、指令属性参数、指令属性修饰符
     let [dir, value, arg, modifiers = EMPTY_OBJ] = directives[i]
-    if (isFunction(dir)) {
-      // 函数指令
-      dir = {
-        mounted: dir,
-        updated: dir
-      } as ObjectDirective
+    if (dir) {
+      if (isFunction(dir)) {
+        // 函数指令
+        dir = {
+          mounted: dir,
+          updated: dir
+        } as ObjectDirective
+      }
+      if (dir.deep) {
+        traverse(value)
+      }
+      bindings.push({
+        dir, // 指令内容 - 即组件指令属性列表里的 指令对象
+        instance, // （父）组件实例
+        value, // 指令属性值
+        oldValue: void 0, // vnode的旧指令
+        arg, // 指令参数
+        modifiers // 指令修饰符
+      })
     }
-    if (dir.deep) {
-      traverse(value)
-    }
-    bindings.push({
-      dir, // 指令内容 - 即组件指令属性列表里的 指令对象
-      instance, // （父）组件实例
-      value, // 指令属性值
-      oldValue: void 0, // vnode的旧指令
-      arg, // 指令参数
-      modifiers // 指令修饰符
-    })
   }
   return vnode
 }

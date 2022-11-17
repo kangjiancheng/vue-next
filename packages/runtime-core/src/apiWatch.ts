@@ -9,7 +9,7 @@ import {
   EffectScheduler,
   DebuggerOptions
 } from '@vue/reactivity'
-import { SchedulerJob, queuePreFlushCb } from './scheduler'
+import { SchedulerJob, queueJob } from './scheduler'
 import {
   EMPTY_OBJ,
   isObject,
@@ -40,6 +40,8 @@ import { warn } from './warning'
 import { DeprecationTypes } from './compat/compatConfig'
 import { checkCompatEnabled, isCompatEnabled } from './compat/compatConfig'
 import { ObjectWatchOptionItem } from './componentOptions'
+import { useSSRContext } from '@vue/runtime-core'
+import { SSRContext } from '@vue/server-renderer'
 
 export type WatchEffect = (onCleanup: OnCleanup) => void
 
@@ -91,9 +93,7 @@ export function watchPostEffect(
   return doWatch(
     effect,
     null,
-    (__DEV__
-      ? { ...options, flush: 'post' }
-      : { flush: 'post' }) as WatchOptionsBase
+    __DEV__ ? { ...options, flush: 'post' } : { flush: 'post' }
   )
 }
 
@@ -104,9 +104,7 @@ export function watchSyncEffect(
   return doWatch(
     effect,
     null,
-    (__DEV__
-      ? { ...options, flush: 'sync' }
-      : { flush: 'sync' }) as WatchOptionsBase
+    __DEV__ ? { ...options, flush: 'sync' } : { flush: 'sync' }
   )
 }
 
@@ -295,7 +293,8 @@ function doWatch(
   }
 
   // in SSR there is no need to setup an actual effect, and it should be noop
-  // unless it's eager
+  // unless it's eager or sync flush
+  let ssrCleanup: (() => void)[] | undefined
   if (__SSR__ && isInSSRComponentSetup) {
     // we will also not call the invalidate callback (+ runner is not set up)
     onCleanup = NOOP
@@ -308,11 +307,18 @@ function doWatch(
         onCleanup
       ])
     }
-    return NOOP
+    if (flush === 'sync') {
+      const ctx = useSSRContext() as SSRContext
+      ssrCleanup = ctx.__watcherHandles || (ctx.__watcherHandles = [])
+    } else {
+      return NOOP
+    }
   }
 
   // 记录 old value
-  let oldValue = isMultiSource ? [] : INITIAL_WATCHER_VALUE
+  let oldValue: any = isMultiSource
+    ? new Array((source as []).length).fill(INITIAL_WATCHER_VALUE)
+    : INITIAL_WATCHER_VALUE
   // 执行runner
   const job: SchedulerJob = () => {
     if (!effect.active) {
@@ -342,7 +348,11 @@ function doWatch(
         callWithAsyncErrorHandling(cb, instance, ErrorCodes.WATCH_CALLBACK, [
           newValue,
           // pass undefined as the old value when it's changed for the first time
-          oldValue === INITIAL_WATCHER_VALUE ? undefined : oldValue, // 首次改变时
+          oldValue === INITIAL_WATCHER_VALUE
+            ? undefined
+            : isMultiSource && oldValue[0] === INITIAL_WATCHER_VALUE
+            ? []
+            : oldValue, // 首次改变时
           onCleanup
         ])
         oldValue = newValue // 执行完回调后，该值变为旧值，为下一次更新做准备
@@ -366,7 +376,10 @@ function doWatch(
     // 更新时：同步任务后，在组件执行渲染函数effect任务之后
     scheduler = () => queuePostRenderEffect(job, instance && instance.suspense)
   } else {
-    scheduler = () => queuePreFlushCb(job)
+    // default: 'pre'
+    job.pre = true
+    if (instance) job.id = instance.uid
+    scheduler = () => queueJob(job)
   }
 
   // 创建监听目标getter的effect函数
@@ -396,12 +409,15 @@ function doWatch(
   }
 
   // 返回一个可以停止监听的函数
-  return () => {
+  const unwatch = () => {
     effect.stop() // 停止active，并在此effect的依赖列表中deps - 移除 对此监听目标依赖项数据 的该依赖effect
     if (instance && instance.scope) {
       remove(instance.scope.effects!, effect)
     }
   }
+
+  if (__SSR__ && ssrCleanup) ssrCleanup.push(unwatch)
+  return unwatch
 }
 
 // this.$watch

@@ -230,8 +230,9 @@ export function generate(
     ssr
   } = context
 
+  const helpers = Array.from(ast.helpers)
   // 渲染函数中需要使用的 Vue 辅助函数列表，如: createVNode、createTextVNode 等
-  const hasHelpers = ast.helpers.length > 0
+  const hasHelpers = helpers.length > 0
   // 使用关键字 with，调整当前作用域的 this 指向，变量默认指向 with的指定
   const useWithBlock = !prefixIdentifiers && mode !== 'module' // true
   const genScopeId = !__BROWSER__ && scopeId != null && mode === 'module'
@@ -297,7 +298,7 @@ export function generate(
     // function mode const declarations should be inside with block
     // also they should be renamed to avoid collision with user properties
     if (hasHelpers) {
-      push(`const { ${ast.helpers.map(aliasHelper).join(', ')} } = _Vue`)
+      push(`const { ${helpers.map(aliasHelper).join(', ')} } = _Vue`)
       push(`\n`)
       newline() // 换行并保持缩进
     }
@@ -443,12 +444,11 @@ function genFunctionPreamble(ast: RootNode, context: CodegenContext) {
   // In prefix mode, we place the const declaration at top so it's done
   // only once; But if we not prefixing, we place the declaration inside the
   // with block so it doesn't incur the `in` check cost for every helper access.
-  if (ast.helpers.length > 0) {
+  const helpers = Array.from(ast.helpers)
+  if (helpers.length > 0) {
     if (!__BROWSER__ && prefixIdentifiers) {
       // TODO: cfs - !__BROWSER__
-      push(
-        `const { ${ast.helpers.map(aliasHelper).join(', ')} } = ${VueBinding}\n`
-      )
+      push(`const { ${helpers.map(aliasHelper).join(', ')} } = ${VueBinding}\n`)
     } else {
       // "with" mode.
 
@@ -485,7 +485,7 @@ function genFunctionPreamble(ast: RootNode, context: CodegenContext) {
           CREATE_TEXT, // Symbol(__DEV__ ? `createTextVNode` : ``)  // 静态文本
           CREATE_STATIC // Symbol(__DEV__ ? `createStaticVNode` : ``) // 非Browser, transform stringifyStatic
         ]
-          .filter(helper => ast.helpers.includes(helper))
+          .filter(helper => helpers.includes(helper))
           .map(aliasHelper)
           .join(', ') // 如：'createVNode: _createVNode, createTextVNode: _createTextVNode'
 
@@ -539,11 +539,13 @@ function genModulePreamble(
   } = context
 
   if (genScopeId && ast.hoists.length) {
-    ast.helpers.push(PUSH_SCOPE_ID, POP_SCOPE_ID)
+    ast.helpers.add(PUSH_SCOPE_ID)
+    ast.helpers.add(POP_SCOPE_ID)
   }
 
   // generate import statements for helpers
-  if (ast.helpers.length) {
+  if (ast.helpers.size) {
+    const helpers = Array.from(ast.helpers)
     if (optimizeImports) {
       // when bundled with webpack with code-split, calling an import binding
       // as a function leads to it being wrapped with `Object(a.b)` or `(0,a.b)`,
@@ -551,18 +553,18 @@ function genModulePreamble(
       // therefore we assign the imports to variables (which is a constant ~50b
       // cost per-component instead of scaling with template size)
       push(
-        `import { ${ast.helpers
+        `import { ${helpers
           .map(s => helperNameMap[s])
           .join(', ')} } from ${JSON.stringify(runtimeModuleName)}\n`
       )
       push(
-        `\n// Binding optimization for webpack code-split\nconst ${ast.helpers
+        `\n// Binding optimization for webpack code-split\nconst ${helpers
           .map(s => `_${helperNameMap[s]} = ${helperNameMap[s]}`)
           .join(', ')}\n`
       )
     } else {
       push(
-        `import { ${ast.helpers
+        `import { ${helpers
           .map(s => `${helperNameMap[s]} as _${helperNameMap[s]}`)
           .join(', ')} } from ${JSON.stringify(runtimeModuleName)}\n`
       )

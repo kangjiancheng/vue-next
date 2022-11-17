@@ -91,6 +91,13 @@ function createArrayInstrumentations() {
   return instrumentations
 }
 
+function hasOwnProperty(key: string) {
+  // @ts-ignore
+  const obj = toRaw(this)
+  track(obj, TrackOpTypes.HAS, key)
+  return obj.hasOwnProperty(key)
+}
+
 function createGetter(isReadonly = false, shallow = false) {
   return function get(target: Target, key: string | symbol, receiver: object) {
     if (key === ReactiveFlags.IS_REACTIVE) {
@@ -121,11 +128,16 @@ function createGetter(isReadonly = false, shallow = false) {
     // 响应对象 为 数组
     const targetIsArray = isArray(target)
 
-    // 如 访问数组某个方法：let list = reactive([1, 2, 3]); list.includes(1)
-    // 注意可以正常访问数组索引（索引也是属性）: list[0]
-    if (!isReadonly && targetIsArray && hasOwn(arrayInstrumentations, key)) {
-      // 返回数组这些方法
-      return Reflect.get(arrayInstrumentations, key, receiver)
+    if (!isReadonly) {
+      // 如 访问数组某个方法：let list = reactive([1, 2, 3]); list.includes(1)
+      // 注意可以正常访问数组索引（索引也是属性）: list[0]
+      if (targetIsArray && hasOwn(arrayInstrumentations, key)) {
+        // 返回数组这些方法
+        return Reflect.get(arrayInstrumentations, key, receiver)
+      }
+      if (key === 'hasOwnProperty') {
+        return hasOwnProperty
+      }
     }
 
     const res = Reflect.get(target, key, receiver)
@@ -179,10 +191,10 @@ function createSetter(shallow = false) {
     if (isReadonly(oldValue) && isRef(oldValue) && !isRef(value)) {
       return false
     }
-    if (!shallow && !isReadonly(value)) {
-      if (!isShallow(value)) {
-        value = toRaw(value)
+    if (!shallow) {
+      if (!isShallow(value) && !isReadonly(value)) {
         oldValue = toRaw(oldValue)
+        value = toRaw(value)
       }
       if (!isArray(target) && isRef(oldValue) && !isRef(value)) {
         // 针对属性为ref对象

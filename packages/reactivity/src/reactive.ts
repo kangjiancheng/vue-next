@@ -264,10 +264,10 @@ export function toRaw<T>(observed: T): T {
   return raw ? toRaw(raw) : observed
 }
 
+export type Raw<T> = T & { [RawSymbol]?: true }
+
 // 标记为 __v_skip
-export function markRaw<T extends object>(
-  value: T
-): T & { [RawSymbol]?: true } {
+export function markRaw<T extends object>(value: T): Raw<T> {
   // Object.defineProperty =》 value.__v_skip = true
   def(value, ReactiveFlags.SKIP, true)
   return value

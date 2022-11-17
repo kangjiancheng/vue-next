@@ -34,7 +34,9 @@ import {
   OptionTypesKeys,
   resolveMergedOptions,
   shouldCacheAccess,
-  MergedComponentOptionsOverride
+  MergedComponentOptionsOverride,
+  InjectToObject,
+  ComponentInjectOptions
 } from './componentOptions'
 import { EmitsOptions, EmitFn } from './componentEmits'
 import { Slots } from './componentSlots'
@@ -141,6 +143,7 @@ export type CreateComponentPublicInstance<
   PublicProps = P,
   Defaults = {},
   MakeDefaultsOptional extends boolean = false,
+  I extends ComponentInjectOptions = {},
   PublicMixin = IntersectionMixin<Mixin> & IntersectionMixin<Extends>,
   PublicP = UnwrapMixinsType<PublicMixin, 'P'> & EnsureNonVoid<P>,
   PublicB = UnwrapMixinsType<PublicMixin, 'B'> & EnsureNonVoid<B>,
@@ -161,7 +164,8 @@ export type CreateComponentPublicInstance<
   PublicProps,
   PublicDefaults,
   MakeDefaultsOptional,
-  ComponentOptionsBase<P, B, D, C, M, Mixin, Extends, E, string, Defaults>
+  ComponentOptionsBase<P, B, D, C, M, Mixin, Extends, E, string, Defaults>,
+  I
 >
 
 // public properties exposed on the proxy, which is used as the render context
@@ -176,7 +180,8 @@ export type ComponentPublicInstance<
   PublicProps = P,
   Defaults = {},
   MakeDefaultsOptional extends boolean = false,
-  Options = ComponentOptionsBase<any, any, any, any, any, any, any, any, any>
+  Options = ComponentOptionsBase<any, any, any, any, any, any, any, any, any>,
+  I extends ComponentInjectOptions = {}
 > = {
   $: ComponentInternalInstance
   $data: D
@@ -193,9 +198,11 @@ export type ComponentPublicInstance<
   $options: Options & MergedComponentOptionsOverride
   $forceUpdate: () => void
   $nextTick: typeof nextTick
-  $watch(
-    source: string | Function,
-    cb: Function,
+  $watch<T extends string | ((...args: any) => any)>(
+    source: T,
+    cb: T extends (...args: any) => infer R
+      ? (...args: [R, R]) => any
+      : (...args: any) => any,
     options?: WatchOptions
   ): WatchStopHandle
 } & P &
@@ -203,7 +210,8 @@ export type ComponentPublicInstance<
   UnwrapNestedRefs<D> &
   ExtractComputedReturns<C> &
   M &
-  ComponentCustomProperties
+  ComponentCustomProperties &
+  InjectToObject<I>
 
 export type PublicPropertiesMap = Record<
   string,
@@ -228,7 +236,7 @@ export const publicPropertiesMap: PublicPropertiesMap =
   // Move PURE marker to new line to workaround compiler discarding it
   // due to type annotation
   /*#__PURE__*/ extend(Object.create(null), {
-  // i 为component实例: instance
+    // i 为component实例: instance
     $: i => i,
     $el: i => i.vnode.el,
     $data: i => i.data,
@@ -264,6 +272,9 @@ export interface ComponentRenderContext {
 
 export const isReservedPrefix = (key: string) => key === '_' || key === '$'
 
+const hasSetupBinding = (state: Data, key: string) =>
+  state !== EMPTY_OBJ && !state.__isScriptSetup && hasOwn(state, key)
+
 // 拦截组件实例的上下文：instance.ctx，并返回给instance.proxy
 // ctx 为组件实例的上下文，包括了实例方法，实例data属性、实例props等
 export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
@@ -279,19 +290,6 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
 
     // 当访问组件实例上下文ctx属性时，设置缓存所访问属性的范围：data / props / ctx，方便后续再次访问时可直接返回，避免重复判断等操作
     // 访问优先级：setup > data > props
-
-    // prioritize <script setup> bindings during dev.
-    // this allows even properties that start with _ or $ to be used - so that
-    // it aligns with the production behavior where the render fn is inlined and
-    // indeed has access to all declared variables.
-    if (
-      __DEV__ &&
-      setupState !== EMPTY_OBJ &&
-      setupState.__isScriptSetup &&
-      hasOwn(setupState, key)
-    ) {
-      return setupState[key]
-    }
 
     // data / props / ctx
     // This getter gets called for every property access on the render context
@@ -315,7 +313,7 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
             return props![key]
           // default: just fallthrough
         }
-      } else if (setupState !== EMPTY_OBJ && hasOwn(setupState, key)) {
+      } else if (hasSetupBinding(setupState, key)) {
         accessCache![key] = AccessTypes.SETUP
         return setupState[key]
       } else if (data !== EMPTY_OBJ && hasOwn(data, key)) {
@@ -416,19 +414,22 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
   ): boolean {
     // 修改组件的 data、setup 返回值、props
     const { data, setupState, ctx } = instance
-    if (setupState !== EMPTY_OBJ && hasOwn(setupState, key)) {
+    if (hasSetupBinding(setupState, key)) {
       setupState[key] = value
       return true
+    } else if (
+      __DEV__ &&
+      setupState.__isScriptSetup &&
+      hasOwn(setupState, key)
+    ) {
+      warn(`Cannot mutate <script setup> binding "${key}" from Options API.`)
+      return false
     } else if (data !== EMPTY_OBJ && hasOwn(data, key)) {
       data[key] = value
       return true
     } else if (hasOwn(instance.props, key)) {
       // 禁止修改 props 属性
-      __DEV__ &&
-        warn(
-          `Attempting to mutate prop "${key}". Props are readonly.`,
-          instance
-        )
+      __DEV__ && warn(`Attempting to mutate prop "${key}". Props are readonly.`)
       return false
     }
 
@@ -436,8 +437,8 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
     if (key[0] === '$' && key.slice(1) in instance) {
       __DEV__ &&
         warn(
-          `Attempting to mutate public property "${key}". Properties starting with $ are reserved and readonly.`,
-          instance
+          `Attempting to mutate public property "${key}". ` +
+            `Properties starting with $ are reserved and readonly.`
         )
       return false
     } else {
@@ -467,7 +468,7 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
     return (
       !!accessCache![key] || // 访问属性的同时，会设置accessCache相应值
       (data !== EMPTY_OBJ && hasOwn(data, key)) ||
-      (setupState !== EMPTY_OBJ && hasOwn(setupState, key)) ||
+      hasSetupBinding(setupState, key) ||
       ((normalizedProps = propsOptions[0]) && hasOwn(normalizedProps, key)) ||
       hasOwn(ctx, key) ||
       hasOwn(publicPropertiesMap, key) ||

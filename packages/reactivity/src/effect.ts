@@ -305,8 +305,9 @@ export function trigger(
     deps = [...depsMap.values()]
   } else if (key === 'length' && isArray(target)) {
     // 数组清空
+    const newLength = Number(newValue)
     depsMap.forEach((dep, key) => {
-      if (key === 'length' || key >= (newValue as number)) {
+      if (key === 'length' || key >= newLength) {
         deps.push(dep)
       }
     })

@@ -194,10 +194,12 @@ export function buildSlots(
   // 解析子元素 <template v-slot>
 
   // 2. Iterate through children and check for template slots
+  //    <template v-slot:foo="{ prop }">
   let hasTemplateSlots = false // 组件存在子节点 <template v-slot...>
   let hasNamedDefaultSlot = false // 存在 'default'，即：<template v-slot> 或 <template v-slot:default>
   const implicitDefaultChildren: TemplateChildNode[] = [] // 保存非 <template v-slot> 节点，添加到 default slot
   const seenSlotNames = new Set<string>() // 保存<template v-slot...>节点的 slot name
+  let conditionalBranchIndex = 0
 
   // 处理顺序：普通元素、动态slot、静态slot
   for (let i = 0; i < children.length; i++) {
@@ -263,7 +265,7 @@ export function buildSlots(
         createConditionalExpression(
           vIf.exp!, // test - if 条件表达式
           // 创建动态子元素slot的 js ast节点: 节点key - slot name，节点value - 子元素内容
-          buildDynamicSlot(slotName, slotFunction), // consequent - if true， 动态slot对象 js ast节点
+          buildDynamicSlot(slotName, slotFunction, conditionalBranchIndex++), // consequent - if true， 动态slot对象 js ast节点
           defaultFallback // alternate - if false，默认为undefined -  createSimpleExpression(`undefined`, false)
         )
       )
@@ -306,10 +308,15 @@ export function buildSlots(
         conditional.alternate = vElse.exp // v-else-if 存在条件
           ? createConditionalExpression(
               vElse.exp, // v-else-if 条件表达式
-              buildDynamicSlot(slotName, slotFunction), // 条件true 对应的位置 - 即此子元素所代表的slot节点
+              buildDynamicSlot(
+                // 条件true 对应的位置 - 即此子元素所代表的slot节点
+                slotName,
+                slotFunction,
+                conditionalBranchIndex++
+              ),
               defaultFallback // alternate - 条件false 对应的位置，创建 'undefined' slot节点
             )
-          : buildDynamicSlot(slotName, slotFunction) // v-else子元素代表的slot节点
+          : buildDynamicSlot(slotName, slotFunction, conditionalBranchIndex++) // v-else子元素代表的slot节点
       } else {
         // 前边无相邻的v-if，即前边第一个非注释的节点不带有v-if指令
         context.onError(
@@ -478,13 +485,20 @@ export function buildSlots(
 //    节点 value - slot 内容，即子元素的js ast节点
 function buildDynamicSlot(
   name: ExpressionNode,
-  fn: FunctionExpression
+  fn: FunctionExpression,
+  index?: number
 ): ObjectExpression {
-  return createObjectExpression([
-    // js 对象 节点
+  // js 对象 节点
+  const props = [
     createObjectProperty(`name`, name), // js 对象属性 节点，参数1、参数2都是 createSimpleExpression
     createObjectProperty(`fn`, fn) // js 对象属性 节点， fn 为 动态子元素slot内容 js ast节点
-  ])
+  ]
+  if (index != null) {
+    props.push(
+      createObjectProperty(`key`, createSimpleExpression(String(index), true))
+    )
+  }
+  return createObjectExpression(props)
 }
 
 // 组件子孙节点中 是否存在 slot标签元素

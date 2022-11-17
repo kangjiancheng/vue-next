@@ -6,7 +6,14 @@ import {
 } from './effect'
 import { TrackOpTypes, TriggerOpTypes } from './operations'
 import { isArray, hasChanged, IfAny } from '@vue/shared'
-import { isProxy, toRaw, isReactive, toReactive } from './reactive'
+import {
+  isProxy,
+  toRaw,
+  isReactive,
+  toReactive,
+  isReadonly,
+  isShallow
+} from './reactive'
 import type { ShallowReactiveMarker } from './reactive'
 import { CollectionTypes } from './collectionHandlers'
 import { createDep, Dep } from './dep'
@@ -109,7 +116,7 @@ class RefImpl<T> {
   public dep?: Dep = undefined
   public readonly __v_isRef = true // 标记为 ref
 
-    // _shallow: 转换对象时，只考虑value值，不进行其它属性响应转换
+  // _shallow: 转换对象时，只考虑value值，不进行其它属性响应转换
   constructor(value: T, public readonly __v_isShallow: boolean) {
     this._rawValue = __v_isShallow ? value : toRaw(value)
     this._value = __v_isShallow ? value : toReactive(value)
@@ -122,12 +129,14 @@ class RefImpl<T> {
   }
 
   set value(newVal) {
-    newVal = this.__v_isShallow ? newVal : toRaw(newVal)
+    const useDirectValue =
+      this.__v_isShallow || isShallow(newVal) || isReadonly(newVal)
+    newVal = useDirectValue ? newVal : toRaw(newVal)
     if (hasChanged(newVal, this._rawValue)) {
       // 判断 value值 是否改变
       // 重新赋值
       this._rawValue = newVal
-      this._value = this.__v_isShallow ? newVal : toReactive(newVal)
+      this._value = useDirectValue ? newVal : toReactive(newVal)
       // 触发 响应式依赖更新组件
       triggerRefValue(this, newVal)
     }
@@ -294,9 +303,8 @@ export interface RefUnwrapBailTypes {}
 
 export type ShallowUnwrapRef<T> = {
   [K in keyof T]: T[K] extends Ref<infer V>
-    ? V
-    : // if `V` is `unknown` that means it does not extend `Ref` and is undefined
-    T[K] extends Ref<infer V> | undefined
+    ? V // if `V` is `unknown` that means it does not extend `Ref` and is undefined
+    : T[K] extends Ref<infer V> | undefined
     ? unknown extends V
       ? undefined
       : V | undefined
@@ -317,7 +325,7 @@ export type UnwrapRefSimple<T> = T extends
   | RefUnwrapBailTypes[keyof RefUnwrapBailTypes]
   | { [RawSymbol]?: true }
   ? T
-  : T extends Array<any>
+  : T extends ReadonlyArray<any>
   ? { [K in keyof T]: UnwrapRefSimple<T[K]> }
   : T extends object & { [ShallowReactiveMarker]?: never }
   ? {

@@ -152,7 +152,7 @@ export const transformElement: NodeTransform = (node, context) => {
         isComponent,
         isDynamicComponent
       )
-      vnodeProps = propsBuildResult.props// 解析后的props列表
+      vnodeProps = propsBuildResult.props // 解析后的props列表
       patchFlag = propsBuildResult.patchFlag // 根据相关prop信息，进行二进制运算设置patchFlag
       dynamicPropNames = propsBuildResult.dynamicPropNames // 静态prop key的name列表，且非 ref、style、class，且该指令没有被设置缓存，如：v-bind、 v-model、 v-on
       const directives = propsBuildResult.directives // 需要在运行时，重新处理的：v-model、v-show、用户自定义指令
@@ -486,7 +486,7 @@ export function buildProps(
   const { tag, loc: elementLoc, children } = node
   let properties: ObjectExpression['properties'] = [] // createObjectProperty(key, value) 存储props中经过转换的属性值节点/属性名节点
   const mergeArgs: PropsExpression[] = [] // 配合v-on/v-bind（无参数指令） 合并去重属性
-  const runtimeDirectives: DirectiveNode[] = []// 如运行时指令，如 v-model，v-show
+  const runtimeDirectives: DirectiveNode[] = [] // 如运行时指令，如 v-model，v-show
   const hasChildren = children.length > 0
   let shouldUseBlock = false
 
@@ -499,6 +499,25 @@ export function buildProps(
   let hasDynamicKeys = false // 是否存在动态指令
   let hasVnodeHook = false // 存在vnodehook，如onVnodeMounted
   const dynamicPropNames: string[] = [] // 动态prop名列表：是静态指令节点，且非 ref、style、class，且该指令没有被设置缓存，指令范围：v-on、v-bind、v-model、v-html、v-text
+
+  const pushMergeArg = (arg?: PropsExpression) => {
+    if (properties.length) {
+      // 在v-bind/v-on之前如果存在属性，则需要先对之前的属性进行去重合并 dedupeProperties(properties)
+      // 如：<span class="red" :class="['blue', { green: true}]" v-bind="{ class: 'yellow'}"></span>
+      // 合并前两个属性：class="red"、:class="['blue', { green: true}]"
+      mergeArgs.push(
+        // createObjectExpression {
+        //   type: NodeTypes.JS_OBJECT_EXPRESSION,
+        //   loc,
+        //   properties // 已经合并去重
+        // }
+        createObjectExpression(dedupeProperties(properties), elementLoc)
+      )
+      // 如果存在v-bind/v-on指令，之后都依据mergeArgs合并后的列表
+      properties = []
+    }
+    if (arg) mergeArgs.push(arg)
+  }
 
   // 根据属性列表设置相应的 PatchFlag 值
   // directiveTransforms后，进一步分析指令props属性节点：v-on、v-bind、v-model、v-html、v-text
@@ -598,19 +617,21 @@ export function buildProps(
         // in inline mode there is no setupState object, so we can't use string
         // keys to set the ref. Instead, we need to transform it to pass the
         // actual ref instead.
-        if (
-          !__BROWSER__ &&
-          value &&
-          context.inline &&
-          context.bindingMetadata[value.content]
-        ) {
-          isStatic = false
-          properties.push(
-            createObjectProperty(
-              createSimpleExpression('ref_key', true),
-              createSimpleExpression(value.content, true, value.loc)
+        if (!__BROWSER__ && value && context.inline) {
+          const binding = context.bindingMetadata[value.content]
+          if (
+            binding === BindingTypes.SETUP_LET ||
+            binding === BindingTypes.SETUP_REF ||
+            binding === BindingTypes.SETUP_MAYBE_REF
+          ) {
+            isStatic = false
+            properties.push(
+              createObjectProperty(
+                createSimpleExpression('ref_key', true),
+                createSimpleExpression(value.content, true, value.loc)
+              )
             )
-          )
+          }
         }
       }
       // skip is on <component>, or is="vue:xxx"
@@ -674,7 +695,7 @@ export function buildProps(
       if (
         name === 'is' ||
         (isVBind &&
-        isStaticArgOf(arg, 'is') && // 绑定静态is属性，如 <component :is='HelloWold' />
+          isStaticArgOf(arg, 'is') && // 绑定静态is属性，如 <component :is='HelloWold' />
           (isComponentTag(tag) ||
             (__COMPAT__ &&
               isCompatEnabled(
@@ -718,27 +739,11 @@ export function buildProps(
         hasDynamicKeys = true // 存在动态绑定参数指令
         if (exp) {
           // 存在属性值节点
-
-          if (properties.length) {
-            // 在v-bind/v-on之前如果存在属性，则需要先对之前的属性进行去重合并 dedupeProperties(properties)
-            // 如：<span class="red" :class="['blue', { green: true}]" v-bind="{ class: 'yellow'}"></span>
-            // 合并前两个属性：class="red"、:class="['blue', { green: true}]"
-            mergeArgs.push(
-              // createObjectExpression {
-              //   type: NodeTypes.JS_OBJECT_EXPRESSION,
-              //   loc,
-              //   properties // 已经合并去重
-              // }
-              createObjectExpression(dedupeProperties(properties), elementLoc)
-            )
-            // 如果存在v-bind/v-on指令，之后都依据mergeArgs合并后的列表
-            properties = []
-          }
-
           if (isVBind) {
             // 如：<span class="red" :class="['blue', { green: true}]" v-bind="{ class: 'yellow'}"></span>
             // 直接保存v-bind属性值节点
-
+            // have to merge early for compat build check
+            pushMergeArg()
             if (__COMPAT__) {
               // 2.x v-bind object order compat
               if (__DEV__) {
@@ -787,12 +792,12 @@ export function buildProps(
             // v-on="obj" -> toHandlers(obj)
             // <button onclick="click1" @click="'click2'" v-on:click="'click3'"  v-on="{click: 'click4'}"></button>, parse ast时，会生成4个prop，1个name='onclick'， 3个 name='on'
             // 此刻：1个 prop.key.content = 'onclick，2个 prop.key.content = 'onClick'，mergeArgs[0]有两个元素
-            mergeArgs.push({
+            pushMergeArg({
               // v-on="{click: 'click4'}"
               type: NodeTypes.JS_CALL_EXPRESSION, // codegen 执行表达式
               loc,
               callee: context.helper(TO_HANDLERS), // TO_HANDLERS = Symbol('toHandlers')
-              arguments: [exp] // 属性值
+              arguments: isComponent ? [exp] : [exp, `true`] // 属性值
             })
           }
         } else {
@@ -837,8 +842,12 @@ export function buildProps(
         // props 为codegen转换后
         const { props, needRuntime } = directiveTransform(prop, node, context)
         !ssr && props.forEach(analyzePatchFlag)
-        // 保存属性props, prop为createObjectProperty(key, value)
-        properties.push(...props)
+        if (isVOn && arg && !isStaticExp(arg)) {
+          pushMergeArg(createObjectExpression(props, elementLoc))
+        } else {
+          // 保存属性props, prop为createObjectProperty(key, value)
+          properties.push(...props)
+        }
         if (needRuntime) {
           // 如 v-model，指令使用环境type，如文本input V_MODEL_TEXT = Symbol(__DEV__ ? `vModelText` : ``)
           // 如 v-show，V_SHOW = Symbol(__DEV__ ? `vShow` : ``)
@@ -865,21 +874,12 @@ export function buildProps(
   let propsExpression: PropsExpression | undefined = undefined
 
   // has v-bind="object" or v-on="object", wrap with mergeProps
+  // mergeArgs 由 v-bind/v-on （无指令参数）过程创建
   if (mergeArgs.length) {
-    // mergeArgs 由 v-bind/v-on （无指令参数）过程创建
-
-    if (properties.length) {
-      // 如：<span class="red" :class="['blue', { green: true}]" v-bind="{ class: 'yellow'}" style="color: blue" :style="{color: 'red'}"></span>
-      // 在处理完v-bind/v-on属性之后，需要继续处理之后可能存在的重复属性
-      mergeArgs.push(
-        // createObjectExpression {
-        //   type: NodeTypes.JS_OBJECT_EXPRESSION,
-        //   loc,
-        //   properties // 已经合并去重 dedupeProperties(properties)
-        // }
-        createObjectExpression(dedupeProperties(properties), elementLoc)
-      )
-    }
+    // close up any not-yet-merged props
+    // 如：<span class="red" :class="['blue', { green: true}]" v-bind="{ class: 'yellow'}" style="color: blue" :style="{color: 'red'}"></span>
+    // 在处理完v-bind/v-on属性之后，需要继续处理之后可能存在的重复属性
+    pushMergeArg()
     if (mergeArgs.length > 1) {
       // 创建执行合并props函数
       propsExpression = createCallExpression(
@@ -1085,7 +1085,7 @@ function mergeAsArray(existing: Property, incoming: Property) {
 
 // 解析构建指令节点，v-show、v-model、用户自定义指令
 // 解析其中： 指令名、指令值、指令参数、参数修饰符
-export function buildDirectiveArgs(// 解析后的指令节点：key/value
+export function buildDirectiveArgs( // 解析后的指令节点：key/value
   dir: DirectiveNode,
   context: TransformContext
 ): ArrayExpression {

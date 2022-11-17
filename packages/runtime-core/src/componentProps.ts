@@ -207,6 +207,13 @@ export function initProps(
   instance.attrs = attrs
 }
 
+function isInHmrContext(instance: ComponentInternalInstance | null) {
+  while (instance) {
+    if (instance.type.__hmrId) return true
+    instance = instance.parent
+  }
+}
+
 // 更新组件时，在执行渲染函数前 - updateComponentPreRender：更新props - updateProps
 export function updateProps(
   instance: ComponentInternalInstance,
@@ -227,11 +234,7 @@ export function updateProps(
     // always force full diff in dev
     // - #1942 if hmr is enabled with sfc component
     // - vite#872 non-sfc component used by sfc component
-    !(
-      __DEV__ &&
-      (instance.type.__hmrId ||
-        (instance.parent && instance.parent.type.__hmrId))
-    ) &&
+    !(__DEV__ && isInHmrContext(instance)) &&
     (optimized || patchFlag > 0) &&
     !(patchFlag & PatchFlags.FULL_PROPS) // 不 存在动态指令参数 或 v-on/v-bind（无参数）指令
   ) {
@@ -541,7 +544,9 @@ export function normalizePropsOptions(
 
   // 没有props
   if (!raw && !hasExtends) {
-    cache.set(comp, EMPTY_ARR as any)
+    if (isObject(comp)) {
+      cache.set(comp, EMPTY_ARR as any)
+    }
     return EMPTY_ARR as any
   }
 
@@ -590,8 +595,7 @@ export function normalizePropsOptions(
         // 如 props: { age: Number }   规范后为  age: { type: Number }
         // 如 props: { age: [Number, String] }   规范后为  age: { type: [Number, String] }
         const prop: NormalizedProp = (normalized[normalizedKey] =
-          isArray(opt) || isFunction(opt) ? { type: opt } : opt)
-
+          isArray(opt) || isFunction(opt) ? { type: opt } : { ...opt })
         if (prop) {
           // 获取prop属性类型列表中的 Boolean 类型的位置
           const booleanIndex = getTypeIndex(Boolean, prop.type)
@@ -620,7 +624,9 @@ export function normalizePropsOptions(
   }
 
   const res: NormalizedPropsOptions = [normalized, needCastKeys]
-  cache.set(comp, res)
+  if (isObject(comp)) {
+    cache.set(comp, res)
+  }
   return res
 }
 

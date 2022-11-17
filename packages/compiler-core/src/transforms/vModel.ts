@@ -18,6 +18,7 @@ import {
 } from '../utils'
 import { IS_REF } from '../runtimeHelpers'
 import { BindingTypes } from '../options'
+import { camelize } from '@vue/shared'
 
 /**
  * 转换处理 v-model 指令
@@ -50,11 +51,22 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
   // im SFC <script setup> inline mode, the exp may have been transformed into
   // _unref(exp)
   const bindingType = context.bindingMetadata[rawExp]
+
+  // check props
+  if (
+    bindingType === BindingTypes.PROPS ||
+    bindingType === BindingTypes.PROPS_ALIASED
+  ) {
+    context.onError(createCompilerError(ErrorCodes.X_V_MODEL_ON_PROPS, exp.loc))
+    return createTransformProps()
+  }
+
   const maybeRef =
     !__BROWSER__ &&
     context.inline &&
-    bindingType &&
-    bindingType !== BindingTypes.SETUP_CONST
+    (bindingType === BindingTypes.SETUP_LET ||
+      bindingType === BindingTypes.SETUP_REF ||
+      bindingType === BindingTypes.SETUP_MAYBE_REF)
 
   // 必须有值，不可为空，如：v-model=""
   // 或者 v-model绑定的应该是一个变量或某个对象属性，如：$_abc[foo][bar] 或 $_abc.foo.bar
@@ -92,7 +104,7 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
 
   const eventName = arg
     ? isStaticExp(arg) // arg不存在时 false
-      ? `onUpdate:${arg.content}` // 静态指令 如 v-model:myValue 则 eventName = 'onUpdate:myValue'
+      ? `onUpdate:${camelize(arg.content)}` // 静态指令 如 v-model:myValue 则 eventName = 'onUpdate:myValue'
       : createCompoundExpression(['"onUpdate:" + ', arg]) // 动态指令， v-model:[someProp]
     : `onUpdate:modelValue` // 空指令参数 <input v-model="inputText" />， 默认： eventName = 'onUpdate:modelValue'
 
