@@ -72,6 +72,11 @@ export interface KeepAliveContext extends ComponentRenderContext {
 export const isKeepAlive = (vnode: VNode): boolean =>
   (vnode.type as any).__isKeepAlive
 
+/*
+ * 1、在执行渲染函数时，根据key或组件对象 返回已缓存的vnode；
+ * 2、在子组件切换时，执行 deactivated - 存储要被卸载的组件el dom、 activated - insert要显示的子组件并patch
+ * 3、在执行mounted/updated中 缓存当前子组件的vnode；
+ */
 const KeepAliveImpl: ComponentOptions = {
   name: `KeepAlive`,
 
@@ -104,9 +109,9 @@ const KeepAliveImpl: ComponentOptions = {
       }
     }
 
-    const cache: Cache = new Map()
-    const keys: Keys = new Set()
-    let current: VNode | null = null
+    const cache: Cache = new Map() // 已缓存的子组件vnode列表
+    const keys: Keys = new Set() // 已缓存的子组件key列表
+    let current: VNode | null = null // 当前缓存的子组件
 
     if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
       ;(instance as any).__v_cache = cache
@@ -122,11 +127,15 @@ const KeepAliveImpl: ComponentOptions = {
         o: { createElement }
       }
     } = sharedContext
+    // 存储被缓存的组件vnode的el即真实dom
     const storageContainer = createElement('div')
 
+    // 子组件切换时，触发激活函数 - vnode 为要被激活的子组件vnode - 为之前缓存的子组件vnode，在渲染函数中生成返回的
     sharedContext.activate = (vnode, container, anchor, isSVG, optimized) => {
       const instance = vnode.component!
+      // 将缓存的子组件的el挂载到当前父dom下
       move(vnode, container, anchor, MoveType.ENTER, parentSuspense)
+      // 恢复缓存后的子组件，还要比较是否有prop发生变化
       // in case props have changed
       patch(
         instance.vnode,
@@ -140,6 +149,7 @@ const KeepAliveImpl: ComponentOptions = {
         optimized
       )
       queuePostRenderEffect(() => {
+        // 将子组件标记为激活状态
         instance.isDeactivated = false
         if (instance.a) {
           invokeArrayFns(instance.a)
@@ -156,9 +166,13 @@ const KeepAliveImpl: ComponentOptions = {
       }
     }
 
+    // 切换子组件时，缓存当前要被销毁的子组件
     sharedContext.deactivate = (vnode: VNode) => {
+      // 要被销毁/缓存的子组件vnode
       const instance = vnode.component!
+      // 将当前子组件挂载到缓存dom上
       move(vnode, storageContainer, null, MoveType.LEAVE, parentSuspense)
+      // 在本轮更新后，执行该副作用回调
       queuePostRenderEffect(() => {
         if (instance.da) {
           invokeArrayFns(instance.da)
@@ -167,6 +181,7 @@ const KeepAliveImpl: ComponentOptions = {
         if (vnodeHook) {
           invokeVNodeHook(vnodeHook, instance.parent, vnode)
         }
+        // 手动将当前已缓缓存的子组件标记为非激跃状态
         instance.isDeactivated = true
       }, parentSuspense)
 
@@ -223,7 +238,7 @@ const KeepAliveImpl: ComponentOptions = {
         cache.set(pendingCacheKey, getInnerChild(instance.subTree))
       }
     }
-    onMounted(cacheSubtree)
+    onMounted(cacheSubtree) // keep-alive setup的渲染函数执行完后，执行mounted 回调函数 缓存当前子组件vnode
     onUpdated(cacheSubtree)
 
     onBeforeUnmount(() => {
@@ -242,6 +257,7 @@ const KeepAliveImpl: ComponentOptions = {
       })
     })
 
+    // 执行完setup函数后，返回渲染函数，之后挂载时 再执行渲染函数，返回当前子组件的vnode
     return () => {
       pendingCacheKey = null
 
@@ -266,6 +282,7 @@ const KeepAliveImpl: ComponentOptions = {
         return rawVNode
       }
 
+      // keep-alive 子组件vnode
       let vnode = getInnerChild(rawVNode)
       const comp = vnode.type as ConcreteComponent
 
@@ -279,16 +296,18 @@ const KeepAliveImpl: ComponentOptions = {
 
       const { include, exclude, max } = props
 
+      // 不在include里的，直接返回新生成的子组件vnode
       if (
         (include && (!name || !matches(include, name))) ||
         (exclude && name && matches(exclude, name))
       ) {
+        // 不被缓存的组件，直接返回新的vnode
         current = vnode
         return rawVNode
       }
 
       const key = vnode.key == null ? comp : vnode.key
-      const cachedVNode = cache.get(key)
+      const cachedVNode = cache.get(key) // keep-alive组件更新时，即切换到其它子组件时，获取其缓存的vnode
 
       // clone vnode if it's reused because we are going to mutate it
       if (vnode.el) {
@@ -304,6 +323,7 @@ const KeepAliveImpl: ComponentOptions = {
       // beforeMount/beforeUpdate hooks.
       pendingCacheKey = key
 
+      // 如果此子组件已被缓存到keep-alive组件上的话：复制其中缓存的数据
       if (cachedVNode) {
         // copy over mounted state
         vnode.el = cachedVNode.el
@@ -313,6 +333,7 @@ const KeepAliveImpl: ComponentOptions = {
           setTransitionHooks(vnode, vnode.transition!)
         }
         // avoid vnode being mounted as fresh
+        // 避免重新渲染缓存的子组件时，重新生成vnode，此时应该执行shareContext里的 activate 组件生命周期，来恢复缓存的子组件数据
         vnode.shapeFlag |= ShapeFlags.COMPONENT_KEPT_ALIVE
         // make this key the freshest
         keys.delete(key)
@@ -325,10 +346,11 @@ const KeepAliveImpl: ComponentOptions = {
         }
       }
       // avoid vnode being unmounted
+      // 标记为keep_alive缓存组件类型，避免切换到其它子组件时，触发常规卸载unmounted生命周期，此时应该执行上面的组件deactivated生命周期函数
       vnode.shapeFlag |= ShapeFlags.COMPONENT_SHOULD_KEEP_ALIVE
 
       current = vnode
-      return isSuspense(rawVNode.type) ? rawVNode : vnode
+      return isSuspense(rawVNode.type) ? rawVNode : vnode // 返回子组件vnode
     }
   }
 }

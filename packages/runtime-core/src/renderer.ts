@@ -2232,6 +2232,7 @@ function baseCreateRenderer(
       setRef(ref, null, parentSuspense, vnode, true)
     }
 
+    // 触发keep-alive组件的销毁生命周期，在此 缓存keep-alive子组件数据，并存储其中的子组件vnode el
     if (shapeFlag & ShapeFlags.COMPONENT_SHOULD_KEEP_ALIVE) {
       ;(parentComponent!.ctx as KeepAliveContext).deactivate(vnode)
       return

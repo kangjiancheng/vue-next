@@ -774,6 +774,7 @@ export function handleSetupResult(
       // set it as ssrRender instead.
       instance.ssrRender = setupResult
     } else {
+      // 如 keep-live 组件返回的就是一个函数
       instance.render = setupResult as InternalRenderFunction
     }
   } else if (isObject(setupResult)) {

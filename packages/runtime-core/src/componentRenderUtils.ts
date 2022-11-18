@@ -102,7 +102,7 @@ export function renderComponentRoot(
         //     ], 2 /* CLASS */))
         //   }
         // }"
-        // 返回渲染节点vnode
+        // 执行组件的渲染函数，返回渲染组件的vnode
         render!.call(
           proxyToUse,
           proxyToUse!, // instance.ctx 的代理 proxy： RuntimeCompiledPublicInstanceProxyHandlers

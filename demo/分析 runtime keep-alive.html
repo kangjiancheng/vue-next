@@ -7,8 +7,9 @@
   <title>Vue 3 分析 runtime suspense</title>
   <style>
     body {
-      margin: 0;
+      margin: 100px;
       padding: 0;
+      text-align: center;
     }
   </style>
 </head>
@@ -20,126 +21,60 @@
 <!-- 生产模式-->
 <!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
 <script>
+  const { createApp, ref, reactive, onMounted, } = Vue
 
-  const {
-    createApp,
-    ref,
-    reactive,
-    onMounted,
-  } = Vue
-
-  const HelloWorld = {
-    name: 'HelloWorld',
-    template: `
-      <div class="hello-world" v-test-dir="handleDir">Hi, {{ userName }}</div>
-    `,
-    props: ['userName'],
-    directives: {
-      testDir: {
-        mounted(el, binding) {
-          console.log('hello-world test dir mounted!')
-          if (typeof binding.value === 'function') {
-            binding.value()
-          } else {
-            console.log('bind value: ', binding.value)
-          }
-        }
-      }
-    },
+  // 子组件A
+  const InputA = {
+    template: `<input class="input-a" v-model="valueA"/>`,
     setup() {
-      const handleDir = () => {
-        console.log('test-dir handler value')
-      }
-
+      const valueA = ref('aaa')
       return {
-        handleDir,
+        valueA,
       }
     }
   }
 
-  const rootComponent = {
-    name: 'root-component',
-    components: {
-      HelloWorld,
-    },
-    template: `
-      <div class="root-component" @click="handleClick" @vnodeMounted="handleVnodeMounted">你好</div>
-    `,
-    props: {
-      age: Number,
-      sex: {
-        type: String,
-        default: 'girl'
-      },
-      classProps: [ String, Array, Object ]
-    },
-    data (){
+  // 子组件B
+  const InputB = {
+    template: `<input class="input-b" v-model="valueB"/>`,
+    setup() {
+      const valueB = ref('bbb')
       return {
-        myID: '000', // 在模版中访问： myID
-        $id: '001' // 在模版中访问：$data.$id
+        valueB,
       }
-    },
-    // props 不可通过解构来获取对应值
-    setup(props, setupContext ) {
-      const count = ref(0)
-      const state = reactive({ foo: 1 })
+    }
+  }
 
-      const handleClick = () => {
-        count.value++
-        state.foo++
-      }
-      const handleFocus = () => {
-        count.value++
-        state.foo++
-      }
+  // 父组件
+  const rootComponent = {
+    components: { InputA, InputB, },
+    template: `
+      <div class="root-component">
+        <div>
+          <input type="radio" id="a" value="InputA" v-model="active" /><label for="a">A</label>
+          <input type="radio" id="b" value="InputB" v-model="active" /><label for="b">B</label>
+        </div>
+
+        <!--active改变，触发重新执行keep-alive的渲染函数，并-->
+        <keep-alive>
+          <component :is="active" :key="active" />
+        </keep-alive>
+      </div>
+    `,
+    setup() {
+      const active = ref('InputA')
 
       onMounted(() => {
-        console.log('hook: onMounted')
-        console.log(setupContext.attrs)
       })
 
-      const handleVnodeMounted = () => {
-        console.log('vnode mounted')
-      }
-
-
       return {
-        count,
-        age: props.age,
-        isHeader: true,
-        handleClick,
-        handleVnodeMounted,
-        handleFocus,
-        helloMsg: '你好，小朋友！',
-        userSlot: 'user',
-        redStyle: { color: 'red' }
+        active,
       }
     }
   }
-  var rootModel = '哈哈哈'
-  const rootProps = {
-    key: 1,
-    id: 11,
-    age: 10,
-    sex: 'boy',
-    "onUpdate:modelValue": $event => (rootModel = $event),
-    classProps: {
-      red: 'red-bg',
-      weight: 'font-weight',
-    },
-  }
 
-  const app = createApp(rootComponent, rootProps)
-
-  app.config.performance = true
-  app.config.globalProperties.isBoy = true
-
+  const app = createApp(rootComponent)
   app.mount('#app')
-
-  const p = Promise.resolve('a');
-  p.then(function (s) {
-    console.log(s)
-  });
 </script>
 
 </body>
