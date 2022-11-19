@@ -21,14 +21,29 @@
 <!-- 生产模式-->
 <!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
 <script>
-  const { createApp, ref, reactive, onMounted, } = Vue
+  const { createApp, ref, reactive, onMounted,onActivated,onDeactivated } = Vue
 
   // 子组件A
   const InputA = {
     name: 'InputA',
-    template: `<input class="input-a" v-model="valueA"/>`,
+    template: `子组件A: <input class="input-a" v-model="valueA"/>`,
     setup() {
       const valueA = ref('aaa')
+
+      // 配合keep-alive缓存使用
+      onActivated(() => {
+        // 调用时机为首次挂载
+        // 以及每次从缓存中被重新插入时
+        console.log('子组件A onActivated')
+      })
+
+      // 配合keep-alive缓存使用
+      onDeactivated(() => {
+        // 在从 DOM 上移除、进入缓存
+        // 以及组件卸载时调用
+        console.log('子组件A onDeactivated')
+      })
+
       return {
         valueA,
       }
@@ -38,9 +53,24 @@
   // 子组件B
   const InputB = {
     name: 'InputB',
-    template: `<input class="input-b" v-model="valueB"/>`,
+    template: `子组件B: <input class="input-b" v-model="valueB"/>`,
     setup() {
       const valueB = ref('bbb')
+
+      // 配合keep-alive缓存使用
+      onActivated(() => {
+        // 调用时机为首次挂载
+        // 以及每次从缓存中被重新插入时
+        console.log('子组件B onActivated')
+      })
+
+      // 配合keep-alive缓存使用
+      onDeactivated(() => {
+        // 在从 DOM 上移除、进入缓存
+        // 以及组件卸载时调用
+        console.log('子组件B onDeactivated')
+      })
+
       return {
         valueB,
       }
