@@ -197,20 +197,26 @@ const KeepAliveImpl: ComponentOptions = {
       _unmount(vnode, instance, parentSuspense, true)
     }
 
+    // 在include或exclude发生改变时，遍历所有已缓存的子组件列表，并移除不再需要缓存的子组件
     function pruneCache(filter?: (name: string) => boolean) {
       cache.forEach((vnode, key) => {
         const name = getComponentName(vnode.type as ConcreteComponent)
         if (name && (!filter || !filter(name))) {
+          // 取消缓存为不符合filter的子组件
           pruneCacheEntry(key)
         }
       })
     }
 
+    // 移除缓存的子组件
     function pruneCacheEntry(key: CacheKey) {
+      // 缓存的子组件Vnode
       const cached = cache.get(key) as VNode
       if (!current || cached.type !== current.type) {
+        // 当前没有子组件 或 要取消缓存的子组件不是当前显示的子组件，则可以正常卸载
         unmount(cached)
       } else if (current) {
+        // 要取消的缓存子组件是 当前展示的子组件，则重置子组件的shapeFlag状态，恢复成默认的
         // current active instance should no longer be kept-alive.
         // we can't unmount it now but it might be later, so reset its flag now.
         resetShapeFlag(current)
@@ -219,11 +225,12 @@ const KeepAliveImpl: ComponentOptions = {
       keys.delete(key)
     }
 
+    // 当include/exclude发生变化时，移除缓存列表中相关子组件
     // prune cache on include/exclude prop change
     watch(
       () => [props.include, props.exclude],
       ([include, exclude]) => {
-        include && pruneCache(name => matches(include, name))
+        include && pruneCache(name => matches(include, name)) // 移除不需要缓存的子组件
         exclude && pruneCache(name => !matches(exclude, name))
       },
       // prune post-render after `current` has been updated
@@ -238,6 +245,7 @@ const KeepAliveImpl: ComponentOptions = {
         cache.set(pendingCacheKey, getInnerChild(instance.subTree))
       }
     }
+    // 挂载或更新后，都会缓存当前子组件vnode
     onMounted(cacheSubtree) // keep-alive setup的渲染函数执行完后，执行mounted 回调函数 缓存当前子组件vnode
     onUpdated(cacheSubtree)
 
@@ -342,6 +350,7 @@ const KeepAliveImpl: ComponentOptions = {
         keys.add(key)
         // prune oldest entry
         if (max && keys.size > parseInt(max as string, 10)) {
+          // 移除第一个缓存的子组件： Set keys.values() 方法返回一个新的迭代器对象，该对象按插入顺序包含 Set 对象中每个元素的值。
           pruneCacheEntry(keys.values().next().value)
         }
       }
@@ -446,6 +455,7 @@ function injectToKeepAliveRoot(
   }, target)
 }
 
+// 在取消缓存的子组件时，重置keep-alive子组件的shapeFlag状态：（减去）移除之前追加的ShapeFlags标记
 function resetShapeFlag(vnode: VNode) {
   // bitwise operations to remove keep alive flags
   vnode.shapeFlag &= ~ShapeFlags.COMPONENT_SHOULD_KEEP_ALIVE

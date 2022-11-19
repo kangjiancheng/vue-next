@@ -25,6 +25,7 @@
 
   // 子组件A
   const InputA = {
+    name: 'InputA',
     template: `<input class="input-a" v-model="valueA"/>`,
     setup() {
       const valueA = ref('aaa')
@@ -36,6 +37,7 @@
 
   // 子组件B
   const InputB = {
+    name: 'InputB',
     template: `<input class="input-b" v-model="valueB"/>`,
     setup() {
       const valueB = ref('bbb')
@@ -51,24 +53,32 @@
     template: `
       <div class="root-component">
         <div>
-          <input type="radio" id="a" value="InputA" v-model="active" /><label for="a">A</label>
-          <input type="radio" id="b" value="InputB" v-model="active" /><label for="b">B</label>
+          <span>切换子组件：</span>
+          <input type="radio" id="toggle-a" value="InputA" v-model="active" /><label for="toggle-a">A</label>
+          <input type="radio" id="toggle-b" value="InputB" v-model="active" /><label for="toggle-b">B</label>
+        </div>
+        <div>
+          <span>缓存子组件：</span>
+          <input type="checkbox" id="cache-a" value="InputA" v-model="cacheInclude" /><label for="cache-a">A</label>
+          <input type="checkbox" id="cache-b" value="InputB" v-model="cacheInclude" /><label for="cache-b">B</label>
         </div>
 
         <!--active改变，触发重新执行keep-alive的渲染函数，并-->
-        <keep-alive>
+        <keep-alive :include="cacheInclude">
           <component :is="active" :key="active" />
         </keep-alive>
       </div>
     `,
     setup() {
       const active = ref('InputA')
+      const cacheInclude = ref(['InputA', 'InputB'])
 
       onMounted(() => {
       })
 
       return {
         active,
+        cacheInclude,
       }
     }
   }
