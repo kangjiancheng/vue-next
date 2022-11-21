@@ -21,7 +21,8 @@
 <!-- 生产模式-->
 <!--<script src="../packages/vue/dist/vue.global.prod.js"></script>-->
 <script>
-  const { createApp, ref, reactive, onMounted,onActivated,onDeactivated } = Vue
+
+  const { createApp, ref, reactive, onMounted,onActivated,onDeactivated, watch } = Vue
 
   // 子组件A
   const InputA = {
@@ -29,12 +30,17 @@
     template: `子组件A: <input class="input-a" v-model="valueA"/>`,
     setup() {
       const valueA = ref('aaa')
+      let a = 123
+
+      onMounted(() => {
+        console.log('A mounted: ', a)
+      })
 
       // 配合keep-alive缓存使用
       onActivated(() => {
         // 调用时机为首次挂载
         // 以及每次从缓存中被重新插入时
-        console.log('子组件A onActivated')
+        console.log('子组件A onActivated: ', a)
       })
 
       // 配合keep-alive缓存使用
@@ -42,6 +48,11 @@
         // 在从 DOM 上移除、进入缓存
         // 以及组件卸载时调用
         console.log('子组件A onDeactivated')
+      })
+
+      watch(valueA, (val) => {
+        console.log('watch a: ', val)
+        a = val
       })
 
       return {
@@ -103,8 +114,7 @@
       const active = ref('InputA')
       const cacheInclude = ref(['InputA', 'InputB'])
 
-      onMounted(() => {
-      })
+
 
       return {
         active,
