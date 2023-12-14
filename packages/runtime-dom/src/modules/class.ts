@@ -1,4 +1,4 @@
-import { ElementWithTransition } from '../components/Transition'
+import { ElementWithTransition, vtcKey } from '../components/Transition'
 
 // 添加vnode dom实例的class
 // compiler should normalize class + :class bindings on the same element
@@ -7,7 +7,7 @@ export function patchClass(el: Element, value: string | null, isSVG: boolean) {
   // directly setting className should be faster than setAttribute in theory
   // if this is an element during a transition, take the temporary transition
   // classes into account.
-  const transitionClasses = (el as ElementWithTransition)._vtc
+  const transitionClasses = (el as ElementWithTransition)[vtcKey]
   if (transitionClasses) {
     value = (
       value ? [value, ...transitionClasses] : [...transitionClasses]

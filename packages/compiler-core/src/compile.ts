@@ -46,16 +46,12 @@ export function getBaseTransformPreset(
             transformExpression
           ]
         : __BROWSER__ && __DEV__
-        ? [transformExpression] // 处理插值表达式内容，指令属性节点值表达式，排除v-for和v-on:arg属性节点，在浏览器中只需要节点验证表达式值的js语法规则：validateBrowserExpression
-        : []),
+          ? [transformExpression] // 处理插值表达式内容，指令属性节点值表达式，排除v-for和v-on:arg属性节点，在浏览器中只需要节点验证表达式值的js语法规则：validateBrowserExpression
+          : []),
       transformSlotOutlet, // 处理插值表达式内容，指令属性节点值表达式，排除v-for和v-on:arg属性节点，在浏览器中只需要节点验证表达式值的js语法规则：validateBrowserExpression
       transformElement, // 处理html元素节点或组件节点，解析元素节点的prop属性列表（on/bind/model/text/html/show/is）、v-slot指令与默认/具名插槽转换、patchFlag信息、用户定义的指令等，为当前节点的ast生成对应的codegen vnode执行函数节点
       trackSlotScopes, // 处理并跟踪节点的slot指令，通过计数来识别出是否内嵌了slot指令，为transformElement检测是否定义了动态slot，创建对应的patchflag信息
       transformText // 处理 连续子文本节点/表达式节点 的合并；或 如果即包含文本又包含其它类型节点时，则需要设置该子节点文本/表达式的diff patch codegenNode 信息，同时也重新定义当前节点的子节点配置
-
-      // compiler-dom:
-      // transformStyle,                      // 不返回回调转换插件， html元素全部转换静态style属性为对应的动态style指令属性节点
-      // warnTransitionChildren               // transition组件只接收一个子元素/子组件
     ],
     // 默认 directiveTransforms
     // transformElement阶段

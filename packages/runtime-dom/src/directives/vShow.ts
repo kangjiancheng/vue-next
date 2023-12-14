@@ -1,8 +1,10 @@
 import { ObjectDirective } from '@vue/runtime-core'
 
+export const vShowOldKey = Symbol('_vod')
+
 interface VShowElement extends HTMLElement {
   // _vod = vue original display
-  _vod: string
+  [vShowOldKey]: string
 }
 
 // template: '<span v-show="isShow">123</span>'
@@ -20,7 +22,7 @@ interface VShowElement extends HTMLElement {
 export const vShow: ObjectDirective<VShowElement> = {
   // vnode el节点属性props 已经添加了，将要挂载到父节点dom上
   beforeMount(el, { value }, { transition }) {
-    el._vod = el.style.display === 'none' ? '' : el.style.display
+    el[vShowOldKey] = el.style.display === 'none' ? '' : el.style.display
     if (transition && value) {
       // TODO: transition
       transition.beforeEnter(el)
@@ -56,7 +58,7 @@ export const vShow: ObjectDirective<VShowElement> = {
 }
 
 function setDisplay(el: VShowElement, value: unknown): void {
-  el.style.display = value ? el._vod : 'none'
+  el.style.display = value ? el[vShowOldKey] : 'none'
 }
 
 // SSR vnode transforms, only used when user includes client-oriented render

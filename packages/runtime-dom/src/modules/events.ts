@@ -1,9 +1,9 @@
 import { hyphenate, isArray } from '@vue/shared'
 import {
+  ErrorCodes,
   ComponentInternalInstance,
   callWithAsyncErrorHandling
 } from '@vue/runtime-core'
-import { ErrorCodes } from 'packages/runtime-core/src/errorHandling'
 
 interface Invoker extends EventListener {
   value: EventValue
@@ -31,6 +31,8 @@ export function removeEventListener(
   el.removeEventListener(event, handler, options)
 }
 
+const veiKey = Symbol('_vei')
+
 // 为vnode dom实例el 添加vue事件属性与事件处理函数
 // 如 template: '<button @click.once="handleClick" @focus.prevent.passive="handleFocus"></button>'
 // 则渲染函数：
@@ -39,7 +41,7 @@ export function removeEventListener(
 //   onFocusPassive: _withModifiers(handleFocus, ["prevent"])
 // }, null, 40 /* PROPS, HYDRATE_EVENTS */, ["onClickOnce", "onFocusPassive"]))
 export function patchEvent(
-  el: Element & { _vei?: Record<string, Invoker | undefined> },
+  el: Element & { [veiKey]?: Record<string, Invoker | undefined> },
   rawName: string, // vue事件属性名
   prevValue: EventValue | null,
   nextValue: EventValue | null, // 事件属性值，即事件处理函数
@@ -47,7 +49,7 @@ export function patchEvent(
 ) {
   // vue事件，如 @click 则 ，rawName = 'onClick'
   // vei = vue event invokers
-  const invokers = el._vei || (el._vei = {}) // 事件执行列表
+  const invokers = el[veiKey] || (el[veiKey] = {}) // 事件执行列表
   const existingInvoker = invokers[rawName]
   if (nextValue && existingInvoker) {
     // 事件已存在，更换新事件处理函数

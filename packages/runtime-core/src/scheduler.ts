@@ -1,5 +1,5 @@
 import { ErrorCodes, callWithErrorHandling } from './errorHandling'
-import { isArray, NOOP } from '@vue/shared'
+import { Awaited, isArray, NOOP } from '@vue/shared'
 import { ComponentInternalInstance, getComponentName } from './component'
 import { warn } from './warning'
 
@@ -51,10 +51,10 @@ const RECURSION_LIMIT = 100
 type CountMap = Map<SchedulerJob, number>
 
 // 缓冲队列执行完后，在执行nextTick函数
-export function nextTick<T = void>(
+export function nextTick<T = void, R = void>(
   this: T,
-  fn?: (this: T) => void
-): Promise<void> {
+  fn?: (this: T) => R
+): Promise<Awaited<R>> {
   const p = currentFlushPromise || resolvedPromise
   return fn ? p.then(this ? fn.bind(this) : fn) : p
 }
@@ -70,8 +70,13 @@ function findInsertionIndex(id: number) {
 
   while (start < end) {
     const middle = (start + end) >>> 1
-    const middleJobId = getId(queue[middle])
-    middleJobId < id ? (start = middle + 1) : (end = middle)
+    const middleJob = queue[middle]
+    const middleJobId = getId(middleJob)
+    if (middleJobId < id || (middleJobId === id && middleJob.pre)) {
+      start = middle + 1
+    } else {
+      end = middle
+    }
   }
 
   return start
@@ -144,6 +149,7 @@ export function queuePostFlushCb(cb: SchedulerJobs) {
 }
 
 export function flushPreFlushCbs(
+  instance?: ComponentInternalInstance,
   seen?: CountMap,
   // if currently flushing, skip the current job itself
   i = isFlushing ? flushIndex + 1 : 0
@@ -154,6 +160,9 @@ export function flushPreFlushCbs(
   for (; i < queue.length; i++) {
     const cb = queue[i]
     if (cb && cb.pre) {
+      if (instance && cb.id !== instance.uid) {
+        continue
+      }
       if (__DEV__ && checkRecursiveUpdates(seen!, cb)) {
         continue
       }

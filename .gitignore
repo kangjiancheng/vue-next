@@ -9,3 +9,5 @@ TODOs.md
 # IntelliJ project files
 .idea
 .eslintcache
+dts-build/packages
+*.tsbuildinfo

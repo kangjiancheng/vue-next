@@ -23,7 +23,8 @@ import {
   locStub,
   CacheExpression,
   ConstantTypes,
-  MemoExpression
+  MemoExpression,
+  convertToBlock
 } from '../ast'
 import { createCompilerError, ErrorCodes } from '../errors'
 import { processExpression } from './transformExpression'
@@ -34,10 +35,9 @@ import {
   findDir,
   findProp,
   isBuiltInType,
-  makeBlock
+  getMemoedVNodeCall
 } from '../utils'
 import { PatchFlags, PatchFlagNames } from '@vue/shared'
-import { getMemoedVNodeCall } from '..'
 
 /**
  * 创建v-if解析插件时，原理是基于 if分支流节点 来解析的，如一个分支流中可能是：if节点、else节点、else-if节点，构成的一个逻辑判断流程。
@@ -355,8 +355,7 @@ function createChildrenCodegenNode(
     const vnodeCall = getMemoedVNodeCall(ret)
     // Change createVNode to createBlock.
     if (vnodeCall.type === NodeTypes.VNODE_CALL) {
-      // VNODE_CALL 在transformElement阶段创建
-      makeBlock(vnodeCall, context)
+      convertToBlock(vnodeCall, context)
     }
     // 注入if分支流的key到branch的prop属性列表中
     // inject branch key

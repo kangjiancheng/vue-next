@@ -8,7 +8,12 @@ import { RendererOptions } from '@vue/runtime-core'
 
 // 元素dom事件属性，小写，如：<button onclick="handler(event)"></button>，则prop为 onclick
 // vue事件：<button @click="handleClick"></button>，则prop为 onClick
-const nativeOnRE = /^on[a-z]/
+const isNativeOn = (key: string) =>
+  key.charCodeAt(0) === 111 /* o */ &&
+  key.charCodeAt(1) === 110 /* n */ &&
+  // lowercase letter
+  key.charCodeAt(2) > 96 &&
+  key.charCodeAt(2) < 123
 
 type DOMRendererOptions = RendererOptions<Node, Element>
 
@@ -41,8 +46,8 @@ export const patchProp: DOMRendererOptions['patchProp'] = (
     key[0] === '.'
       ? ((key = key.slice(1)), true)
       : key[0] === '^'
-      ? ((key = key.slice(1)), false)
-      : shouldSetAsProp(el, key, nextValue, isSVG)
+        ? ((key = key.slice(1)), false)
+        : shouldSetAsProp(el, key, nextValue, isSVG)
   ) {
     // dom 实例属性，如： innerHTML、id
     patchDOMProp(
@@ -83,7 +88,7 @@ function shouldSetAsProp(
       return true
     }
     // or native onclick with function values
-    if (key in el && nativeOnRE.test(key) && isFunction(value)) {
+    if (key in el && isNativeOn(key) && isFunction(value)) {
       return true
     }
     return false
@@ -115,8 +120,21 @@ function shouldSetAsProp(
     return false
   }
 
+  // #8780 the width or height of embedded tags must be set as attribute
+  if (key === 'width' || key === 'height') {
+    const tag = el.tagName
+    if (
+      tag === 'IMG' ||
+      tag === 'VIDEO' ||
+      tag === 'CANVAS' ||
+      tag === 'SOURCE'
+    ) {
+      return false
+    }
+  }
+
   // native onclick with string value, must be set as attribute
-  if (nativeOnRE.test(key) && isString(value)) {
+  if (isNativeOn(key) && isString(value)) {
     return false
   }
 

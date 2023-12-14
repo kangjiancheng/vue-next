@@ -35,12 +35,7 @@ import {
   TO_HANDLERS,
   NORMALIZE_PROPS,
   GUARD_REACTIVE_PROPS,
-  CREATE_BLOCK,
-  CREATE_ELEMENT_BLOCK,
-  CREATE_VNODE,
-  CREATE_ELEMENT_VNODE,
-  WITH_MEMO,
-  OPEN_BLOCK
+  WITH_MEMO
 } from './runtimeHelpers'
 import { isString, isObject, hyphenate, extend, NOOP } from '@vue/shared'
 import { PropsExpression } from './transforms/transformElement'
@@ -364,25 +359,6 @@ export function isSlotOutlet(
   return node.type === NodeTypes.ELEMENT && node.tagType === ElementTypes.SLOT
 }
 
-// 将template元素上的key 属性注入到子节点属性列表中去
-
-// 场景一：注入到slot元素属性列表中去，如：
-// 在解析v-for指令中，<template v-for="..." key="..."><slot></slot></template>
-// node: slotOutlet.codegenNode， 其中slot在transformSlotOutlet解析所得
-
-// 场景二：注入到普通元素节点，此时template v-for 只有一个子元素，则需要将key属性注入到，如：
-// <template v-for="..." :key="..."><div>...</div></template>
-// 则其node，即子节点： <div>...</div> 的codegenNode 在 transformElement节点生成 createVNodeCall
-
-// 场景三：在解析v-if指令时，将if在兄弟节点中的位置key（系统），注入到 如：<div v-if="true" v-for="item in items"></div>
-export function getVNodeHelper(ssr: boolean, isComponent: boolean) {
-  return ssr || isComponent ? CREATE_VNODE : CREATE_ELEMENT_VNODE
-}
-
-export function getVNodeBlockHelper(ssr: boolean, isComponent: boolean) {
-  return ssr || isComponent ? CREATE_BLOCK : CREATE_ELEMENT_BLOCK
-}
-
 const propsHelperSet = new Set([NORMALIZE_PROPS, GUARD_REACTIVE_PROPS])
 
 function getUnnormalizedProps(
@@ -625,14 +601,4 @@ export function getMemoedVNodeCall(node: BlockCodegenNode | MemoExpression) {
   }
 }
 
-export function makeBlock(
-  node: VNodeCall,
-  { helper, removeHelper, inSSR }: TransformContext
-) {
-  if (!node.isBlock) {
-    node.isBlock = true
-    removeHelper(getVNodeHelper(inSSR, node.isComponent))
-    helper(OPEN_BLOCK)
-    helper(getVNodeBlockHelper(inSSR, node.isComponent))
-  }
-}
+export const forAliasRE = /([\s\S]*?)\s+(?:in|of)\s+([\s\S]*)/

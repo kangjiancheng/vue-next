@@ -1,4 +1,4 @@
-import { isArray, isString, isObject, hyphenate } from './'
+import { isArray, isString, isObject, hyphenate } from './general'
 
 export type NormalizedStyle = Record<string, string | number>
 
@@ -20,9 +20,7 @@ export function normalizeStyle(
       }
     }
     return res
-  } else if (isString(value)) {
-    return value
-  } else if (isObject(value)) {
+  } else if (isString(value) || isObject(value)) {
     return value
   }
 }
@@ -32,7 +30,7 @@ export function normalizeStyle(
 const listDelimiterRE = /;(?![^(]*\))/g // 注意 断言匹配'空隙'，所以只匹配的是 ';'，空隙后面只是额外条件，不进行捕获
 // 属性分隔符
 const propertyDelimiterRE = /:([^]+)/
-const styleCommentRE = /\/\*.*?\*\//gs
+const styleCommentRE = /\/\*[^]*?\*\//g
 
 // 行内样式转换对象样式
 // 如：parseStringStyle('color: red;font-size: 12px;') =》 {"color": "red", "font-size": "12px"}，匹配到符号条件的分隔符 ';'

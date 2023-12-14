@@ -865,7 +865,7 @@ function isComponent(
       }
     } else {
       // directive
-      // v-is (TODO Deprecate)
+      // v-is (TODO: remove in 3.4)
       if (p.name === 'is') {
         return true
       } else if (
@@ -1059,8 +1059,8 @@ function parseAttribute(
       (isPropShorthand || startsWith(name, ':')
         ? 'bind'
         : startsWith(name, '@')
-        ? 'on'
-        : 'slot')
+          ? 'on'
+          : 'slot')
 
     // 指令属性名节点/指令名表达式，match[2]，如 @click.prevent 中的 'click'；
     // 注意 动态指令时，不能是 @['click']，指令名不可以有 ' " < 这3个字符，必须是个变量
@@ -1070,7 +1070,11 @@ function parseAttribute(
     // 如 <span v-bind="{}"></span> 则此时 match2 = undefined
     if (match[2]) {
       const isSlot = dirName === 'slot' // 如：template: '<span #header="nav"></span>' 或 'v-slot'，则 name = '#header'，match[2] = 'header'，dirName = 'slot'
-      const startOffset = name.lastIndexOf(match[2]) // 指令内容开始位置
+      const startOffset = name.lastIndexOf(
+        // 指令内容开始位置
+        match[2],
+        name.length - (match[3]?.length || 0)
+      )
 
       // 解析指令内容的开始位置与结束位置，解析的内容为  ' :、@、# ' 后的指令内容
       const loc = getSelection(
@@ -1374,6 +1378,7 @@ function parseTextData(
   } else {
     // 解析普通文本 且带有 &符号，可能是html 实体，如 在html dom文档body中使用小于号 <，在通过 innerHTML获取模版内容时，会被转译为 &lt; 。因此解析时为了获取实际的内容，需要decodeEntities解析实体内容
     // 通过创建一个dom实例，将rawText作为innerHTML，然后获取其中的textContent，即可实现解析
+    // DATA or RCDATA containing "&". Entity decoding is required.
     return context.options.decodeEntities(
       rawText,
       mode === TextModes.ATTRIBUTE_VALUE // 3.0.2版本暂未发现有使用该参数

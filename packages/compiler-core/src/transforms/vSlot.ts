@@ -108,6 +108,7 @@ export const trackVForSlotScopes: NodeTransform = (node, context) => {
 
 export type SlotFnBuilder = (
   slotProps: ExpressionNode | undefined,
+  vForExp: ExpressionNode | undefined,
   slotChildren: TemplateChildNode[],
   loc: SourceLocation
 ) => FunctionExpression
@@ -118,7 +119,7 @@ export type SlotFnBuilder = (
  * @param children - 子元素的子元素列表
  * @param loc - 子元素源码位置
  */
-const buildClientSlotFn: SlotFnBuilder = (props, children, loc) =>
+const buildClientSlotFn: SlotFnBuilder = (props, _vForExp, children, loc) =>
   createFunctionExpression(
     // JS_FUNCTION_EXPRESSION
     props, // params 参数
@@ -186,7 +187,7 @@ export function buildSlots(
       // 根据 v-slot 指定，创建组件的slot节点：
       createObjectProperty(
         arg || createSimpleExpression('default', true), // 指定 slot的name: 代表此组件的子元素内容属于哪个slot
-        buildSlotFn(exp, children, loc) // 子元素的js ast节点
+        buildSlotFn(exp, undefined, children, loc) // 子元素的js ast节点
       )
     )
   }
@@ -250,14 +251,21 @@ export function buildSlots(
       hasDynamicSlots = true
     }
 
+    const vFor = findDir(slotElement, 'for') // 子元素存在 v-for
     // slot 节点值 即组件子元素的js ast节点
-    const slotFunction = buildSlotFn(slotProps, slotChildren, slotLoc) // JS_FUNCTION_EXPRESSION
+    const slotFunction = buildSlotFn(
+      // JS_FUNCTION_EXPRESSION
+      slotProps,
+      vFor?.exp,
+      slotChildren,
+      slotLoc
+    )
 
     // check if this slot is conditional (v-if/v-for)
     // 注意 组件节点跳过 插件transform if/for，所以需要在此单独处理if/for
     let vIf: DirectiveNode | undefined // 子元素存在 v-if
     let vElse: DirectiveNode | undefined // 子元素存在 v-else-if/else
-    let vFor: DirectiveNode | undefined // 子元素存在 v-for
+
     if ((vIf = findDir(slotElement, 'if'))) {
       hasDynamicSlots = true // 动态slot
       dynamicSlots.push(
@@ -323,7 +331,7 @@ export function buildSlots(
           createCompilerError(ErrorCodes.X_V_ELSE_NO_ADJACENT_IF, vElse.loc) // v-else/v-else-if has no adjacent v-if
         )
       }
-    } else if ((vFor = findDir(slotElement, 'for'))) {
+    } else if (vFor) {
       hasDynamicSlots = true
 
       // 解析 v-for 表达式值，创建对应的js ast 节点
@@ -399,7 +407,7 @@ export function buildSlots(
       props: ExpressionNode | undefined,
       children: TemplateChildNode[]
     ) => {
-      const fn = buildSlotFn(props, children, loc)
+      const fn = buildSlotFn(props, undefined, children, loc)
       if (__COMPAT__ && context.compatConfig) {
         fn.isNonScopedSlot = true
       }
@@ -443,8 +451,8 @@ export function buildSlots(
   const slotFlag = hasDynamicSlots // 是否存在动态 slot，如 动态v-slot:[xxx]、或 v-if/v-for、或 嵌套v-if/v-for
     ? SlotFlags.DYNAMIC // 2
     : hasForwardedSlots(node.children) // 组件子孙节点中 是否存在 slot 标签元素
-    ? SlotFlags.FORWARDED // 3
-    : SlotFlags.STABLE // 1
+      ? SlotFlags.FORWARDED // 3
+      : SlotFlags.STABLE // 1
 
   // 创建 静态slots节点列表 的js对象格式：将数组转换为对象
   let slots = createObjectExpression(

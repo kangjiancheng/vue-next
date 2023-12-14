@@ -643,33 +643,33 @@ describe('compiler: codegen', () => {
     test('with props', () => {
       expect(genCode(createVNodeCall(null, `"div"`, mockProps)))
         .toMatchInlineSnapshot(`
-        "return _createElementVNode("div", { foo: "bar" })
-         "
-      `)
+          "return _createElementVNode("div", { foo: "bar" })
+           "
+        `)
     })
 
     test('with children, no props', () => {
       expect(genCode(createVNodeCall(null, `"div"`, undefined, mockChildren)))
         .toMatchInlineSnapshot(`
-        "return _createElementVNode("div", null, children)
-         "
-      `)
+          "return _createElementVNode("div", null, children)
+           "
+        `)
     })
 
     test('with children + props', () => {
       expect(genCode(createVNodeCall(null, `"div"`, mockProps, mockChildren)))
         .toMatchInlineSnapshot(`
-        "return _createElementVNode("div", { foo: "bar" }, children)
-         "
-      `)
+          "return _createElementVNode("div", { foo: "bar" }, children)
+           "
+        `)
     })
 
     test('with patchFlag and no children/props', () => {
       expect(genCode(createVNodeCall(null, `"div"`, undefined, undefined, '1')))
         .toMatchInlineSnapshot(`
-        "return _createElementVNode("div", null, null, 1)
-         "
-      `)
+          "return _createElementVNode("div", null, null, 1)
+           "
+        `)
     })
 
     test('as block', () => {

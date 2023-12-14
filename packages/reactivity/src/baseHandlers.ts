@@ -26,7 +26,6 @@ import {
   hasChanged,
   isArray,
   isIntegerKey,
-  extend,
   makeMap
 } from '@vue/shared'
 import { isRef } from './ref'
@@ -44,11 +43,6 @@ const builtInSymbols = new Set(
     .map(key => (Symbol as any)[key])
     .filter(isSymbol) // typeof val === 'symbol'
 )
-
-const get = /*#__PURE__*/ createGetter()
-const shallowGet = /*#__PURE__*/ createGetter(false, true)
-const readonlyGet = /*#__PURE__*/ createGetter(true)
-const shallowReadonlyGet = /*#__PURE__*/ createGetter(true, true)
 
 const arrayInstrumentations = /*#__PURE__*/ createArrayInstrumentations()
 
@@ -91,15 +85,21 @@ function createArrayInstrumentations() {
   return instrumentations
 }
 
-function hasOwnProperty(key: string) {
-  // @ts-ignore
+function hasOwnProperty(this: object, key: string) {
   const obj = toRaw(this)
   track(obj, TrackOpTypes.HAS, key)
   return obj.hasOwnProperty(key)
 }
 
-function createGetter(isReadonly = false, shallow = false) {
-  return function get(target: Target, key: string | symbol, receiver: object) {
+class BaseReactiveHandler implements ProxyHandler<Target> {
+  constructor(
+    protected readonly _isReadonly = false,
+    protected readonly _shallow = false
+  ) {}
+
+  get(target: Target, key: string | symbol, receiver: object) {
+    const isReadonly = this._isReadonly,
+      shallow = this._shallow
     if (key === ReactiveFlags.IS_REACTIVE) {
       // 判断对象是否响应 - isReactive(proxy)
       return !isReadonly
@@ -108,21 +108,28 @@ function createGetter(isReadonly = false, shallow = false) {
       return isReadonly
     } else if (key === ReactiveFlags.IS_SHALLOW) {
       return shallow
-    } else if (
-      key === ReactiveFlags.RAW && // 访问对象当原始对象 - toRaw(proxy)
-      receiver === // receiver：触发该拦截方法的操作对象（一般为Proxy实例对象，注意原型链）
-        (isReadonly
-          ? shallow
-            ? shallowReadonlyMap
-            : readonlyMap
-          : shallow
-          ? shallowReactiveMap
-          : reactiveMap
-        ).get(target)
-    ) {
-      // 访问 原生对象
-      // toRaw(target)
-      return target
+    } else if (key === ReactiveFlags.RAW) {
+      // 访问对象当原始对象 - toRaw(proxy)
+      if (
+        receiver === // receiver：触发该拦截方法的操作对象（一般为Proxy实例对象，注意原型链）
+          (isReadonly
+            ? shallow
+              ? shallowReadonlyMap
+              : readonlyMap
+            : shallow
+              ? shallowReactiveMap
+              : reactiveMap
+          ).get(target) ||
+        // receiver is not the reactive proxy, but has the same prototype
+        // this means the reciever is a user proxy of the reactive proxy
+        Object.getPrototypeOf(target) === Object.getPrototypeOf(receiver)
+      ) {
+        // 访问 原生对象
+        // toRaw(target)
+        return target
+      }
+      // early return undefined
+      return
     }
 
     // 响应对象 为 数组
@@ -177,21 +184,20 @@ function createGetter(isReadonly = false, shallow = false) {
   }
 }
 
-const set = /*#__PURE__*/ createSetter()
-const shallowSet = /*#__PURE__*/ createSetter(true)
+class MutableReactiveHandler extends BaseReactiveHandler {
+  constructor(shallow = false) {
+    super(false, shallow)
+  }
 
-function createSetter(shallow = false) {
-  return function set(
+  set(
     target: object,
     key: string | symbol,
     value: unknown,
     receiver: object
   ): boolean {
     let oldValue = (target as any)[key]
-    if (isReadonly(oldValue) && isRef(oldValue) && !isRef(value)) {
-      return false
-    }
-    if (!shallow) {
+    if (!this._shallow) {
+      const isOldValueReadonly = isReadonly(oldValue)
       if (!isShallow(value) && !isReadonly(value)) {
         oldValue = toRaw(oldValue)
         value = toRaw(value)
@@ -199,8 +205,12 @@ function createSetter(shallow = false) {
       if (!isArray(target) && isRef(oldValue) && !isRef(value)) {
         // 针对属性为ref对象
         // 非数组，且之前为ref对象，但是新值不是ref对象 - 目的：方便不用通过调用ref value属性来设置 新值
-        oldValue.value = value
-        return true
+        if (isOldValueReadonly) {
+          return false
+        } else {
+          oldValue.value = value
+          return true
+        }
       }
     } else {
       // in shallow mode, objects are set as-is regardless of reactive or not
@@ -226,43 +236,40 @@ function createSetter(shallow = false) {
     }
     return result
   }
-}
 
-function deleteProperty(target: object, key: string | symbol): boolean {
-  const hadKey = hasOwn(target, key)
-  const oldValue = (target as any)[key]
-  const result = Reflect.deleteProperty(target, key)
-  if (result && hadKey) {
-    trigger(target, TriggerOpTypes.DELETE, key, undefined, oldValue)
+  deleteProperty(target: object, key: string | symbol): boolean {
+    const hadKey = hasOwn(target, key)
+    const oldValue = (target as any)[key]
+    const result = Reflect.deleteProperty(target, key)
+    if (result && hadKey) {
+      trigger(target, TriggerOpTypes.DELETE, key, undefined, oldValue)
+    }
+    return result
   }
-  return result
-}
 
-function has(target: object, key: string | symbol): boolean {
-  const result = Reflect.has(target, key)
-  if (!isSymbol(key) || !builtInSymbols.has(key)) {
-    track(target, TrackOpTypes.HAS, key)
+  has(target: object, key: string | symbol): boolean {
+    const result = Reflect.has(target, key)
+    if (!isSymbol(key) || !builtInSymbols.has(key)) {
+      track(target, TrackOpTypes.HAS, key)
+    }
+    return result
   }
-  return result
+  ownKeys(target: object): (string | symbol)[] {
+    track(
+      target,
+      TrackOpTypes.ITERATE,
+      isArray(target) ? 'length' : ITERATE_KEY
+    )
+    return Reflect.ownKeys(target)
+  }
 }
 
-function ownKeys(target: object): (string | symbol)[] {
-  track(target, TrackOpTypes.ITERATE, isArray(target) ? 'length' : ITERATE_KEY)
-  return Reflect.ownKeys(target)
-}
+class ReadonlyReactiveHandler extends BaseReactiveHandler {
+  constructor(shallow = false) {
+    super(true, shallow)
+  }
 
-// 代理普通对象：Array、Object，如 在setup中: reactive({ name: '小明' })
-export const mutableHandlers: ProxyHandler<object> = {
-  get, // createGetter
-  set, // createSetter
-  deleteProperty,
-  has,
-  ownKeys
-}
-
-export const readonlyHandlers: ProxyHandler<object> = {
-  get: readonlyGet, // createGetter(true)
-  set(target, key) {
+  set(target: object, key: string | symbol) {
     if (__DEV__) {
       warn(
         `Set operation on key "${String(key)}" failed: target is readonly.`, // 如不可在setup在中修改props属性
@@ -270,8 +277,9 @@ export const readonlyHandlers: ProxyHandler<object> = {
       )
     }
     return true
-  },
-  deleteProperty(target, key) {
+  }
+
+  deleteProperty(target: object, key: string | symbol) {
     if (__DEV__) {
       warn(
         `Delete operation on key "${String(key)}" failed: target is readonly.`,
@@ -282,14 +290,16 @@ export const readonlyHandlers: ProxyHandler<object> = {
   }
 }
 
+// 代理普通对象：Array、Object，如 在setup中: reactive({ name: '小明' })
+export const mutableHandlers: ProxyHandler<object> =
+  /*#__PURE__*/ new MutableReactiveHandler()
+
+export const readonlyHandlers: ProxyHandler<object> =
+  /*#__PURE__*/ new ReadonlyReactiveHandler()
+
 // 如 instance.props，在执行渲染函数期间，渲染函数访问ctx上的props属性
-export const shallowReactiveHandlers = /*#__PURE__*/ extend(
-  {},
-  mutableHandlers,
-  {
-    get: shallowGet, // createGetter(false, true)
-    set: shallowSet
-  }
+export const shallowReactiveHandlers = /*#__PURE__*/ new MutableReactiveHandler(
+  true
 )
 
 // 如在执行 setup(shallowReadonly(instance.props), setupContext)
@@ -297,10 +307,5 @@ export const shallowReactiveHandlers = /*#__PURE__*/ extend(
 // Props handlers are special in the sense that it should not unwrap top-level
 // refs (in order to allow refs to be explicitly passed down), but should
 // retain the reactivity of the normal readonly object.
-export const shallowReadonlyHandlers = /*#__PURE__*/ extend(
-  {},
-  readonlyHandlers,
-  {
-    get: shallowReadonlyGet // createGetter(true, true)
-  }
-)
+export const shallowReadonlyHandlers =
+  /*#__PURE__*/ new ReadonlyReactiveHandler(true)

@@ -117,14 +117,14 @@ const transformClick = (key: ExpressionNode, event: string) => {
   return isStaticClick
     ? createSimpleExpression(event, true) // 静态指令
     : key.type !== NodeTypes.SIMPLE_EXPRESSION // 动态指令 需要转换为复合codegen节点
-    ? createCompoundExpression([
-        `(`,
-        key,
-        `) === "onClick" ? "${event}" : (`,
-        key,
-        `)`
-      ])
-    : key // 已经是复合（在处理属性名阶段已经进行转换）
+      ? createCompoundExpression([
+          `(`,
+          key,
+          `) === "onClick" ? "${event}" : (`,
+          key,
+          `)`
+        ])
+      : key // 已经是复合（在处理属性名阶段已经进行转换）
 }
 
 // 解析dom节点上的v-on指令

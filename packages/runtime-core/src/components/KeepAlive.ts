@@ -3,7 +3,6 @@ import {
   getCurrentInstance,
   SetupContext,
   ComponentInternalInstance,
-  LifecycleHooks,
   currentInstance,
   getComponentName,
   ComponentOptions
@@ -13,7 +12,8 @@ import {
   cloneVNode,
   isVNode,
   VNodeProps,
-  invokeVNodeHook
+  invokeVNodeHook,
+  isSameVNodeType
 } from '../vnode'
 import { warn } from '../warning'
 import {
@@ -44,6 +44,7 @@ import { ComponentRenderContext } from '../componentPublicInstance'
 import { devtoolsComponentAdded } from '../devtools'
 import { isAsyncWrapper } from '../apiAsyncComponent'
 import { isSuspense } from './Suspense'
+import { LifecycleHooks } from '../enums'
 
 type MatchPattern = string | RegExp | (string | RegExp)[]
 
@@ -212,7 +213,7 @@ const KeepAliveImpl: ComponentOptions = {
     function pruneCacheEntry(key: CacheKey) {
       // 缓存的子组件Vnode
       const cached = cache.get(key) as VNode
-      if (!current || cached.type !== current.type) {
+      if (!current || !isSameVNodeType(cached, current)) {
         // 当前没有子组件 或 要取消缓存的子组件不是当前显示的子组件，则可以正常卸载
         unmount(cached)
       } else if (current) {
@@ -253,7 +254,7 @@ const KeepAliveImpl: ComponentOptions = {
       cache.forEach(cached => {
         const { subTree, suspense } = instance
         const vnode = getInnerChild(subTree)
-        if (cached.type === vnode.type) {
+        if (cached.type === vnode.type && cached.key === vnode.key) {
           // current instance will be unmounted as part of keep-alive's unmount
           resetShapeFlag(vnode)
           // but invoke its deactivated hook here
@@ -374,6 +375,9 @@ export const KeepAlive = KeepAliveImpl as any as {
   __isKeepAlive: true
   new (): {
     $props: VNodeProps & KeepAliveProps
+    $slots: {
+      default(): VNode[]
+    }
   }
 }
 

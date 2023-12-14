@@ -4,7 +4,13 @@ import { initDev } from './dev'
 import { compile, CompilerOptions, CompilerError } from '@vue/compiler-dom'
 import { registerRuntimeCompiler, RenderFunction, warn } from '@vue/runtime-dom'
 import * as runtimeDom from '@vue/runtime-dom'
-import { isString, NOOP, generateCodeFrame, extend } from '@vue/shared'
+import {
+  isString,
+  NOOP,
+  generateCodeFrame,
+  extend,
+  EMPTY_OBJ
+} from '@vue/shared'
 import { InternalRenderFunction } from 'packages/runtime-core/src/component'
 
 if (__DEV__) {
@@ -12,7 +18,19 @@ if (__DEV__) {
 }
 
 // 以vue模板源码为key，缓存对应的编译结果：渲染函数render
-const compileCache: Record<string, RenderFunction> = Object.create(null)
+const compileCache = new WeakMap<
+  CompilerOptions,
+  Record<string, RenderFunction>
+>()
+
+function getCache(options?: CompilerOptions) {
+  let c = compileCache.get(options ?? EMPTY_OBJ)
+  if (!c) {
+    c = Object.create(null) as Record<string, RenderFunction>
+    compileCache.set(options ?? EMPTY_OBJ, c)
+  }
+  return c
+}
 
 // 当执行完setup函数后：编译vue模版源码template得到对应的js渲染函数，即得到
 function compileToFunction(
@@ -30,7 +48,8 @@ function compileToFunction(
 
   // 以模板内容为key，缓存编译结果
   const key = template
-  const cached = compileCache[key]
+  const cache = getCache(options)
+  const cached = cache[key]
   if (cached) {
     return cached
   }
@@ -94,7 +113,7 @@ function compileToFunction(
   // mark the function as runtime compiled
   ;(render as InternalRenderFunction)._rc = true
 
-  return (compileCache[key] = render)
+  return (cache[key] = render)
 }
 
 registerRuntimeCompiler(compileToFunction)

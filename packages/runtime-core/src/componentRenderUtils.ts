@@ -77,6 +77,21 @@ export function renderComponentRoot(
       const proxyToUse = withProxy || proxy
 
       // 执行组件模版对应的渲染函数，得到组件模版template的vnode
+      // 'this' isn't available in production builds with `<script setup>`,
+      // so warn if it's used in dev.
+      const thisProxy =
+        __DEV__ && setupState.__isScriptSetup
+          ? new Proxy(proxyToUse!, {
+              get(target, key, receiver) {
+                warn(
+                  `Property '${String(
+                    key
+                  )}' was accessed via 'this'. Avoid using 'this' in templates.`
+                )
+                return Reflect.get(target, key, receiver)
+              }
+            })
+          : proxyToUse
       result = normalizeVNode(
         // child.el === null ? child : cloneVNode(child)
         // 执行渲染函数
@@ -104,7 +119,7 @@ export function renderComponentRoot(
         // }"
         // 执行组件的渲染函数，返回渲染组件的vnode
         render!.call(
-          proxyToUse,
+          thisProxy,
           proxyToUse!, // instance.ctx 的代理 proxy： RuntimeCompiledPublicInstanceProxyHandlers
           renderCache,
           props,

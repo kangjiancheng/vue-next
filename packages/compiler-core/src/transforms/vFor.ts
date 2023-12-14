@@ -26,7 +26,9 @@ import {
   ForIteratorExpression,
   ConstantTypes,
   createBlockStatement,
-  createCompoundExpression
+  createCompoundExpression,
+  getVNodeBlockHelper,
+  getVNodeHelper
 } from '../ast'
 import { createCompilerError, ErrorCodes } from '../errors'
 import {
@@ -35,9 +37,8 @@ import {
   isTemplateNode,
   isSlotOutlet,
   injectProp,
-  getVNodeBlockHelper,
-  getVNodeHelper,
-  findDir
+  findDir,
+  forAliasRE
 } from '../utils'
 import {
   RENDER_LIST,
@@ -110,8 +111,8 @@ export const transformFor = createStructuralDirectiveTransform(
       const fragmentFlag = isStableFragment // 默认false
         ? PatchFlags.STABLE_FRAGMENT // 稳定片段
         : keyProp // 带key属性节点
-        ? PatchFlags.KEYED_FRAGMENT // 带key的片段 <div v-for="(item, index) in items" :key="index"></div>
-        : PatchFlags.UNKEYED_FRAGMENT //  <div v-for="(item, index) in items"></div>
+          ? PatchFlags.KEYED_FRAGMENT // 带key的片段 <div v-for="(item, index) in items" :key="index"></div>
+          : PatchFlags.UNKEYED_FRAGMENT //  <div v-for="(item, index) in items"></div>
 
       forNode.codegenNode = createVNodeCall(
         context,
@@ -163,10 +164,10 @@ export const transformFor = createStructuralDirectiveTransform(
         const slotOutlet = isSlotOutlet(node)
           ? node // <slot v-for="...">
           : isTemplate &&
-            node.children.length === 1 &&
-            isSlotOutlet(node.children[0]) //  只有一个slot子节点 <template v-for><slot>...</slot></template>，
-          ? (node.children[0] as SlotOutletNode) // api-extractor somehow fails to infer this
-          : null
+              node.children.length === 1 &&
+              isSlotOutlet(node.children[0]) //  只有一个slot子节点 <template v-for><slot>...</slot></template>，
+            ? (node.children[0] as SlotOutletNode) // api-extractor somehow fails to infer this
+            : null
 
         if (slotOutlet) {
           // <slot v-for="..."> or <template v-for="..."><slot/></template>
@@ -351,9 +352,6 @@ export function processFor(
     if (onExit) onExit()
   }
 }
-
-// v-for 指令值内容匹配
-const forAliasRE = /([\s\S]*?)\s+(?:in|of)\s+([\s\S]*)/
 
 // This regex doesn't cover the case if key or index aliases have destructuring,
 // but those do not make sense in the first place, so this works in practice.

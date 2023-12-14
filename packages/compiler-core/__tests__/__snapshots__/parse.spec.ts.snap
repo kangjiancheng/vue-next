@@ -1,6 +1,6 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`compiler: parse Errors ABRUPT_CLOSING_OF_EMPTY_COMMENT <template><!--></template> 1`] = `
+exports[`compiler: parse > Errors > ABRUPT_CLOSING_OF_EMPTY_COMMENT > <template><!--></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -70,7 +70,7 @@ exports[`compiler: parse Errors ABRUPT_CLOSING_OF_EMPTY_COMMENT <template><!--><
 }
 `;
 
-exports[`compiler: parse Errors ABRUPT_CLOSING_OF_EMPTY_COMMENT <template><!---></template> 1`] = `
+exports[`compiler: parse > Errors > ABRUPT_CLOSING_OF_EMPTY_COMMENT > <template><!---></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -140,7 +140,7 @@ exports[`compiler: parse Errors ABRUPT_CLOSING_OF_EMPTY_COMMENT <template><!--->
 }
 `;
 
-exports[`compiler: parse Errors ABRUPT_CLOSING_OF_EMPTY_COMMENT <template><!----></template> 1`] = `
+exports[`compiler: parse > Errors > ABRUPT_CLOSING_OF_EMPTY_COMMENT > <template><!----></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -210,7 +210,7 @@ exports[`compiler: parse Errors ABRUPT_CLOSING_OF_EMPTY_COMMENT <template><!----
 }
 `;
 
-exports[`compiler: parse Errors CDATA_IN_HTML_CONTENT <template><![CDATA[cdata]]></template> 1`] = `
+exports[`compiler: parse > Errors > CDATA_IN_HTML_CONTENT > <template><![CDATA[cdata]]></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -280,7 +280,7 @@ exports[`compiler: parse Errors CDATA_IN_HTML_CONTENT <template><![CDATA[cdata]]
 }
 `;
 
-exports[`compiler: parse Errors CDATA_IN_HTML_CONTENT <template><svg><![CDATA[cdata]]></svg></template> 1`] = `
+exports[`compiler: parse > Errors > CDATA_IN_HTML_CONTENT > <template><svg><![CDATA[cdata]]></svg></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -374,7 +374,7 @@ exports[`compiler: parse Errors CDATA_IN_HTML_CONTENT <template><svg><![CDATA[cd
 }
 `;
 
-exports[`compiler: parse Errors DUPLICATE_ATTRIBUTE <template><div id="" id=""></div></template> 1`] = `
+exports[`compiler: parse > Errors > DUPLICATE_ATTRIBUTE > <template><div id="" id=""></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -519,7 +519,7 @@ exports[`compiler: parse Errors DUPLICATE_ATTRIBUTE <template><div id="" id=""><
 }
 `;
 
-exports[`compiler: parse Errors END_TAG_WITH_ATTRIBUTES <template><div></div id=""></template> 1`] = `
+exports[`compiler: parse > Errors > END_TAG_WITH_ATTRIBUTES > <template><div></div id=""></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -595,7 +595,7 @@ exports[`compiler: parse Errors END_TAG_WITH_ATTRIBUTES <template><div></div id=
 }
 `;
 
-exports[`compiler: parse Errors END_TAG_WITH_TRAILING_SOLIDUS <template><div></div/></template> 1`] = `
+exports[`compiler: parse > Errors > END_TAG_WITH_TRAILING_SOLIDUS > <template><div></div/></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -671,7 +671,7 @@ exports[`compiler: parse Errors END_TAG_WITH_TRAILING_SOLIDUS <template><div></d
 }
 `;
 
-exports[`compiler: parse Errors EOF_BEFORE_TAG_NAME <template>< 1`] = `
+exports[`compiler: parse > Errors > EOF_BEFORE_TAG_NAME > <template>< 1`] = `
 {
   "cached": 0,
   "children": [
@@ -741,7 +741,7 @@ exports[`compiler: parse Errors EOF_BEFORE_TAG_NAME <template>< 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_BEFORE_TAG_NAME <template></ 1`] = `
+exports[`compiler: parse > Errors > EOF_BEFORE_TAG_NAME > <template></ 1`] = `
 {
   "cached": 0,
   "children": [
@@ -811,7 +811,7 @@ exports[`compiler: parse Errors EOF_BEFORE_TAG_NAME <template></ 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_CDATA <template><svg><![CDATA[ 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_CDATA > <template><svg><![CDATA[ 1`] = `
 {
   "cached": 0,
   "children": [
@@ -887,7 +887,7 @@ exports[`compiler: parse Errors EOF_IN_CDATA <template><svg><![CDATA[ 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_CDATA <template><svg><![CDATA[cdata 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_CDATA > <template><svg><![CDATA[cdata 1`] = `
 {
   "cached": 0,
   "children": [
@@ -981,7 +981,7 @@ exports[`compiler: parse Errors EOF_IN_CDATA <template><svg><![CDATA[cdata 1`] =
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_COMMENT <template><! 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_COMMENT > <template><! 1`] = `
 {
   "cached": 0,
   "children": [
@@ -1051,7 +1051,7 @@ exports[`compiler: parse Errors EOF_IN_COMMENT <template><! 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_COMMENT <template><!- 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_COMMENT > <template><!- 1`] = `
 {
   "cached": 0,
   "children": [
@@ -1121,7 +1121,7 @@ exports[`compiler: parse Errors EOF_IN_COMMENT <template><!- 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_COMMENT <template><!-- 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_COMMENT > <template><!-- 1`] = `
 {
   "cached": 0,
   "children": [
@@ -1191,7 +1191,7 @@ exports[`compiler: parse Errors EOF_IN_COMMENT <template><!-- 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_COMMENT <template><!--comment 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_COMMENT > <template><!--comment 1`] = `
 {
   "cached": 0,
   "children": [
@@ -1261,7 +1261,7 @@ exports[`compiler: parse Errors EOF_IN_COMMENT <template><!--comment 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_COMMENT <template><!abc 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_COMMENT > <template><!abc 1`] = `
 {
   "cached": 0,
   "children": [
@@ -1331,7 +1331,7 @@ exports[`compiler: parse Errors EOF_IN_COMMENT <template><!abc 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_SCRIPT_HTML_COMMENT_LIKE_TEXT <script><!--console.log('hello') 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_SCRIPT_HTML_COMMENT_LIKE_TEXT > <script><!--console.log('hello') 1`] = `
 {
   "cached": 0,
   "children": [
@@ -1401,7 +1401,7 @@ exports[`compiler: parse Errors EOF_IN_SCRIPT_HTML_COMMENT_LIKE_TEXT <script><!-
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_SCRIPT_HTML_COMMENT_LIKE_TEXT <script>console.log('hello') 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_SCRIPT_HTML_COMMENT_LIKE_TEXT > <script>console.log('hello') 1`] = `
 {
   "cached": 0,
   "children": [
@@ -1471,7 +1471,7 @@ exports[`compiler: parse Errors EOF_IN_SCRIPT_HTML_COMMENT_LIKE_TEXT <script>con
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_TAG <div></div 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_TAG > <div></div 1`] = `
 {
   "cached": 0,
   "children": [
@@ -1523,7 +1523,7 @@ exports[`compiler: parse Errors EOF_IN_TAG <div></div 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_TAG <template><div  1`] = `
+exports[`compiler: parse > Errors > EOF_IN_TAG > <template><div  1`] = `
 {
   "cached": 0,
   "children": [
@@ -1599,7 +1599,7 @@ exports[`compiler: parse Errors EOF_IN_TAG <template><div  1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_TAG <template><div 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_TAG > <template><div 1`] = `
 {
   "cached": 0,
   "children": [
@@ -1675,7 +1675,7 @@ exports[`compiler: parse Errors EOF_IN_TAG <template><div 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_TAG <template><div id  1`] = `
+exports[`compiler: parse > Errors > EOF_IN_TAG > <template><div id  1`] = `
 {
   "cached": 0,
   "children": [
@@ -1770,7 +1770,7 @@ exports[`compiler: parse Errors EOF_IN_TAG <template><div id  1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_TAG <template><div id = 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_TAG > <template><div id = 1`] = `
 {
   "cached": 0,
   "children": [
@@ -1865,7 +1865,7 @@ exports[`compiler: parse Errors EOF_IN_TAG <template><div id = 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_TAG <template><div id 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_TAG > <template><div id 1`] = `
 {
   "cached": 0,
   "children": [
@@ -1960,7 +1960,7 @@ exports[`compiler: parse Errors EOF_IN_TAG <template><div id 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_TAG <template><div id="abc 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_TAG > <template><div id="abc 1`] = `
 {
   "cached": 0,
   "children": [
@@ -2071,7 +2071,7 @@ exports[`compiler: parse Errors EOF_IN_TAG <template><div id="abc 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_TAG <template><div id="abc" 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_TAG > <template><div id="abc" 1`] = `
 {
   "cached": 0,
   "children": [
@@ -2182,7 +2182,7 @@ exports[`compiler: parse Errors EOF_IN_TAG <template><div id="abc" 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_TAG <template><div id="abc"/ 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_TAG > <template><div id="abc"/ 1`] = `
 {
   "cached": 0,
   "children": [
@@ -2293,7 +2293,7 @@ exports[`compiler: parse Errors EOF_IN_TAG <template><div id="abc"/ 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_TAG <template><div id='abc 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_TAG > <template><div id='abc 1`] = `
 {
   "cached": 0,
   "children": [
@@ -2404,7 +2404,7 @@ exports[`compiler: parse Errors EOF_IN_TAG <template><div id='abc 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_TAG <template><div id='abc' 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_TAG > <template><div id='abc' 1`] = `
 {
   "cached": 0,
   "children": [
@@ -2515,7 +2515,7 @@ exports[`compiler: parse Errors EOF_IN_TAG <template><div id='abc' 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_TAG <template><div id='abc'/ 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_TAG > <template><div id='abc'/ 1`] = `
 {
   "cached": 0,
   "children": [
@@ -2626,7 +2626,7 @@ exports[`compiler: parse Errors EOF_IN_TAG <template><div id='abc'/ 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_TAG <template><div id=abc / 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_TAG > <template><div id=abc / 1`] = `
 {
   "cached": 0,
   "children": [
@@ -2737,7 +2737,7 @@ exports[`compiler: parse Errors EOF_IN_TAG <template><div id=abc / 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors EOF_IN_TAG <template><div id=abc 1`] = `
+exports[`compiler: parse > Errors > EOF_IN_TAG > <template><div id=abc 1`] = `
 {
   "cached": 0,
   "children": [
@@ -2848,7 +2848,7 @@ exports[`compiler: parse Errors EOF_IN_TAG <template><div id=abc 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors INCORRECTLY_CLOSED_COMMENT <template><!--comment--!></template> 1`] = `
+exports[`compiler: parse > Errors > INCORRECTLY_CLOSED_COMMENT > <template><!--comment--!></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -2918,7 +2918,7 @@ exports[`compiler: parse Errors INCORRECTLY_CLOSED_COMMENT <template><!--comment
 }
 `;
 
-exports[`compiler: parse Errors INCORRECTLY_OPENED_COMMENT <!DOCTYPE html> 1`] = `
+exports[`compiler: parse > Errors > INCORRECTLY_OPENED_COMMENT > <!DOCTYPE html> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -2964,7 +2964,7 @@ exports[`compiler: parse Errors INCORRECTLY_OPENED_COMMENT <!DOCTYPE html> 1`] =
 }
 `;
 
-exports[`compiler: parse Errors INCORRECTLY_OPENED_COMMENT <template><!></template> 1`] = `
+exports[`compiler: parse > Errors > INCORRECTLY_OPENED_COMMENT > <template><!></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -3034,7 +3034,7 @@ exports[`compiler: parse Errors INCORRECTLY_OPENED_COMMENT <template><!></templa
 }
 `;
 
-exports[`compiler: parse Errors INCORRECTLY_OPENED_COMMENT <template><!-></template> 1`] = `
+exports[`compiler: parse > Errors > INCORRECTLY_OPENED_COMMENT > <template><!-></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -3104,7 +3104,7 @@ exports[`compiler: parse Errors INCORRECTLY_OPENED_COMMENT <template><!-></templ
 }
 `;
 
-exports[`compiler: parse Errors INCORRECTLY_OPENED_COMMENT <template><!ELEMENT br EMPTY></template> 1`] = `
+exports[`compiler: parse > Errors > INCORRECTLY_OPENED_COMMENT > <template><!ELEMENT br EMPTY></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -3174,7 +3174,7 @@ exports[`compiler: parse Errors INCORRECTLY_OPENED_COMMENT <template><!ELEMENT b
 }
 `;
 
-exports[`compiler: parse Errors INVALID_FIRST_CHARACTER_OF_TAG_NAME <template></ï¿½></template> 1`] = `
+exports[`compiler: parse > Errors > INVALID_FIRST_CHARACTER_OF_TAG_NAME > <template></ï¿½></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -3244,7 +3244,7 @@ exports[`compiler: parse Errors INVALID_FIRST_CHARACTER_OF_TAG_NAME <template></
 }
 `;
 
-exports[`compiler: parse Errors INVALID_FIRST_CHARACTER_OF_TAG_NAME <template><ï¿½></template> 1`] = `
+exports[`compiler: parse > Errors > INVALID_FIRST_CHARACTER_OF_TAG_NAME > <template><ï¿½></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -3314,7 +3314,7 @@ exports[`compiler: parse Errors INVALID_FIRST_CHARACTER_OF_TAG_NAME <template><ï
 }
 `;
 
-exports[`compiler: parse Errors INVALID_FIRST_CHARACTER_OF_TAG_NAME <template>{{a < b}}</template> 1`] = `
+exports[`compiler: parse > Errors > INVALID_FIRST_CHARACTER_OF_TAG_NAME > <template>{{a < b}}</template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -3402,7 +3402,7 @@ exports[`compiler: parse Errors INVALID_FIRST_CHARACTER_OF_TAG_NAME <template>{{
 }
 `;
 
-exports[`compiler: parse Errors INVALID_FIRST_CHARACTER_OF_TAG_NAME <template>a < b</template> 1`] = `
+exports[`compiler: parse > Errors > INVALID_FIRST_CHARACTER_OF_TAG_NAME > <template>a < b</template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -3472,7 +3472,7 @@ exports[`compiler: parse Errors INVALID_FIRST_CHARACTER_OF_TAG_NAME <template>a 
 }
 `;
 
-exports[`compiler: parse Errors INVALID_FIRST_CHARACTER_OF_TAG_NAME <template>a </ b</template> 1`] = `
+exports[`compiler: parse > Errors > INVALID_FIRST_CHARACTER_OF_TAG_NAME > <template>a </ b</template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -3559,7 +3559,7 @@ exports[`compiler: parse Errors INVALID_FIRST_CHARACTER_OF_TAG_NAME <template>a 
 }
 `;
 
-exports[`compiler: parse Errors MISSING_ATTRIBUTE_VALUE <template><div id= /></div></template> 1`] = `
+exports[`compiler: parse > Errors > MISSING_ATTRIBUTE_VALUE > <template><div id= /></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -3670,7 +3670,7 @@ exports[`compiler: parse Errors MISSING_ATTRIBUTE_VALUE <template><div id= /></d
 }
 `;
 
-exports[`compiler: parse Errors MISSING_ATTRIBUTE_VALUE <template><div id= ></div></template> 1`] = `
+exports[`compiler: parse > Errors > MISSING_ATTRIBUTE_VALUE > <template><div id= ></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -3765,7 +3765,7 @@ exports[`compiler: parse Errors MISSING_ATTRIBUTE_VALUE <template><div id= ></di
 }
 `;
 
-exports[`compiler: parse Errors MISSING_ATTRIBUTE_VALUE <template><div id=></div></template> 1`] = `
+exports[`compiler: parse > Errors > MISSING_ATTRIBUTE_VALUE > <template><div id=></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -3860,7 +3860,7 @@ exports[`compiler: parse Errors MISSING_ATTRIBUTE_VALUE <template><div id=></div
 }
 `;
 
-exports[`compiler: parse Errors MISSING_END_TAG_NAME <template></></template> 1`] = `
+exports[`compiler: parse > Errors > MISSING_END_TAG_NAME > <template></></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -3912,7 +3912,7 @@ exports[`compiler: parse Errors MISSING_END_TAG_NAME <template></></template> 1`
 }
 `;
 
-exports[`compiler: parse Errors MISSING_WHITESPACE_BETWEEN_ATTRIBUTES <template><div id="foo"\\x0d;\\x0a;class="bar"></div></template> 1`] = `
+exports[`compiler: parse > Errors > MISSING_WHITESPACE_BETWEEN_ATTRIBUTES > <template><div id="foo"\\x0d;\\x0a;class="bar"></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -4060,7 +4060,7 @@ class="bar"></div></template>",
 }
 `;
 
-exports[`compiler: parse Errors MISSING_WHITESPACE_BETWEEN_ATTRIBUTES <template><div id="foo"class="bar"></div></template> 1`] = `
+exports[`compiler: parse > Errors > MISSING_WHITESPACE_BETWEEN_ATTRIBUTES > <template><div id="foo"class="bar"></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -4205,7 +4205,7 @@ exports[`compiler: parse Errors MISSING_WHITESPACE_BETWEEN_ATTRIBUTES <template>
 }
 `;
 
-exports[`compiler: parse Errors NESTED_COMMENT <template><!--a<!-- 1`] = `
+exports[`compiler: parse > Errors > NESTED_COMMENT > <template><!--a<!-- 1`] = `
 {
   "cached": 0,
   "children": [
@@ -4275,7 +4275,7 @@ exports[`compiler: parse Errors NESTED_COMMENT <template><!--a<!-- 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors NESTED_COMMENT <template><!--a<!--></template> 1`] = `
+exports[`compiler: parse > Errors > NESTED_COMMENT > <template><!--a<!--></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -4345,7 +4345,7 @@ exports[`compiler: parse Errors NESTED_COMMENT <template><!--a<!--></template> 1
 }
 `;
 
-exports[`compiler: parse Errors NESTED_COMMENT <template><!--a<!--b<!----></template> 1`] = `
+exports[`compiler: parse > Errors > NESTED_COMMENT > <template><!--a<!--b<!----></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -4415,7 +4415,7 @@ exports[`compiler: parse Errors NESTED_COMMENT <template><!--a<!--b<!----></temp
 }
 `;
 
-exports[`compiler: parse Errors NESTED_COMMENT <template><!--a<!--b<!--c--></template> 1`] = `
+exports[`compiler: parse > Errors > NESTED_COMMENT > <template><!--a<!--b<!--c--></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -4485,7 +4485,7 @@ exports[`compiler: parse Errors NESTED_COMMENT <template><!--a<!--b<!--c--></tem
 }
 `;
 
-exports[`compiler: parse Errors NESTED_COMMENT <template><!--a<!--b--></template> 1`] = `
+exports[`compiler: parse > Errors > NESTED_COMMENT > <template><!--a<!--b--></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -4555,7 +4555,7 @@ exports[`compiler: parse Errors NESTED_COMMENT <template><!--a<!--b--></template
 }
 `;
 
-exports[`compiler: parse Errors UNEXPECTED_CHARACTER_IN_ATTRIBUTE_NAME <template><div a"bc=''></div></template> 1`] = `
+exports[`compiler: parse > Errors > UNEXPECTED_CHARACTER_IN_ATTRIBUTE_NAME > <template><div a"bc=''></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -4666,7 +4666,7 @@ exports[`compiler: parse Errors UNEXPECTED_CHARACTER_IN_ATTRIBUTE_NAME <template
 }
 `;
 
-exports[`compiler: parse Errors UNEXPECTED_CHARACTER_IN_ATTRIBUTE_NAME <template><div a'bc=''></div></template> 1`] = `
+exports[`compiler: parse > Errors > UNEXPECTED_CHARACTER_IN_ATTRIBUTE_NAME > <template><div a'bc=''></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -4777,7 +4777,7 @@ exports[`compiler: parse Errors UNEXPECTED_CHARACTER_IN_ATTRIBUTE_NAME <template
 }
 `;
 
-exports[`compiler: parse Errors UNEXPECTED_CHARACTER_IN_ATTRIBUTE_NAME <template><div a<bc=''></div></template> 1`] = `
+exports[`compiler: parse > Errors > UNEXPECTED_CHARACTER_IN_ATTRIBUTE_NAME > <template><div a<bc=''></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -4888,7 +4888,7 @@ exports[`compiler: parse Errors UNEXPECTED_CHARACTER_IN_ATTRIBUTE_NAME <template
 }
 `;
 
-exports[`compiler: parse Errors UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE <template><div foo=bar"></div></template> 1`] = `
+exports[`compiler: parse > Errors > UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE > <template><div foo=bar"></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -4999,7 +4999,7 @@ exports[`compiler: parse Errors UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE
 }
 `;
 
-exports[`compiler: parse Errors UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE <template><div foo=bar'></div></template> 1`] = `
+exports[`compiler: parse > Errors > UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE > <template><div foo=bar'></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -5110,7 +5110,7 @@ exports[`compiler: parse Errors UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE
 }
 `;
 
-exports[`compiler: parse Errors UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE <template><div foo=bar<div></div></template> 1`] = `
+exports[`compiler: parse > Errors > UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE > <template><div foo=bar<div></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -5221,7 +5221,7 @@ exports[`compiler: parse Errors UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE
 }
 `;
 
-exports[`compiler: parse Errors UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE <template><div foo=bar=baz></div></template> 1`] = `
+exports[`compiler: parse > Errors > UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE > <template><div foo=bar=baz></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -5332,7 +5332,7 @@ exports[`compiler: parse Errors UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE
 }
 `;
 
-exports[`compiler: parse Errors UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE <template><div foo=bar\`></div></template> 1`] = `
+exports[`compiler: parse > Errors > UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE > <template><div foo=bar\`></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -5443,7 +5443,7 @@ exports[`compiler: parse Errors UNEXPECTED_CHARACTER_IN_UNQUOTED_ATTRIBUTE_VALUE
 }
 `;
 
-exports[`compiler: parse Errors UNEXPECTED_EQUALS_SIGN_BEFORE_ATTRIBUTE_NAME <template><div =></div></template> 1`] = `
+exports[`compiler: parse > Errors > UNEXPECTED_EQUALS_SIGN_BEFORE_ATTRIBUTE_NAME > <template><div =></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -5538,7 +5538,7 @@ exports[`compiler: parse Errors UNEXPECTED_EQUALS_SIGN_BEFORE_ATTRIBUTE_NAME <te
 }
 `;
 
-exports[`compiler: parse Errors UNEXPECTED_EQUALS_SIGN_BEFORE_ATTRIBUTE_NAME <template><div =foo=bar></div></template> 1`] = `
+exports[`compiler: parse > Errors > UNEXPECTED_EQUALS_SIGN_BEFORE_ATTRIBUTE_NAME > <template><div =foo=bar></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -5649,7 +5649,7 @@ exports[`compiler: parse Errors UNEXPECTED_EQUALS_SIGN_BEFORE_ATTRIBUTE_NAME <te
 }
 `;
 
-exports[`compiler: parse Errors UNEXPECTED_QUESTION_MARK_INSTEAD_OF_TAG_NAME <template><?xml?></template> 1`] = `
+exports[`compiler: parse > Errors > UNEXPECTED_QUESTION_MARK_INSTEAD_OF_TAG_NAME > <template><?xml?></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -5719,7 +5719,7 @@ exports[`compiler: parse Errors UNEXPECTED_QUESTION_MARK_INSTEAD_OF_TAG_NAME <te
 }
 `;
 
-exports[`compiler: parse Errors UNEXPECTED_SOLIDUS_IN_TAG <template><div a/b></div></template> 1`] = `
+exports[`compiler: parse > Errors > UNEXPECTED_SOLIDUS_IN_TAG > <template><div a/b></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -5832,7 +5832,7 @@ exports[`compiler: parse Errors UNEXPECTED_SOLIDUS_IN_TAG <template><div a/b></d
 }
 `;
 
-exports[`compiler: parse Errors X_INVALID_END_TAG <svg><![CDATA[</div>]]></svg> 1`] = `
+exports[`compiler: parse > Errors > X_INVALID_END_TAG > <svg><![CDATA[</div>]]></svg> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -5902,7 +5902,7 @@ exports[`compiler: parse Errors X_INVALID_END_TAG <svg><![CDATA[</div>]]></svg> 
 }
 `;
 
-exports[`compiler: parse Errors X_INVALID_END_TAG <svg><!--</div>--></svg> 1`] = `
+exports[`compiler: parse > Errors > X_INVALID_END_TAG > <svg><!--</div>--></svg> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -5972,7 +5972,7 @@ exports[`compiler: parse Errors X_INVALID_END_TAG <svg><!--</div>--></svg> 1`] =
 }
 `;
 
-exports[`compiler: parse Errors X_INVALID_END_TAG <template></div></div></template> 1`] = `
+exports[`compiler: parse > Errors > X_INVALID_END_TAG > <template></div></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -6024,7 +6024,7 @@ exports[`compiler: parse Errors X_INVALID_END_TAG <template></div></div></templa
 }
 `;
 
-exports[`compiler: parse Errors X_INVALID_END_TAG <template></div></template> 1`] = `
+exports[`compiler: parse > Errors > X_INVALID_END_TAG > <template></div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -6076,7 +6076,7 @@ exports[`compiler: parse Errors X_INVALID_END_TAG <template></div></template> 1`
 }
 `;
 
-exports[`compiler: parse Errors X_INVALID_END_TAG <template>{{'</div>'}}</template> 1`] = `
+exports[`compiler: parse > Errors > X_INVALID_END_TAG > <template>{{'</div>'}}</template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -6164,7 +6164,7 @@ exports[`compiler: parse Errors X_INVALID_END_TAG <template>{{'</div>'}}</templa
 }
 `;
 
-exports[`compiler: parse Errors X_INVALID_END_TAG <textarea></div></textarea> 1`] = `
+exports[`compiler: parse > Errors > X_INVALID_END_TAG > <textarea></div></textarea> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -6234,7 +6234,7 @@ exports[`compiler: parse Errors X_INVALID_END_TAG <textarea></div></textarea> 1`
 }
 `;
 
-exports[`compiler: parse Errors X_MISSING_DYNAMIC_DIRECTIVE_ARGUMENT_END <div v-foo:[sef fsef] /> 1`] = `
+exports[`compiler: parse > Errors > X_MISSING_DYNAMIC_DIRECTIVE_ARGUMENT_END > <div v-foo:[sef fsef] /> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -6343,7 +6343,7 @@ exports[`compiler: parse Errors X_MISSING_DYNAMIC_DIRECTIVE_ARGUMENT_END <div v-
 }
 `;
 
-exports[`compiler: parse Errors X_MISSING_END_TAG <template><div> 1`] = `
+exports[`compiler: parse > Errors > X_MISSING_END_TAG > <template><div> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -6419,7 +6419,7 @@ exports[`compiler: parse Errors X_MISSING_END_TAG <template><div> 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors X_MISSING_END_TAG <template><div></template> 1`] = `
+exports[`compiler: parse > Errors > X_MISSING_END_TAG > <template><div></template> 1`] = `
 {
   "cached": 0,
   "children": [
@@ -6495,7 +6495,7 @@ exports[`compiler: parse Errors X_MISSING_END_TAG <template><div></template> 1`]
 }
 `;
 
-exports[`compiler: parse Errors X_MISSING_INTERPOLATION_END {{ 1`] = `
+exports[`compiler: parse > Errors > X_MISSING_INTERPOLATION_END > {{ 1`] = `
 {
   "cached": 0,
   "children": [
@@ -6541,7 +6541,7 @@ exports[`compiler: parse Errors X_MISSING_INTERPOLATION_END {{ 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors X_MISSING_INTERPOLATION_END {{ foo 1`] = `
+exports[`compiler: parse > Errors > X_MISSING_INTERPOLATION_END > {{ foo 1`] = `
 {
   "cached": 0,
   "children": [
@@ -6587,7 +6587,7 @@ exports[`compiler: parse Errors X_MISSING_INTERPOLATION_END {{ foo 1`] = `
 }
 `;
 
-exports[`compiler: parse Errors X_MISSING_INTERPOLATION_END {{}} 1`] = `
+exports[`compiler: parse > Errors > X_MISSING_INTERPOLATION_END > {{}} 1`] = `
 {
   "cached": 0,
   "children": [
@@ -6651,7 +6651,7 @@ exports[`compiler: parse Errors X_MISSING_INTERPOLATION_END {{}} 1`] = `
 }
 `;
 
-exports[`compiler: parse invalid html 1`] = `
+exports[`compiler: parse > invalid html 1`] = `
 {
   "cached": 0,
   "children": [
@@ -6733,7 +6733,7 @@ exports[`compiler: parse invalid html 1`] = `
 }
 `;
 
-exports[`compiler: parse self closing multiple tag 1`] = `
+exports[`compiler: parse > self closing multiple tag 1`] = `
 {
   "cached": 0,
   "children": [
@@ -6923,7 +6923,7 @@ exports[`compiler: parse self closing multiple tag 1`] = `
 }
 `;
 
-exports[`compiler: parse valid html 1`] = `
+exports[`compiler: parse > valid html 1`] = `
 {
   "cached": 0,
   "children": [

@@ -51,19 +51,25 @@ const modifierGuards: Record<
 //   }
 // }
 //  添加vue事件修饰符对应的处理逻辑
-export const withModifiers = (fn: Function, modifiers: string[]) => {
-  return (event: Event, ...args: unknown[]) => {
-    // 在执行事件方法前，先执行修饰符对应的逻辑
-    for (let i = 0; i < modifiers.length; i++) {
-      const guard = modifierGuards[modifiers[i]]
-      // 守卫，即只允许触发相应修饰符的逻辑
-      // 如 如果点击的不是 'shift' 按键，则不处理后续逻辑
-      if (guard && guard(event, modifiers)) return
-    }
-
-    // 执行完修饰符处理逻辑，在执行最终方法
-    return fn(event, ...args)
-  }
+export const withModifiers = <
+  T extends (event: Event, ...args: unknown[]) => any
+>(
+  fn: T & { _withMods?: T },
+  modifiers: string[]
+) => {
+  return (
+    fn._withMods ||
+    (fn._withMods = ((event, ...args) => {
+      // 在执行事件方法前，先执行修饰符对应的逻辑
+      for (let i = 0; i < modifiers.length; i++) {
+        const guard = modifierGuards[modifiers[i]]
+        // 守卫，即只允许触发相应修饰符的逻辑
+        // 如 如果点击的不是 'shift' 按键，则不处理后续逻辑
+        if (guard && guard(event, modifiers)) return
+      }
+      return fn(event, ...args)
+    }) as T)
+  )
 }
 
 // Kept for 2.x compat.
@@ -81,7 +87,10 @@ const keyNames: Record<string, string | string[]> = {
 /**
  * @private
  */
-export const withKeys = (fn: Function, modifiers: string[]) => {
+export const withKeys = <T extends (event: KeyboardEvent) => any>(
+  fn: T & { _withKeys?: T },
+  modifiers: string[]
+) => {
   let globalKeyCodes: LegacyConfig['keyCodes']
   let instance: ComponentInternalInstance | null = null
   if (__COMPAT__) {
@@ -101,40 +110,43 @@ export const withKeys = (fn: Function, modifiers: string[]) => {
     }
   }
 
-  return (event: KeyboardEvent) => {
-    if (!('key' in event)) {
-      return
-    }
+  return (
+    fn._withKeys ||
+    (fn._withKeys = (event => {
+      if (!('key' in event)) {
+        return
+      }
 
-    const eventKey = hyphenate(event.key)
-    if (modifiers.some(k => k === eventKey || keyNames[k] === eventKey)) {
-      return fn(event)
-    }
-
-    if (__COMPAT__) {
-      const keyCode = String(event.keyCode)
-      if (
-        compatUtils.isCompatEnabled(
-          DeprecationTypes.V_ON_KEYCODE_MODIFIER,
-          instance
-        ) &&
-        modifiers.some(mod => mod == keyCode)
-      ) {
+      const eventKey = hyphenate(event.key)
+      if (modifiers.some(k => k === eventKey || keyNames[k] === eventKey)) {
         return fn(event)
       }
-      if (globalKeyCodes) {
-        for (const mod of modifiers) {
-          const codes = globalKeyCodes[mod]
-          if (codes) {
-            const matches = isArray(codes)
-              ? codes.some(code => String(code) === keyCode)
-              : String(codes) === keyCode
-            if (matches) {
-              return fn(event)
+
+      if (__COMPAT__) {
+        const keyCode = String(event.keyCode)
+        if (
+          compatUtils.isCompatEnabled(
+            DeprecationTypes.V_ON_KEYCODE_MODIFIER,
+            instance
+          ) &&
+          modifiers.some(mod => mod == keyCode)
+        ) {
+          return fn(event)
+        }
+        if (globalKeyCodes) {
+          for (const mod of modifiers) {
+            const codes = globalKeyCodes[mod]
+            if (codes) {
+              const matches = isArray(codes)
+                ? codes.some(code => String(code) === keyCode)
+                : String(codes) === keyCode
+              if (matches) {
+                return fn(event)
+              }
             }
           }
         }
       }
-    }
-  }
+    }) as T)
+  )
 }

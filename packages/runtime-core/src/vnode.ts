@@ -46,15 +46,15 @@ import { defineLegacyVNodeProperties } from './compat/renderFn'
 import { callWithAsyncErrorHandling, ErrorCodes } from './errorHandling'
 import { ComponentPublicInstance } from './componentPublicInstance'
 
-export const Fragment = Symbol(__DEV__ ? 'Fragment' : undefined) as any as {
+export const Fragment = Symbol.for('v-fgt') as any as {
   __isFragment: true
   new (): {
     $props: VNodeProps
   }
 }
-export const Text = Symbol(__DEV__ ? 'Text' : undefined)
-export const Comment = Symbol(__DEV__ ? 'Comment' : undefined)
-export const Static = Symbol(__DEV__ ? 'Static' : undefined)
+export const Text = Symbol.for('v-txt')
+export const Comment = Symbol.for('v-cmt')
+export const Static = Symbol.for('v-stc')
 
 export type VNodeTypes =
   | string
@@ -433,6 +433,9 @@ const normalizeRef = ({
   ref_key,
   ref_for
 }: VNodeProps): VNodeNormalizedRefAtom | null => {
+  if (typeof ref === 'number') {
+    ref = '' + ref
+  }
   return (
     ref != null
       ? isString(ref) || isRef(ref) || isFunction(ref)
@@ -515,7 +518,7 @@ function createBaseVNode(
     (vnode.patchFlag > 0 || shapeFlag & ShapeFlags.COMPONENT) &&
     // the EVENTS flag is only for hydration and if it is the only flag, the
     // vnode should not be considered dynamic due to handler caching.
-    vnode.patchFlag !== PatchFlags.HYDRATE_EVENTS // vnode 只有这一个 patch flag，则不管
+    vnode.patchFlag !== PatchFlags.NEED_HYDRATION // vnode 只有这一个 patch flag，则不管
   ) {
     currentBlock.push(vnode)
   }
@@ -606,22 +609,22 @@ function _createVNode(
   const shapeFlag = isString(type)
     ? ShapeFlags.ELEMENT // 1 - 如 执行render的 createVNode
     : __FEATURE_SUSPENSE__ && isSuspense(type)
-    ? ShapeFlags.SUSPENSE // 1 << 7 = 64
-    : isTeleport(type)
-    ? ShapeFlags.TELEPORT // 1 << 6 = 32
-    : isObject(type)
-    ? ShapeFlags.STATEFUL_COMPONENT // 1 << 2 = 4  -  vnode 类型
-    : isFunction(type)
-    ? ShapeFlags.FUNCTIONAL_COMPONENT // 1 << 1 = 2
-    : 0
+      ? ShapeFlags.SUSPENSE // 1 << 7 = 64
+      : isTeleport(type)
+        ? ShapeFlags.TELEPORT // 1 << 6 = 32
+        : isObject(type)
+          ? ShapeFlags.STATEFUL_COMPONENT // 1 << 2 = 4  -  vnode 类型
+          : isFunction(type)
+            ? ShapeFlags.FUNCTIONAL_COMPONENT // 1 << 1 = 2
+            : 0
 
   // 注意：组件节点 被转换为 响应式
   if (__DEV__ && shapeFlag & ShapeFlags.STATEFUL_COMPONENT && isProxy(type)) {
     // type：reactive/readonly
     type = toRaw(type)
     warn(
-      `Vue received a Component which was made a reactive object. This can ` +
-        `lead to unnecessary performance overhead, and should be avoided by ` +
+      `Vue received a Component that was made a reactive object. This can ` +
+        `lead to unnecessary performance overhead and should be avoided by ` +
         `marking the component with \`markRaw\` or using \`shallowRef\` ` +
         `instead of \`ref\`.`,
       `\nComponent that was made reactive: `,
@@ -712,12 +715,13 @@ export function cloneVNode<T, U>(
     ssFallback: vnode.ssFallback && cloneVNode(vnode.ssFallback),
     el: vnode.el,
     anchor: vnode.anchor,
-    ctx: vnode.ctx
+    ctx: vnode.ctx,
+    ce: vnode.ce
   }
   if (__COMPAT__) {
     defineLegacyVNodeProperties(cloned as VNode)
   }
-  return cloned as any
+  return cloned
 }
 
 /**

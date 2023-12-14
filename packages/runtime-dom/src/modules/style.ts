@@ -1,5 +1,6 @@
 import { isString, hyphenate, capitalize, isArray } from '@vue/shared'
 import { camelize, warn } from '@vue/runtime-core'
+import { vShowOldKey } from '../directives/vShow'
 
 type Style = string | Record<string, string | string[]> | null
 
@@ -36,17 +37,15 @@ export function patchStyle(el: Element, prev: Style, next: Style) {
     // 对象格式，如：(模版编译会自动转换为对象格式)
     // template 如：<span style="color: red; box-align: center;"></span>
     // VNode 则：const _hoisted_1 = /*#__PURE__*/_createVNode("span", { style: {"color":"red","box-align":"center"} }, null, -1 /* HOISTED */)
-    for (const key in next) {
-      setStyle(style, key, next[key])
-    }
-
-    // 更新时：删除style空属性null
     if (prev && !isString(prev)) {
       for (const key in prev) {
         if (next[key] == null) {
           setStyle(style, key, '')
         }
       }
+    }
+    for (const key in next) {
+      setStyle(style, key, next[key])
     }
   } else {
     const currentDisplay = style.display
@@ -64,7 +63,7 @@ export function patchStyle(el: Element, prev: Style, next: Style) {
     // indicates that the `display` of the element is controlled by `v-show`,
     // so we always keep the current `display` value regardless of the `style`
     // value, thus handing over control to `v-show`.
-    if ('_vod' in el) {
+    if (vShowOldKey in el) {
       style.display = currentDisplay
     }
   }

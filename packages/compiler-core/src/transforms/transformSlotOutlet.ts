@@ -11,7 +11,7 @@ import { isSlotOutlet, isStaticArgOf, isStaticExp } from '../utils'
 import { buildProps, PropsExpression } from './transformElement'
 import { createCompilerError, ErrorCodes } from '../errors'
 import { RENDER_SLOT } from '../runtimeHelpers'
-import { camelize } from '@vue/shared/'
+import { camelize } from '@vue/shared'
 
 // 处理标签slot元素组件：name属性、其它属性prop列表（处理方式buildProps，同transformElements）
 export const transformSlotOutlet: NodeTransform = (node, context) => {

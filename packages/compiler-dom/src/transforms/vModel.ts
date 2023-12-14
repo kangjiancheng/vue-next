@@ -4,7 +4,9 @@ import {
   ElementTypes,
   findProp,
   NodeTypes,
-  hasDynamicKeyVBind
+  hasDynamicKeyVBind,
+  findDir,
+  isStaticArgOf
 } from '@vue/compiler-core'
 import { createDOMCompilerError, DOMErrorCodes } from '../errors'
 import {
@@ -49,8 +51,8 @@ export const transformModel: DirectiveTransform = (dir, node, context) => {
 
   // 使用v-model后，就没必要再添加value属性
   function checkDuplicatedValue() {
-    const value = findProp(node, 'value')
-    if (value) {
+    const value = findDir(node, 'bind')
+    if (value && isStaticArgOf(value.arg, 'value')) {
       // 添加多余的value属性，干扰v-model，如： '<input v-model="inputValue" value="inputValue" type="text" />'
       context.onError(
         createDOMCompilerError(

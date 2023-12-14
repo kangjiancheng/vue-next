@@ -37,7 +37,9 @@ function onCompositionEnd(e: Event) {
   }
 }
 
-type ModelDirective<T> = ObjectDirective<T & { _assign: AssignerFn }>
+const assignKey = Symbol('_assign')
+
+type ModelDirective<T> = ObjectDirective<T & { [assignKey]: AssignerFn }>
 
 // 如：template: '<input v-model="inputValue" placeholder="请输入" @change="handleChange" />'
 // 则渲染code:
@@ -65,7 +67,7 @@ export const vModelText: ModelDirective<
   // vnode 刚初始化完el实例，和创建el子列表
   // created(el, binding, vnode, preVNode)
   created(el, { modifiers: { lazy, trim, number } }, vnode) {
-    el._assign = getModelAssigner(vnode)
+    el[assignKey] = getModelAssigner(vnode)
     const castToNumber =
       number || (vnode.props && vnode.props.type === 'number')
     addEventListener(el, lazy ? 'change' : 'input', e => {
@@ -77,7 +79,7 @@ export const vModelText: ModelDirective<
       if (castToNumber) {
         domValue = looseToNumber(domValue)
       }
-      el._assign(domValue)
+      el[assignKey](domValue)
     })
     if (trim) {
       addEventListener(el, 'change', () => {
@@ -100,27 +102,28 @@ export const vModelText: ModelDirective<
     el.value = value == null ? '' : value
   },
   beforeUpdate(el, { value, modifiers: { lazy, trim, number } }, vnode) {
-    el._assign = getModelAssigner(vnode)
+    el[assignKey] = getModelAssigner(vnode)
     // avoid clearing unresolved text. #2302
     if ((el as any).composing) return
+
+    const elValue =
+      number || el.type === 'number' ? looseToNumber(el.value) : el.value
+    const newValue = value == null ? '' : value
+
+    if (elValue === newValue) {
+      return
+    }
+
     if (document.activeElement === el && el.type !== 'range') {
       if (lazy) {
         return
       }
-      if (trim && el.value.trim() === value) {
-        return
-      }
-      if (
-        (number || el.type === 'number') &&
-        looseToNumber(el.value) === value
-      ) {
+      if (trim && el.value.trim() === newValue) {
         return
       }
     }
-    const newValue = value == null ? '' : value
-    if (el.value !== newValue) {
-      el.value = newValue
-    }
+
+    el.value = newValue
   }
 }
 
@@ -128,12 +131,12 @@ export const vModelCheckbox: ModelDirective<HTMLInputElement> = {
   // #4096 array checkboxes need to be deep traversed
   deep: true,
   created(el, _, vnode) {
-    el._assign = getModelAssigner(vnode)
+    el[assignKey] = getModelAssigner(vnode)
     addEventListener(el, 'change', () => {
       const modelValue = (el as any)._modelValue
       const elementValue = getValue(el)
       const checked = el.checked
-      const assign = el._assign
+      const assign = el[assignKey]
       if (isArray(modelValue)) {
         const index = looseIndexOf(modelValue, elementValue)
         const found = index !== -1
@@ -160,7 +163,7 @@ export const vModelCheckbox: ModelDirective<HTMLInputElement> = {
   // set initial checked on mount to wait for true-value/false-value
   mounted: setChecked,
   beforeUpdate(el, binding, vnode) {
-    el._assign = getModelAssigner(vnode)
+    el[assignKey] = getModelAssigner(vnode)
     setChecked(el, binding, vnode)
   }
 }
@@ -185,13 +188,13 @@ function setChecked(
 export const vModelRadio: ModelDirective<HTMLInputElement> = {
   created(el, { value }, vnode) {
     el.checked = looseEqual(value, vnode.props!.value)
-    el._assign = getModelAssigner(vnode)
+    el[assignKey] = getModelAssigner(vnode)
     addEventListener(el, 'change', () => {
-      el._assign(getValue(el))
+      el[assignKey](getValue(el))
     })
   },
   beforeUpdate(el, { value, oldValue }, vnode) {
-    el._assign = getModelAssigner(vnode)
+    el[assignKey] = getModelAssigner(vnode)
     if (value !== oldValue) {
       el.checked = looseEqual(value, vnode.props!.value)
     }
@@ -209,7 +212,7 @@ export const vModelSelect: ModelDirective<HTMLSelectElement> = {
         .map((o: HTMLOptionElement) =>
           number ? looseToNumber(getValue(o)) : getValue(o)
         )
-      el._assign(
+      el[assignKey](
         el.multiple
           ? isSetModel
             ? new Set(selectedVal)
@@ -217,7 +220,7 @@ export const vModelSelect: ModelDirective<HTMLSelectElement> = {
           : selectedVal[0]
       )
     })
-    el._assign = getModelAssigner(vnode)
+    el[assignKey] = getModelAssigner(vnode)
   },
   // set value in mounted & updated because <select> relies on its children
   // <option>s.
@@ -225,7 +228,7 @@ export const vModelSelect: ModelDirective<HTMLSelectElement> = {
     setSelected(el, value)
   },
   beforeUpdate(el, _binding, vnode) {
-    el._assign = getModelAssigner(vnode)
+    el[assignKey] = getModelAssigner(vnode)
   },
   updated(el, { value }) {
     setSelected(el, value)

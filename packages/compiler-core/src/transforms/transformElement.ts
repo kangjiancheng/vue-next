@@ -19,7 +19,8 @@ import {
   TemplateTextChildNode,
   DirectiveArguments,
   createVNodeCall,
-  ConstantTypes
+  ConstantTypes,
+  JSChildNode
 } from '../ast'
 import {
   PatchFlags,
@@ -275,13 +276,14 @@ export const transformElement: NodeTransform = (node, context) => {
           // HOISTED = -1
           // BAIL = -2
           // special flags (negative and mutually exclusive)
-          vnodePatchFlag = patchFlag + ` /* ${PatchFlagNames[patchFlag]} */`
+          vnodePatchFlag =
+            patchFlag + ` /* ${PatchFlagNames[patchFlag as PatchFlags]} */`
         } else {
           // bitwise flags
           const flagNames = Object.keys(PatchFlagNames)
             .map(Number)
             .filter(n => n > 0 && patchFlag & n) // 进行 按位与 操作， 取出对应的patchFlag值 （patchFlag 初始为0，通过 按位或 变更）
-            .map(n => PatchFlagNames[n]) // 对应的名字
+            .map(n => PatchFlagNames[n as PatchFlags]) // 对应的名字
             .join(`, `)
           vnodePatchFlag = patchFlag + ` /* ${flagNames} */` // 记录需要进行vnode diff 的patchflag和其开发帮助的文本信息
         }
@@ -361,9 +363,14 @@ export function resolveComponentType(
     }
   }
 
-  // 1.5 v-is (TODO: Deprecate)
+  // 1.5 v-is (TODO: remove in 3.4)
   const isDir = !isExplicitDynamic && findDir(node, 'is')
   if (isDir && isDir.exp) {
+    if (__DEV__) {
+      context.onWarn(
+        createCompilerError(ErrorCodes.DEPRECATION_V_IS, isDir.loc)
+      )
+    }
     return createCallExpression(context.helper(RESOLVE_DYNAMIC_COMPONENT), [
       isDir.exp
     ])
@@ -441,7 +448,8 @@ function resolveSetupReference(name: string, context: TransformContext) {
 
   const fromConst =
     checkType(BindingTypes.SETUP_CONST) ||
-    checkType(BindingTypes.SETUP_REACTIVE_CONST)
+    checkType(BindingTypes.SETUP_REACTIVE_CONST) ||
+    checkType(BindingTypes.LITERAL_CONST)
   if (fromConst) {
     return context.inline
       ? // in inline mode, const setup bindings (e.g. imports) can be used as-is
@@ -458,6 +466,13 @@ function resolveSetupReference(name: string, context: TransformContext) {
       ? // setup scope bindings that may be refs need to be unrefed
         `${context.helperString(UNREF)}(${fromMaybeRef})`
       : `$setup[${JSON.stringify(fromMaybeRef)}]`
+  }
+
+  const fromProps = checkType(BindingTypes.PROPS)
+  if (fromProps) {
+    return `${context.helperString(UNREF)}(${
+      context.inline ? '__props' : '$props'
+    }[${JSON.stringify(fromProps)}])`
   }
 }
 
@@ -557,6 +572,12 @@ export function buildProps(
       //     属性名的value type: SIMPLE_EXPRESSION ConstantType =0，属性值的value: COMPOUND_EXPRESSION ConstantType =0, 修饰符的value：SIMPLE_EXPRESSION ConstantType =0
       // v-html 指令，SIMPLE_EXPRESSION ConstantType =0
       // v-text 指令，JS_CALL_EXPRESSION ConstantType = 0
+      if (isEventHandler && value.type === NodeTypes.JS_CALL_EXPRESSION) {
+        // handler wrapped with internal helper e.g. withModifiers(fn)
+        // extract the actual expression
+        value = value.arguments[0] as JSChildNode
+      }
+
       if (
         value.type === NodeTypes.JS_CACHE_EXPRESSION || // 解析v-on指令时，如果设置了shouldCache，则 context.cache() 会生成JS_CACHE_EXPRESSION
         ((value.type === NodeTypes.SIMPLE_EXPRESSION ||
@@ -669,8 +690,7 @@ export function buildProps(
       )
     } else {
       // directives 指令属性，合并去重，转换处理指令
-
-      const { name, arg, exp, loc } = prop
+      const { name, arg, exp, loc, modifiers } = prop
       const isVBind = name === 'bind'
       const isVOn = name === 'on'
 
@@ -835,6 +855,12 @@ export function buildProps(
       //      show: transformShow // 解析v-show，必须设置属性值，返回空属性列表[]，设置needRuntime
       //    }
       // 解析指令: on、bind、model、html、text、show、cloak，注意其它指令v-if/v-for/slot等 transform会注入特有属性injectProps，比如key
+
+      // force hydration for v-bind with .prop modifier
+      if (isVBind && modifiers.includes('prop')) {
+        patchFlag |= PatchFlags.NEED_HYDRATION
+      }
+
       const directiveTransform = context.directiveTransforms[name]
       if (directiveTransform) {
         // has built-in directive transform.
@@ -922,12 +948,12 @@ export function buildProps(
     }
     if (hasHydrationEventBinding) {
       // dom添加其它事件绑定 或 prop转换后以on开头的事件(如v-model)： 非组件且以on开头，但不包括click事件，非vnodehook事件
-      patchFlag |= PatchFlags.HYDRATE_EVENTS
+      patchFlag |= PatchFlags.NEED_HYDRATION
     }
   }
   if (
     !shouldUseBlock &&
-    (patchFlag === 0 || patchFlag === PatchFlags.HYDRATE_EVENTS) &&
+    (patchFlag === 0 || patchFlag === PatchFlags.NEED_HYDRATION) &&
     (hasRef || hasVnodeHook || runtimeDirectives.length > 0)
   ) {
     patchFlag |= PatchFlags.NEED_PATCH

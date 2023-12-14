@@ -1,5 +1,5 @@
 import { TrackOpTypes, TriggerOpTypes } from './operations'
-import { extend, isArray, isIntegerKey, isMap } from '@vue/shared'
+import { extend, isArray, isIntegerKey, isMap, isSymbol } from '@vue/shared'
 import { EffectScope, recordEffectScope } from './effectScope'
 import {
   createDep,
@@ -16,7 +16,7 @@ import { ComputedRefImpl } from './computed'
 // which maintains a Set of subscribers, but we simply store them as
 // raw Sets to reduce memory overhead.
 type KeyToDepMap = Map<any, Dep>
-const targetMap = new WeakMap<any, KeyToDepMap>() // 保存响应式ref数据对象 -> 响应式数据对象key -> 依赖的组件effect集合
+const targetMap = new WeakMap<object, KeyToDepMap>() // 保存响应式ref数据对象 -> 响应式数据对象key -> 依赖的组件effect集合
 
 // The number of effects currently being tracked recursively.
 let effectTrackDepth = 0
@@ -171,11 +171,21 @@ export interface ReactiveEffectRunner<T = any> {
   effect: ReactiveEffect
 }
 
+/**
+ * Registers the given function to track reactive updates.
+ *
+ * The given function will be run once immediately. Every time any reactive
+ * property that's accessed within it gets updated, the function will run again.
+ *
+ * @param fn - The function that will track reactive updates.
+ * @param options - Allows to control the effect's behaviour.
+ * @returns A runner that can be used to control the effect after creation.
+ */
 export function effect<T = any>(
   fn: () => T,
   options?: ReactiveEffectOptions
 ): ReactiveEffectRunner {
-  if ((fn as ReactiveEffectRunner).effect) {
+  if ((fn as ReactiveEffectRunner).effect instanceof ReactiveEffect) {
     fn = (fn as ReactiveEffectRunner).effect.fn
   }
 
@@ -192,6 +202,11 @@ export function effect<T = any>(
   return runner
 }
 
+/**
+ * Stops the effect associated with the given runner.
+ *
+ * @param runner - Association with the effect to stop tracking.
+ */
 export function stop(runner: ReactiveEffectRunner) {
   runner.effect.stop()
 }
@@ -200,18 +215,27 @@ export let shouldTrack = true // 默认需要跟踪
 const trackStack: boolean[] = []
 
 // 暂停跟踪 vue组件数据状态
+/**
+ * Temporarily pauses tracking.
+ */
 export function pauseTracking() {
   trackStack.push(shouldTrack) // 跟踪队列
   shouldTrack = false // 如执行setup函数时，没必要对ctx内部数据状态变化进行跟踪响应
 }
 
 // 启动跟踪
+/**
+ * Re-enables effect tracking (if it was paused).
+ */
 export function enableTracking() {
   trackStack.push(shouldTrack)
   shouldTrack = true
 }
 
 // 恢复跟踪状态
+/**
+ * Resets the previous global effect tracking state.
+ */
 export function resetTracking() {
   const last = trackStack.pop() // 如执行完setup函数后，回复对组件数据读取的跟踪
   shouldTrack = last === undefined ? true : last //默认跟踪
@@ -219,6 +243,16 @@ export function resetTracking() {
 
 // 跟踪某个响应对象的某个属性 所依赖的组件effect（执行组件渲染函数期间、或执行watch/computed期间）
 // 如 const count = ref(1); track(toRaw(count), TrackOpTypes.GET, 'value')
+/**
+ * Tracks access to a reactive property.
+ *
+ * This will check which effect is running at the moment and record it as dep
+ * which records all effects that depend on the reactive property.
+ *
+ * @param target - Object holding the reactive property.
+ * @param type - Defines the type of access to the reactive property.
+ * @param key - Identifier of the reactive property to track.
+ */
 export function track(target: object, type: TrackOpTypes, key: unknown) {
   // targetMap: {
   //    target - 响应式对象: {
@@ -266,15 +300,27 @@ export function trackEffects(
     dep.add(activeEffect!)
     activeEffect!.deps.push(dep) // 组件effect函数（或watch监听目标）依赖此响应式对象的这个属性
     if (__DEV__ && activeEffect!.onTrack) {
-      activeEffect!.onTrack({
-        effect: activeEffect!,
-        ...debuggerEventExtraInfo!
-      })
+      activeEffect!.onTrack(
+        extend(
+          {
+            effect: activeEffect!
+          },
+          debuggerEventExtraInfo!
+        )
+      )
     }
   }
 }
 
 // 触发key 对应的 依赖的组件effect列表更新 deps
+/**
+ * Finds all deps associated with the target (or a specific property) and
+ * triggers the effects stored within.
+ *
+ * @param target - The reactive object.
+ * @param type - Defines the type of the operation that needs to trigger effects.
+ * @param key - Can be used to target a specific reactive property in the target object.
+ */
 export function trigger(
   target: object, // 修改的对象
   type: TriggerOpTypes, // 触发方式 如 set 改值
@@ -307,7 +353,7 @@ export function trigger(
     // 数组清空
     const newLength = Number(newValue)
     depsMap.forEach((dep, key) => {
-      if (key === 'length' || key >= newLength) {
+      if (key === 'length' || (!isSymbol(key) && key >= newLength)) {
         deps.push(dep)
       }
     })
@@ -409,4 +455,8 @@ function triggerEffect(
       effect.run() // 依次触发key所依赖组件effect列表更新
     }
   }
+}
+
+export function getDepFromReactive(object: any, key: string | number | symbol) {
+  return targetMap.get(object)?.get(key)
 }

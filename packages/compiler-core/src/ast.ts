@@ -7,11 +7,14 @@ import {
   OPEN_BLOCK,
   FRAGMENT,
   WITH_DIRECTIVES,
-  WITH_MEMO
+  WITH_MEMO,
+  CREATE_VNODE,
+  CREATE_ELEMENT_VNODE,
+  CREATE_BLOCK,
+  CREATE_ELEMENT_BLOCK
 } from './runtimeHelpers'
 import { PropsExpression } from './transforms/transformElement'
 import { ImportItem, TransformContext } from './transform'
-import { getVNodeBlockHelper, getVNodeHelper } from './utils'
 
 // Vue template is a platform-agnostic superset of HTML (syntax only).
 // More namespaces like SVG and MathML are declared by platform specific
@@ -832,5 +835,36 @@ export function createReturnStatement(
     type: NodeTypes.JS_RETURN_STATEMENT,
     returns,
     loc: locStub
+  }
+}
+
+// 将template元素上的key 属性注入到子节点属性列表中去
+
+// 场景一：注入到slot元素属性列表中去，如：
+// 在解析v-for指令中，<template v-for="..." key="..."><slot></slot></template>
+// node: slotOutlet.codegenNode， 其中slot在transformSlotOutlet解析所得
+
+// 场景二：注入到普通元素节点，此时template v-for 只有一个子元素，则需要将key属性注入到，如：
+// <template v-for="..." :key="..."><div>...</div></template>
+// 则其node，即子节点： <div>...</div> 的codegenNode 在 transformElement节点生成 createVNodeCall
+
+// 场景三：在解析v-if指令时，将if在兄弟节点中的位置key（系统），注入到 如：<div v-if="true" v-for="item in items"></div>
+export function getVNodeHelper(ssr: boolean, isComponent: boolean) {
+  return ssr || isComponent ? CREATE_VNODE : CREATE_ELEMENT_VNODE
+}
+
+export function getVNodeBlockHelper(ssr: boolean, isComponent: boolean) {
+  return ssr || isComponent ? CREATE_BLOCK : CREATE_ELEMENT_BLOCK
+}
+
+export function convertToBlock(
+  node: VNodeCall,
+  { helper, removeHelper, inSSR }: TransformContext
+) {
+  if (!node.isBlock) {
+    node.isBlock = true
+    removeHelper(getVNodeHelper(inSSR, node.isComponent))
+    helper(OPEN_BLOCK)
+    helper(getVNodeBlockHelper(inSSR, node.isComponent))
   }
 }

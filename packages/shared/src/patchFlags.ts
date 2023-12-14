@@ -57,7 +57,12 @@ export const enum PatchFlags {
   FULL_PROPS = 1 << 4,
 
   // dom添加其它事件绑定 或 prop转换后以on开头的事件(如v-model)： 非组件且以on开头，但不包括click事件，非vue内置的vnodehook事件
-  HYDRATE_EVENTS = 1 << 5,
+  /**
+   * Indicates an element that requires props hydration
+   * (but not necessarily patching)
+   * e.g. event listeners & v-bind with prop modifier
+   */
+  NEED_HYDRATION = 1 << 5,
 
   // 检测到节点子元素顺序未改变时，在compiler-core 解析v-for指令时：（为了包裹子内容）
   // 当前节点（非slot标签）下，存在多个子节点，如：<template v-for="..."><div>...</div><div>...</div></template>
@@ -105,15 +110,17 @@ export const enum PatchFlags {
   BAIL = -2
 }
 
-// dev only flag -> name mapping
-// 匹配名字类别
-export const PatchFlagNames = {
+/**
+ * dev only flag -> name mapping
+ * 匹配名字类别
+ */
+export const PatchFlagNames: Record<PatchFlags, string> = {
   [PatchFlags.TEXT]: `TEXT`, // 1
   [PatchFlags.CLASS]: `CLASS`, // 2
   [PatchFlags.STYLE]: `STYLE`, // 4
   [PatchFlags.PROPS]: `PROPS`, // 8
   [PatchFlags.FULL_PROPS]: `FULL_PROPS`, // 16
-  [PatchFlags.HYDRATE_EVENTS]: `HYDRATE_EVENTS`, // 32
+  [PatchFlags.NEED_HYDRATION]: `NEED_HYDRATION`, // 32
   [PatchFlags.STABLE_FRAGMENT]: `STABLE_FRAGMENT`, // 64
   [PatchFlags.KEYED_FRAGMENT]: `KEYED_FRAGMENT`, // 128
   [PatchFlags.UNKEYED_FRAGMENT]: `UNKEYED_FRAGMENT`, // 256
