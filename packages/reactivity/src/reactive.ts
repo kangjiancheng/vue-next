@@ -1,25 +1,19 @@
-import { isObject, toRawType, def } from '@vue/shared'
+import { def, isObject, toRawType } from '@vue/shared'
 import {
   mutableHandlers,
   readonlyHandlers,
   shallowReactiveHandlers,
-  shallowReadonlyHandlers
+  shallowReadonlyHandlers,
 } from './baseHandlers'
 import {
   mutableCollectionHandlers,
   readonlyCollectionHandlers,
   shallowCollectionHandlers,
-  shallowReadonlyCollectionHandlers
+  shallowReadonlyCollectionHandlers,
 } from './collectionHandlers'
-import type { UnwrapRefSimple, Ref, RawSymbol } from './ref'
-
-export const enum ReactiveFlags {
-  SKIP = '__v_skip',
-  IS_REACTIVE = '__v_isReactive',
-  IS_READONLY = '__v_isReadonly',
-  IS_SHALLOW = '__v_isShallow',
-  RAW = '__v_raw'
-}
+import type { RawSymbol, Ref, UnwrapRefSimple } from './ref'
+import { ReactiveFlags } from './constants'
+import { warn } from './warning'
 
 export interface Target {
   [ReactiveFlags.SKIP]?: boolean
@@ -34,10 +28,10 @@ export const shallowReactiveMap = new WeakMap<Target, any>() // 响应式对象�
 export const readonlyMap = new WeakMap<Target, any>()
 export const shallowReadonlyMap = new WeakMap<Target, any>()
 
-const enum TargetType {
+enum TargetType {
   INVALID = 0,
   COMMON = 1,
-  COLLECTION = 2
+  COLLECTION = 2,
 }
 
 function targetTypeMap(rawType: string) {
@@ -72,6 +66,15 @@ function getTargetType(value: Target) {
 // only unwrap nested ref
 export type UnwrapNestedRefs<T> = T extends Ref ? T : UnwrapRefSimple<T>
 
+declare const ReactiveMarkerSymbol: unique symbol
+
+export declare class ReactiveMarker {
+  private [ReactiveMarkerSymbol]?: void
+}
+
+export type Reactive<T> = UnwrapNestedRefs<T> &
+  (T extends readonly any[] ? ReactiveMarker : {})
+
 /**
  * Returns a reactive proxy of the object.
  *
@@ -88,7 +91,7 @@ export type UnwrapNestedRefs<T> = T extends Ref ? T : UnwrapRefSimple<T>
  * @see {@link https://vuejs.org/api/reactivity-core.html#reactive}
  */
 // 将对象 转换为 响应式对象
-export function reactive<T extends object>(target: T): UnwrapNestedRefs<T>
+export function reactive<T extends object>(target: T): Reactive<T>
 export function reactive(target: object) {
   // if trying to observe a readonly proxy, return the readonly version.
   if (isReadonly(target)) {
@@ -100,7 +103,7 @@ export function reactive(target: object) {
     false,
     mutableHandlers, // proxy 普通对象 - COMMON： Array、Object
     mutableCollectionHandlers, // proxy 集合对象 - COLLECTION: Map、Set、WeakMap、WeakSet
-    reactiveMap
+    reactiveMap,
   )
 }
 
@@ -140,20 +143,19 @@ export type ShallowReactive<T> = T & { [ShallowReactiveMarker]?: true }
  */
 // 不进行深层次代理响应：即如果访问该对象的属性时，如果属性值为对象，则直接返回结果，而不是进行响应转换该属性值，但会进行跟踪并收集依赖
 export function shallowReactive<T extends object>(
-  // 创建target 代理proxy响应式d对象
-  target: T
+  target: T, // 创建target 代理proxy响应式d对象
 ): ShallowReactive<T> {
   return createReactiveObject(
     target,
     false, // reactiveMap
     shallowReactiveHandlers, // TargetType.COMMON，即target 类型为：Array、Object
     shallowCollectionHandlers, // TargetType.COLLECTION，即target 类型为：Map、Set、WeakMap、WeakSet
-    shallowReactiveMap
+    shallowReactiveMap,
   )
 }
 
 type Primitive = string | number | boolean | bigint | symbol | undefined | null
-type Builtin = Primitive | Function | Date | Error | RegExp
+export type Builtin = Primitive | Function | Date | Error | RegExp
 export type DeepReadonly<T> = T extends Builtin
   ? T
   : T extends Map<infer K, infer V>
@@ -206,14 +208,14 @@ export type DeepReadonly<T> = T extends Builtin
  * @see {@link https://vuejs.org/api/reactivity-core.html#readonly}
  */
 export function readonly<T extends object>(
-  target: T
+  target: T,
 ): DeepReadonly<UnwrapNestedRefs<T>> {
   return createReactiveObject(
     target,
     true,
     readonlyHandlers,
     readonlyCollectionHandlers,
-    readonlyMap
+    readonlyMap,
   )
 }
 
@@ -255,7 +257,7 @@ export function shallowReadonly<T extends object>(target: T): Readonly<T> {
     true,
     shallowReadonlyHandlers,
     shallowReadonlyCollectionHandlers,
-    shallowReadonlyMap
+    shallowReadonlyMap,
   )
 }
 
@@ -265,11 +267,15 @@ function createReactiveObject(
   isReadonly: boolean,
   baseHandlers: ProxyHandler<any>, // proxy 普通对象 - COMMON： Array、Object
   collectionHandlers: ProxyHandler<any>, // proxy 集合对象 - COLLECTION: Map、Set、WeakMap、WeakSet
-  proxyMap: WeakMap<Target, any> // 收集只读、响应式对象
+  proxyMap: WeakMap<Target, any>, // 收集只读、响应式对象
 ) {
   if (!isObject(target)) {
     if (__DEV__) {
-      console.warn(`value cannot be made reactive: ${String(target)}`)
+      warn(
+        `value cannot be made ${isReadonly ? 'readonly' : 'reactive'}: ${String(
+          target,
+        )}`,
+      )
     }
     return target
   }
@@ -299,7 +305,7 @@ function createReactiveObject(
   // 代理响应式对象
   const proxy = new Proxy(
     target,
-    targetType === TargetType.COLLECTION ? collectionHandlers : baseHandlers
+    targetType === TargetType.COLLECTION ? collectionHandlers : baseHandlers,
   )
   proxyMap.set(target, proxy)
   return proxy
@@ -357,8 +363,8 @@ export function isShallow(value: unknown): boolean {
  * @param value - The value to check.
  * @see {@link https://vuejs.org/api/reactivity-utilities.html#isproxy}
  */
-export function isProxy(value: unknown): boolean {
-  return isReactive(value) || isReadonly(value)
+export function isProxy(value: any): boolean {
+  return value ? !!value[ReactiveFlags.RAW] : false
 }
 
 /**
@@ -415,9 +421,11 @@ export type Raw<T> = T & { [RawSymbol]?: true }
  * @see {@link https://vuejs.org/api/reactivity-advanced.html#markraw}
  */
 export function markRaw<T extends object>(value: T): Raw<T> {
-  // Object.defineProperty =》 value.__v_skip = true
-  // 标记为 __v_skip
-  def(value, ReactiveFlags.SKIP, true)
+  if (Object.isExtensible(value)) {
+    // Object.defineProperty =》 value.__v_skip = true
+    // 标记为 __v_skip
+    def(value, ReactiveFlags.SKIP, true)
+  }
   return value
 }
 
@@ -438,5 +446,5 @@ export const toReactive = <T extends unknown>(value: T): T =>
  *
  * @param value - The value for which a readonly proxy shall be created.
  */
-export const toReadonly = <T extends unknown>(value: T): T =>
-  isObject(value) ? readonly(value) : value
+export const toReadonly = <T extends unknown>(value: T): DeepReadonly<T> =>
+  isObject(value) ? readonly(value) : (value as DeepReadonly<T>)

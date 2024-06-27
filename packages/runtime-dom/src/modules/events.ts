@@ -1,8 +1,9 @@
-import { hyphenate, isArray } from '@vue/shared'
+import { NOOP, hyphenate, isArray, isFunction } from '@vue/shared'
 import {
+  type ComponentInternalInstance,
   ErrorCodes,
-  ComponentInternalInstance,
-  callWithAsyncErrorHandling
+  callWithAsyncErrorHandling,
+  warn,
 } from '@vue/runtime-core'
 
 interface Invoker extends EventListener {
@@ -16,7 +17,7 @@ export function addEventListener(
   el: Element,
   event: string,
   handler: EventListener,
-  options?: EventListenerOptions
+  options?: EventListenerOptions,
 ) {
   // https://developer.mozilla.org/zh-CN/docs/Web/API/EventTarget/addEventListener
   el.addEventListener(event, handler, options)
@@ -26,7 +27,7 @@ export function removeEventListener(
   el: Element,
   event: string,
   handler: EventListener,
-  options?: EventListenerOptions
+  options?: EventListenerOptions,
 ) {
   el.removeEventListener(event, handler, options)
 }
@@ -44,8 +45,8 @@ export function patchEvent(
   el: Element & { [veiKey]?: Record<string, Invoker | undefined> },
   rawName: string, // vue事件属性名
   prevValue: EventValue | null,
-  nextValue: EventValue | null, // 事件属性值，即事件处理函数
-  instance: ComponentInternalInstance | null = null // vnode父组件实例，即vnode所在的模版template的组件
+  nextValue: EventValue | unknown, // 事件属性值，即事件处理函数
+  instance: ComponentInternalInstance | null = null, // vnode父组件实例，即vnode所在的模版template的组件
 ) {
   // vue事件，如 @click 则 ，rawName = 'onClick'
   // vei = vue event invokers
@@ -54,7 +55,9 @@ export function patchEvent(
   if (nextValue && existingInvoker) {
     // 事件已存在，更换新事件处理函数
     // patch
-    existingInvoker.value = nextValue
+    existingInvoker.value = __DEV__
+      ? sanitizeEventValue(nextValue, rawName)
+      : (nextValue as EventValue)
   } else {
     // 添加新事件
 
@@ -62,7 +65,13 @@ export function patchEvent(
     const [name, options] = parseName(rawName)
     if (nextValue) {
       // add 添加事件与事件处理函数
-      const invoker = (invokers[rawName] = createInvoker(nextValue, instance)) // 封装事件监听处理器
+      const invoker = (invokers[rawName] = createInvoker(
+        // 封装事件监听处理器
+        __DEV__
+          ? sanitizeEventValue(nextValue, rawName)
+          : (nextValue as EventValue),
+        instance,
+      ))
       addEventListener(el, name, invoker, options)
     } else if (existingInvoker) {
       // 如果只有事件名，没有事件处理函数
@@ -113,7 +122,7 @@ const getNow = () =>
 // https://developer.mozilla.org/zh-CN/docs/Web/API/EventTarget/addEventListener
 function createInvoker(
   initialValue: EventValue, // 事件属性值，即事件处理函数，如 handleClick
-  instance: ComponentInternalInstance | null // vnode 所在的组件实例
+  instance: ComponentInternalInstance | null, // vnode 所在的组件实例
 ) {
   const invoker: Invoker = (e: Event & { _vts?: number }) => {
     // async edge case vuejs/vue#6566
@@ -138,7 +147,7 @@ function createInvoker(
       patchStopImmediatePropagation(e, invoker.value),
       instance,
       ErrorCodes.NATIVE_EVENT_HANDLER,
-      [e]
+      [e],
     )
   }
   invoker.value = initialValue // 保存事件处理函数
@@ -146,9 +155,20 @@ function createInvoker(
   return invoker
 }
 
+function sanitizeEventValue(value: unknown, propName: string): EventValue {
+  if (isFunction(value) || isArray(value)) {
+    return value as EventValue
+  }
+  warn(
+    `Wrong type passed as event handler to ${propName} - did you forget @ or : ` +
+      `in front of your prop?\nExpected function or array of functions, received type ${typeof value}.`,
+  )
+  return NOOP
+}
+
 function patchStopImmediatePropagation(
   e: Event,
-  value: EventValue
+  value: EventValue,
 ): EventValue {
   if (isArray(value)) {
     // stopImmediatePropagation：用于取消所有后续事件捕获或事件冒泡，并阻止调用任何后续事件处理程序
@@ -157,7 +177,9 @@ function patchStopImmediatePropagation(
       originalStop.call(e)
       ;(e as any)._stopped = true
     }
-    return value.map(fn => (e: Event) => !(e as any)._stopped && fn && fn(e))
+    return (value as Function[]).map(
+      fn => (e: Event) => !(e as any)._stopped && fn && fn(e),
+    )
   } else {
     return value
   }

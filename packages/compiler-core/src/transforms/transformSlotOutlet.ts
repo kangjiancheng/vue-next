@@ -1,17 +1,19 @@
-import { NodeTransform, TransformContext } from '../transform'
+import type { NodeTransform, TransformContext } from '../transform'
 import {
+  type CallExpression,
+  type ExpressionNode,
   NodeTypes,
-  CallExpression,
+  type SlotOutletNode,
   createCallExpression,
-  ExpressionNode,
-  SlotOutletNode,
-  createFunctionExpression
+  createFunctionExpression,
+  createSimpleExpression,
 } from '../ast'
 import { isSlotOutlet, isStaticArgOf, isStaticExp } from '../utils'
-import { buildProps, PropsExpression } from './transformElement'
-import { createCompilerError, ErrorCodes } from '../errors'
+import { type PropsExpression, buildProps } from './transformElement'
+import { ErrorCodes, createCompilerError } from '../errors'
 import { RENDER_SLOT } from '../runtimeHelpers'
 import { camelize } from '@vue/shared'
+import { processExpression } from './transformExpression'
 
 // 处理标签slot元素组件：name属性、其它属性prop列表（处理方式buildProps，同transformElements）
 export const transformSlotOutlet: NodeTransform = (node, context) => {
@@ -29,7 +31,7 @@ export const transformSlotOutlet: NodeTransform = (node, context) => {
       slotName,
       '{}',
       'undefined',
-      'true'
+      'true',
     ]
     let expectedLen = 2
 
@@ -60,7 +62,7 @@ export const transformSlotOutlet: NodeTransform = (node, context) => {
     node.codegenNode = createCallExpression(
       context.helper(RENDER_SLOT), // RENDER_SLOT = Symbol(__DEV__ ? `renderSlot` : ``)
       slotArgs,
-      loc
+      loc,
     )
   }
 }
@@ -73,7 +75,7 @@ interface SlotOutletProcessResult {
 // 解析slot元素的name属性、解析slot元素其它属性buildProps
 export function processSlotOutlet(
   node: SlotOutletNode,
-  context: TransformContext
+  context: TransformContext,
 ): SlotOutletProcessResult {
   let slotName: string | ExpressionNode = `"default"` // slot 插槽名 静态/动态：'<slot name="default"></slot>'
   let slotProps: PropsExpression | undefined = undefined // 经解析后的props列表（同transformElement中的元素/组件上prop解析过程）：已处理所有属性包括静态属性、静态/动态指令属性，并进行了合并去重处理
@@ -99,7 +101,15 @@ export function processSlotOutlet(
       // 动态属性
       if (p.name === 'bind' && isStaticArgOf(p.arg, 'name')) {
         // 动态 name，如: '<slot :name="slotName"></slot>'
-        if (p.exp) slotName = p.exp
+        if (p.exp) {
+          slotName = p.exp
+        } else if (p.arg && p.arg.type === NodeTypes.SIMPLE_EXPRESSION) {
+          const name = camelize(p.arg.content)
+          slotName = p.exp = createSimpleExpression(name, false, p.arg.loc)
+          if (!__BROWSER__) {
+            slotName = p.exp = processExpression(p.exp, context)
+          }
+        }
       } else {
         // 非name
         if (p.name === 'bind' && p.arg && isStaticExp(p.arg)) {
@@ -119,7 +129,7 @@ export function processSlotOutlet(
       context,
       nonNameProps,
       false,
-      false
+      false,
     )
     slotProps = props // 解析后的props列表
 
@@ -127,15 +137,15 @@ export function processSlotOutlet(
       // 不可以添加用户自定义指令
       context.onError(
         createCompilerError(
-          ErrorCodes.X_V_SLOT_UNEXPECTED_DIRECTIVE_ON_SLOT_OUTLET, // Unexpected custom directive on <slot> outlet.
-          directives[0].loc
-        )
+          ErrorCodes.X_V_SLOT_UNEXPECTED_DIRECTIVE_ON_SLOT_OUTLET,
+          directives[0].loc,
+        ),
       )
     }
   }
 
   return {
     slotName, // slot 名字name
-    slotProps // 经解析后的props列表（同transformElement中的prop解析过程）：已处理所有属性包括静态属性、静态/动态指令属性，并进行了合并去重处理
+    slotProps, // 经解析后的props列表（同transformElement中的prop解析过程）：已处理所有属性包括静态属性、静态/动态指令属性，并进行了合并去重处理
   }
 }

@@ -1,6 +1,7 @@
-import { RendererOptions } from '@vue/runtime-core'
+import type { RendererOptions } from '@vue/runtime-core'
 
 export const svgNS = 'http://www.w3.org/2000/svg'
+export const mathmlNS = 'http://www.w3.org/1998/Math/MathML'
 
 const doc = (typeof document !== 'undefined' ? document : null) as Document
 
@@ -20,10 +21,15 @@ export const nodeOps: Omit<RendererOptions<Node, Element>, 'patchProp'> = {
 
   // 创建一个由标签名称 tag 指定的 HTML 元素
   // https://developer.mozilla.org/zh-CN/docs/Web/API/Document/createElement
-  createElement: (tag, isSVG, is, props): Element => {
-    const el = isSVG
-      ? doc.createElementNS(svgNS, tag)
-      : doc.createElement(tag, is ? { is } : undefined) // is 为官方可选属性
+  createElement: (tag, namespace, is, props): Element => {
+    const el =
+      namespace === 'svg'
+        ? doc.createElementNS(svgNS, tag)
+        : namespace === 'mathml'
+          ? doc.createElementNS(mathmlNS, tag)
+          : is
+            ? doc.createElement(tag, { is }) // is 为官方可选属性
+            : doc.createElement(tag)
 
     if (tag === 'select' && props && props.multiple != null) {
       ;(el as HTMLSelectElement).setAttribute('multiple', props.multiple)
@@ -59,7 +65,7 @@ export const nodeOps: Omit<RendererOptions<Node, Element>, 'patchProp'> = {
   // Reason: innerHTML.
   // Static content here can only come from compiled templates.
   // As long as the user only uses trusted templates, this is safe.
-  insertStaticContent(content, parent, anchor, isSVG, start, end) {
+  insertStaticContent(content, parent, anchor, namespace, start, end) {
     // <parent> before | first ... last | anchor </parent>
     const before = anchor ? anchor.previousSibling : parent.lastChild
     // #5308 can only take cached path if:
@@ -73,10 +79,16 @@ export const nodeOps: Omit<RendererOptions<Node, Element>, 'patchProp'> = {
       }
     } else {
       // fresh insert
-      templateContainer.innerHTML = isSVG ? `<svg>${content}</svg>` : content
+      templateContainer.innerHTML =
+        namespace === 'svg'
+          ? `<svg>${content}</svg>`
+          : namespace === 'mathml'
+            ? `<math>${content}</math>`
+            : content
+
       const template = templateContainer.content
-      if (isSVG) {
-        // remove outer svg wrapper
+      if (namespace === 'svg' || namespace === 'mathml') {
+        // remove outer svg/math wrapper
         const wrapper = template.firstChild!
         while (wrapper.firstChild) {
           template.appendChild(wrapper.firstChild)
@@ -89,7 +101,7 @@ export const nodeOps: Omit<RendererOptions<Node, Element>, 'patchProp'> = {
       // first
       before ? before.nextSibling! : parent.firstChild!,
       // last
-      anchor ? anchor.previousSibling! : parent.lastChild!
+      anchor ? anchor.previousSibling! : parent.lastChild!,
     ]
-  }
+  },
 }

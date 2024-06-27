@@ -1,15 +1,18 @@
 import {
-  ComponentInternalInstance,
+  type ComponentInternalInstance,
   currentInstance,
   isInSSRComponentSetup,
   setCurrentInstance,
-  unsetCurrentInstance
 } from './component'
-import { ComponentPublicInstance } from './componentPublicInstance'
-import { callWithAsyncErrorHandling, ErrorTypeStrings } from './errorHandling'
+import type { ComponentPublicInstance } from './componentPublicInstance'
+import { ErrorTypeStrings, callWithAsyncErrorHandling } from './errorHandling'
 import { warn } from './warning'
 import { toHandlerKey } from '@vue/shared'
-import { DebuggerEvent, pauseTracking, resetTracking } from '@vue/reactivity'
+import {
+  type DebuggerEvent,
+  pauseTracking,
+  resetTracking,
+} from '@vue/reactivity'
 import { LifecycleHooks } from './enums'
 
 export { onActivated, onDeactivated } from './components/KeepAlive'
@@ -19,7 +22,7 @@ export function injectHook(
   type: LifecycleHooks,
   hook: Function & { __weh?: Function }, // 生命周期回调函数（即用户传递的钩子函数）
   target: ComponentInternalInstance | null = currentInstance,
-  prepend: boolean = false
+  prepend: boolean = false,
 ): Function | undefined {
   if (target) {
     // hooks 即组件实例上的周期函数
@@ -31,19 +34,15 @@ export function injectHook(
       hook.__weh ||
       (hook.__weh = (...args: unknown[]) => {
         // 执行生命周期函数，如：在组件dom实例挂载到父容器dom上后，执行onMounted周期函数
-
-        if (target.isUnmounted) {
-          return
-        }
         // disable tracking inside all lifecycle hooks
         // since they can potentially be called inside effects.
         pauseTracking()
         // Set currentInstance during hook invocation.
         // This assumes the hook does not synchronously trigger other hooks, which
         // can only be false when the user does something really funky.
-        setCurrentInstance(target)
+        const reset = setCurrentInstance(target)
         const res = callWithAsyncErrorHandling(hook, target, type, args) // 开始执行生命周期函数
-        unsetCurrentInstance()
+        reset()
         resetTracking()
         return res
       })
@@ -62,7 +61,7 @@ export function injectHook(
         (__FEATURE_SUSPENSE__
           ? ` If you are using async setup(), make sure to register lifecycle ` +
             `hooks before the first await statement.`
-          : ``)
+          : ``),
     )
   }
 }
@@ -70,13 +69,16 @@ export function injectHook(
 // 创建生命周期函数
 export const createHook =
   <T extends Function = () => any>(lifecycle: LifecycleHooks) =>
-  (
-    hook: T,
-    target: ComponentInternalInstance | null = currentInstance // currentInstance 当前组件实例
-  ) =>
+  (hook: T, target: ComponentInternalInstance | null = currentInstance) => {
+    // currentInstance 当前组件实例
     // post-create lifecycle registrations are noops during SSR (except for serverPrefetch)
-    (!isInSSRComponentSetup || lifecycle === LifecycleHooks.SERVER_PREFETCH) &&
-    injectHook(lifecycle, (...args: unknown[]) => hook(...args), target) // 向组件实例添加生命周期函数
+    if (
+      !isInSSRComponentSetup ||
+      lifecycle === LifecycleHooks.SERVER_PREFETCH
+    ) {
+      injectHook(lifecycle, (...args: unknown[]) => hook(...args), target) // 向组件实例添加生命周期函数
+    }
+  }
 
 // 执行组件的渲染函数之前
 export const onBeforeMount = createHook(LifecycleHooks.BEFORE_MOUNT)
@@ -95,21 +97,21 @@ export const onServerPrefetch = createHook(LifecycleHooks.SERVER_PREFETCH)
 
 export type DebuggerHook = (e: DebuggerEvent) => void
 export const onRenderTriggered = createHook<DebuggerHook>(
-  LifecycleHooks.RENDER_TRIGGERED
+  LifecycleHooks.RENDER_TRIGGERED,
 )
 export const onRenderTracked = createHook<DebuggerHook>(
-  LifecycleHooks.RENDER_TRACKED
+  LifecycleHooks.RENDER_TRACKED,
 )
 
 export type ErrorCapturedHook<TError = unknown> = (
   err: TError,
   instance: ComponentPublicInstance | null,
-  info: string
+  info: string,
 ) => boolean | void
 
 export function onErrorCaptured<TError = Error>(
   hook: ErrorCapturedHook<TError>,
-  target: ComponentInternalInstance | null = currentInstance
+  target: ComponentInternalInstance | null = currentInstance,
 ) {
   injectHook(LifecycleHooks.ERROR_CAPTURED, hook, target)
 }

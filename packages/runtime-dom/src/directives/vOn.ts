@@ -1,19 +1,31 @@
 import {
-  getCurrentInstance,
+  type ComponentInternalInstance,
   DeprecationTypes,
-  LegacyConfig,
+  type LegacyConfig,
   compatUtils,
-  ComponentInternalInstance
+  getCurrentInstance,
 } from '@vue/runtime-core'
 import { hyphenate, isArray } from '@vue/shared'
 
 const systemModifiers = ['ctrl', 'shift', 'alt', 'meta']
 
 type KeyedEvent = KeyboardEvent | MouseEvent | TouchEvent
+type ModifierGuardsKeys =
+  | 'stop'
+  | 'prevent'
+  | 'self'
+  | 'ctrl'
+  | 'shift'
+  | 'alt'
+  | 'meta'
+  | 'left'
+  | 'middle'
+  | 'right'
+  | 'exact'
 
 // 事件修饰符列表
 const modifierGuards: Record<
-  string,
+  ModifierGuardsKeys,
   (e: Event, modifiers: string[]) => void | boolean
 > = {
   stop: e => e.stopPropagation(),
@@ -27,7 +39,7 @@ const modifierGuards: Record<
   middle: e => 'button' in e && (e as MouseEvent).button !== 1,
   right: e => 'button' in e && (e as MouseEvent).button !== 2,
   exact: (e, modifiers) =>
-    systemModifiers.some(m => (e as any)[`${m}Key`] && !modifiers.includes(m))
+    systemModifiers.some(m => (e as any)[`${m}Key`] && !modifiers.includes(m)),
 }
 
 /**
@@ -52,14 +64,16 @@ const modifierGuards: Record<
 // }
 //  添加vue事件修饰符对应的处理逻辑
 export const withModifiers = <
-  T extends (event: Event, ...args: unknown[]) => any
+  T extends (event: Event, ...args: unknown[]) => any,
 >(
-  fn: T & { _withMods?: T },
-  modifiers: string[]
+  fn: T & { _withMods?: { [key: string]: T } },
+  modifiers: ModifierGuardsKeys[],
 ) => {
+  const cache = fn._withMods || (fn._withMods = {})
+  const cacheKey = modifiers.join('.')
   return (
-    fn._withMods ||
-    (fn._withMods = ((event, ...args) => {
+    cache[cacheKey] ||
+    (cache[cacheKey] = ((event, ...args) => {
       // 在执行事件方法前，先执行修饰符对应的逻辑
       for (let i = 0; i < modifiers.length; i++) {
         const guard = modifierGuards[modifiers[i]]
@@ -81,15 +95,15 @@ const keyNames: Record<string, string | string[]> = {
   left: 'arrow-left',
   right: 'arrow-right',
   down: 'arrow-down',
-  delete: 'backspace'
+  delete: 'backspace',
 }
 
 /**
  * @private
  */
 export const withKeys = <T extends (event: KeyboardEvent) => any>(
-  fn: T & { _withKeys?: T },
-  modifiers: string[]
+  fn: T & { _withKeys?: { [k: string]: T } },
+  modifiers: string[],
 ) => {
   let globalKeyCodes: LegacyConfig['keyCodes']
   let instance: ComponentInternalInstance | null = null
@@ -105,14 +119,17 @@ export const withKeys = <T extends (event: KeyboardEvent) => any>(
     if (__DEV__ && modifiers.some(m => /^\d+$/.test(m))) {
       compatUtils.warnDeprecation(
         DeprecationTypes.V_ON_KEYCODE_MODIFIER,
-        instance
+        instance,
       )
     }
   }
 
+  const cache: { [k: string]: T } = fn._withKeys || (fn._withKeys = {})
+  const cacheKey = modifiers.join('.')
+
   return (
-    fn._withKeys ||
-    (fn._withKeys = (event => {
+    cache[cacheKey] ||
+    (cache[cacheKey] = (event => {
       if (!('key' in event)) {
         return
       }
@@ -127,7 +144,7 @@ export const withKeys = <T extends (event: KeyboardEvent) => any>(
         if (
           compatUtils.isCompatEnabled(
             DeprecationTypes.V_ON_KEYCODE_MODIFIER,
-            instance
+            instance,
           ) &&
           modifiers.some(mod => mod == keyCode)
         ) {

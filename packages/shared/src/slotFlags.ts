@@ -1,6 +1,5 @@
 // 在解析组件 v-slot指令过程中
-
-export const enum SlotFlags {
+export enum SlotFlags {
   /**
    * Stable slots that only reference slot props or context state. The slot
    * can fully capture its own dependencies so when passed down the parent won't
@@ -19,7 +18,7 @@ export const enum SlotFlags {
    * received. This has to be refined at runtime, when the child's vnode
    * is being created (in `normalizeChildren`)
    */
-  FORWARDED = 3 // 静态slot下， 组件节点的子孙元素中存在元素标签为 slot
+  FORWARDED = 3, // 静态slot下， 组件节点的子孙元素中存在元素标签为 slot
 }
 
 /**
@@ -28,5 +27,5 @@ export const enum SlotFlags {
 export const slotFlagsText = {
   [SlotFlags.STABLE]: 'STABLE',
   [SlotFlags.DYNAMIC]: 'DYNAMIC',
-  [SlotFlags.FORWARDED]: 'FORWARDED'
+  [SlotFlags.FORWARDED]: 'FORWARDED',
 }

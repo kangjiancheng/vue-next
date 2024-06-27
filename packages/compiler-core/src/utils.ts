@@ -1,71 +1,72 @@
 import {
-  SourceLocation,
-  Position,
-  ElementNode,
-  NodeTypes,
-  CallExpression,
-  createCallExpression,
-  DirectiveNode,
+  type BlockCodegenNode,
+  type CallExpression,
+  type DirectiveNode,
+  type ElementNode,
   ElementTypes,
-  TemplateChildNode,
-  RootNode,
-  ObjectExpression,
-  Property,
-  JSChildNode,
+  type ExpressionNode,
+  type IfBranchNode,
+  type InterpolationNode,
+  type JSChildNode,
+  type MemoExpression,
+  NodeTypes,
+  type ObjectExpression,
+  type Position,
+  type Property,
+  type RenderSlotCall,
+  type RootNode,
+  type SimpleExpressionNode,
+  type SlotOutletNode,
+  type TemplateChildNode,
+  type TemplateNode,
+  type TextNode,
+  type VNodeCall,
+  createCallExpression,
   createObjectExpression,
-  SlotOutletNode,
-  TemplateNode,
-  RenderSlotCall,
-  ExpressionNode,
-  IfBranchNode,
-  TextNode,
-  InterpolationNode,
-  VNodeCall,
-  SimpleExpressionNode,
-  BlockCodegenNode,
-  MemoExpression
 } from './ast'
-import { TransformContext } from './transform'
+import type { TransformContext } from './transform'
 import {
-  MERGE_PROPS,
-  TELEPORT,
-  SUSPENSE,
-  KEEP_ALIVE,
   BASE_TRANSITION,
-  TO_HANDLERS,
-  NORMALIZE_PROPS,
   GUARD_REACTIVE_PROPS,
-  WITH_MEMO
+  KEEP_ALIVE,
+  MERGE_PROPS,
+  NORMALIZE_PROPS,
+  SUSPENSE,
+  TELEPORT,
+  TO_HANDLERS,
+  WITH_MEMO,
 } from './runtimeHelpers'
-import { isString, isObject, hyphenate, extend, NOOP } from '@vue/shared'
-import { PropsExpression } from './transforms/transformElement'
+import { NOOP, isObject, isString } from '@vue/shared'
+import type { PropsExpression } from './transforms/transformElement'
 import { parseExpression } from '@babel/parser'
-import { Expression } from '@babel/types'
+import type { Expression } from '@babel/types'
+import { unwrapTSNode } from './babelUtils'
 
 // 判断一个指令属性节点是否是静态指令;  (动态指令：':[dynamicName]="value"')
 export const isStaticExp = (p: JSChildNode): p is SimpleExpressionNode =>
   // 指令名节点表达式，如 template: <component :is='HelloWold' />， 静态is返回true
   p.type === NodeTypes.SIMPLE_EXPRESSION && p.isStatic
 
-export const isBuiltInType = (tag: string, expected: string): boolean =>
-  tag === expected || tag === hyphenate(expected) // 匹配非单词边界的第一个大写字母，在其前边加上 - , 并小写后面所有，如 'MyComponentABc' 结果为： 'my-componentabc'
-
 export function isCoreComponent(tag: string): symbol | void {
-  if (isBuiltInType(tag, 'Teleport')) {
-    return TELEPORT
-  } else if (isBuiltInType(tag, 'Suspense')) {
-    return SUSPENSE
-  } else if (isBuiltInType(tag, 'KeepAlive')) {
-    // tag： 'KeepAlive' 或 'keep-alive'
-    return KEEP_ALIVE // Symbol(__DEV__ ? `KeepAlive` : ``)
-  } else if (isBuiltInType(tag, 'BaseTransition')) {
-    return BASE_TRANSITION
+  switch (tag) {
+    case 'Teleport':
+    case 'teleport':
+      return TELEPORT
+    case 'Suspense':
+    case 'suspense':
+      return SUSPENSE
+    case 'KeepAlive':
+    case 'keep-alive':
+      return KEEP_ALIVE
+    case 'BaseTransition':
+    case 'base-transition':
+      return BASE_TRANSITION
   }
 }
 
 // 数字开头：'123abc$'
 // 或不能只有： $、字母、数字、下划线，比如 '{foo:true}'
-const nonIdentifierRE = /^\d|[^\$\w]/
+const nonIdentifierRE = /^\d|[^\$\w\xA0-\uFFFF]/
 // 非数字开头，且都是'[\$A-Za-z0-9_]'，如：'$foo_123'
 export const isSimpleIdentifier = (name: string): boolean =>
   !nonIdentifierRE.test(name)
@@ -78,12 +79,11 @@ export const isSimpleIdentifier = (name: string): boolean =>
 // 匹配一个指令属性值的表达式，即有效的函数名调用： 以 [A-Za-z_$] 开头，如 <button @click="$_abc[foo][bar]"></button>
 // '$_abc$123 . $_abc$123$ . $_abc$123' 或 '$_abc[foo][bar]'
 // 不匹配： '1 + 1'、handleClick(1)
-
-const enum MemberExpLexState {
+enum MemberExpLexState {
   inMemberExp,
   inBrackets,
   inParens,
-  inString
+  inString,
 }
 
 const validFirstIdentCharRE = /[A-Za-z_$\xA0-\uFFFF]/
@@ -171,15 +171,13 @@ export const isMemberExpressionNode = __BROWSER__
   : (path: string, context: TransformContext): boolean => {
       try {
         let ret: Expression = parseExpression(path, {
-          plugins: context.expressionPlugins
+          plugins: context.expressionPlugins,
         })
-        if (ret.type === 'TSAsExpression' || ret.type === 'TSTypeAssertion') {
-          ret = ret.expression
-        }
+        ret = unwrapTSNode(ret) as Expression
         return (
           ret.type === 'MemberExpression' ||
           ret.type === 'OptionalMemberExpression' ||
-          ret.type === 'Identifier'
+          (ret.type === 'Identifier' && ret.name !== 'undefined')
         )
       } catch (e) {
         return false
@@ -190,41 +188,20 @@ export const isMemberExpression = __BROWSER__
   ? isMemberExpressionBrowser
   : isMemberExpressionNode
 
-export function getInnerRange(
-  loc: SourceLocation, // 此节点在模版中的位置信息
-  offset: number, // 某段内容 的偏移量
-  length: number // 某段内容 的长度
-): SourceLocation {
-  __TEST__ && assert(offset <= loc.source.length)
-  const source = loc.source.slice(offset, offset + length)
-  const newLoc: SourceLocation = {
-    source,
-    start: advancePositionWithClone(loc.start, loc.source, offset), // 移动offset距离
-    end: loc.end
-  }
-
-  if (length != null) {
-    __TEST__ && assert(offset + length <= loc.source.length)
-    newLoc.end = advancePositionWithClone(
-      loc.start,
-      loc.source,
-      offset + length
-    )
-  }
-
-  return newLoc
-}
-
 // 复制模版某一范围内的内容，改变其光标位置，当不会改变pos参数，并返回结果
 export function advancePositionWithClone(
   pos: Position,
   source: string,
-  numberOfCharacters: number = source.length // 移动距离
+  numberOfCharacters: number = source.length, // 移动距离
 ): Position {
   return advancePositionWithMutation(
-    extend({}, pos),
+    {
+      offset: pos.offset,
+      line: pos.line,
+      column: pos.column,
+    },
     source,
-    numberOfCharacters
+    numberOfCharacters,
   )
 }
 
@@ -234,7 +211,7 @@ export function advancePositionWithClone(
 export function advancePositionWithMutation(
   pos: Position,
   source: string,
-  numberOfCharacters: number = source.length
+  numberOfCharacters: number = source.length,
 ): Position {
   let linesCount = 0
   let lastNewLinePos = -1
@@ -270,7 +247,7 @@ export function assert(condition: boolean, msg?: string) {
 export function findDir(
   node: ElementNode,
   name: string | RegExp, // 指令名
-  allowEmpty: boolean = false //  指令属性值是否可以为空
+  allowEmpty: boolean = false, //  指令属性值是否可以为空
 ): DirectiveNode | undefined {
   // 在元素节点的属性列表中
   for (let i = 0; i < node.props.length; i++) {
@@ -293,7 +270,7 @@ export function findProp(
   node: ElementNode,
   name: string, // 静态dom属性名 或 bind的某个指令名
   dynamicOnly: boolean = false, // 动态属性，如指令属性
-  allowEmpty: boolean = false // 是否属性值为空
+  allowEmpty: boolean = false, // 是否属性值为空
 ): ElementNode['props'][0] | undefined {
   for (let i = 0; i < node.props.length; i++) {
     const p = node.props[i]
@@ -316,7 +293,7 @@ export function findProp(
 // 静态bind某个指令，如 ':is' 绑定了is指令
 export function isStaticArgOf(
   arg: DirectiveNode['arg'],
-  name: string
+  name: string,
 ): boolean {
   return !!(arg && isStaticExp(arg) && arg.content === name)
 }
@@ -328,13 +305,13 @@ export function hasDynamicKeyVBind(node: ElementNode): boolean {
       p.name === 'bind' &&
       (!p.arg || // v-bind="obj"
         p.arg.type !== NodeTypes.SIMPLE_EXPRESSION || // v-bind:[_ctx.foo]
-        !p.arg.isStatic) // v-bind:[foo]
+        !p.arg.isStatic), // v-bind:[foo]
   )
 }
 
 // 判断是否是 文本节点 或 插值节点
 export function isText(
-  node: TemplateChildNode
+  node: TemplateChildNode,
 ): node is TextNode | InterpolationNode {
   return node.type === NodeTypes.INTERPOLATION || node.type === NodeTypes.TEXT
 }
@@ -344,7 +321,7 @@ export function isVSlot(p: ElementNode['props'][0]): p is DirectiveNode {
 }
 
 export function isTemplateNode(
-  node: RootNode | TemplateChildNode
+  node: RootNode | TemplateChildNode,
 ): node is TemplateNode {
   return (
     node.type === NodeTypes.ELEMENT && node.tagType === ElementTypes.TEMPLATE
@@ -354,7 +331,7 @@ export function isTemplateNode(
 // slot 组件
 // <slot></slot>
 export function isSlotOutlet(
-  node: RootNode | TemplateChildNode
+  node: RootNode | TemplateChildNode,
 ): node is SlotOutletNode {
   return node.type === NodeTypes.ELEMENT && node.tagType === ElementTypes.SLOT
 }
@@ -363,7 +340,7 @@ const propsHelperSet = new Set([NORMALIZE_PROPS, GUARD_REACTIVE_PROPS])
 
 function getUnnormalizedProps(
   props: PropsExpression | '{}',
-  callPath: CallExpression[] = []
+  callPath: CallExpression[] = [],
 ): [PropsExpression | '{}', CallExpression[]] {
   if (
     props &&
@@ -374,7 +351,7 @@ function getUnnormalizedProps(
     if (!isString(callee) && propsHelperSet.has(callee)) {
       return getUnnormalizedProps(
         props.arguments[0] as PropsExpression,
-        callPath.concat(props)
+        callPath.concat(props),
       )
     }
   }
@@ -383,7 +360,7 @@ function getUnnormalizedProps(
 export function injectProp(
   node: VNodeCall | RenderSlotCall, // 如 slotOutlet.codegenNode as RenderSlotCall，一个 NodeTypes.JS_CALL_EXPRESSION类型节点
   prop: Property, // 如 <span v-for="..." key="..."></span> 中 key属性对应的js节点
-  context: TransformContext
+  context: TransformContext,
 ) {
   let propsWithInjection: ObjectExpression | CallExpression | undefined
   /**
@@ -462,7 +439,7 @@ export function injectProp(
         // #2366
         propsWithInjection = createCallExpression(context.helper(MERGE_PROPS), [
           createObjectExpression([prop]),
-          props
+          props,
         ])
       } else {
         // mergeArgs 第一个是 v-bind 指令表达式节点，后面需要其它属性，如class
@@ -486,7 +463,7 @@ export function injectProp(
     // single v-bind with expression, return a merged replacement
     propsWithInjection = createCallExpression(context.helper(MERGE_PROPS), [
       createObjectExpression([prop]),
-      props
+      props,
     ])
     // in the case of nested helper call, e.g. `normalizeProps(guardReactiveProps(props))`,
     // it will be rewritten as `normalizeProps(mergeProps({ key: 0 }, props))`,
@@ -521,7 +498,7 @@ function hasProp(prop: Property, props: ObjectExpression) {
     result = props.properties.some(
       p =>
         p.key.type === NodeTypes.SIMPLE_EXPRESSION &&
-        p.key.content === propKeyName
+        p.key.content === propKeyName,
     )
   }
   return result
@@ -529,7 +506,7 @@ function hasProp(prop: Property, props: ObjectExpression) {
 
 export function toValidAssetId(
   name: string,
-  type: 'component' | 'directive' | 'filter'
+  type: 'component' | 'directive' | 'filter',
 ): string {
   // 非[A-Za-z0-9_]， 如 tag name = 'hello-world' 转换为 '_component_hello__world'
   // see issue#4422, we need adding identifier on validAssetId if variable `name` has specific character
@@ -541,7 +518,7 @@ export function toValidAssetId(
 // Check if a node contains expressions that reference current context scope ids
 export function hasScopeRef(
   node: TemplateChildNode | IfBranchNode | ExpressionNode | undefined,
-  ids: TransformContext['identifiers']
+  ids: TransformContext['identifiers'],
 ): boolean {
   if (!node || Object.keys(ids).length === 0) {
     return false
@@ -601,4 +578,4 @@ export function getMemoedVNodeCall(node: BlockCodegenNode | MemoExpression) {
   }
 }
 
-export const forAliasRE = /([\s\S]*?)\s+(?:in|of)\s+([\s\S]*)/
+export const forAliasRE = /([\s\S]*?)\s+(?:in|of)\s+(\S[\s\S]*)/

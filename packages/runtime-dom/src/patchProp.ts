@@ -3,8 +3,8 @@ import { patchStyle } from './modules/style'
 import { patchAttr } from './modules/attrs'
 import { patchDOMProp } from './modules/props'
 import { patchEvent } from './modules/events'
-import { isOn, isString, isFunction, isModelListener } from '@vue/shared'
-import { RendererOptions } from '@vue/runtime-core'
+import { isFunction, isModelListener, isOn, isString } from '@vue/shared'
+import type { RendererOptions } from '@vue/runtime-core'
 
 // 元素dom事件属性，小写，如：<button onclick="handler(event)"></button>，则prop为 onclick
 // vue事件：<button @click="handleClick"></button>，则prop为 onClick
@@ -24,12 +24,13 @@ export const patchProp: DOMRendererOptions['patchProp'] = (
   key, // prop属性名
   prevValue, // prop旧属性值
   nextValue, // prop新属性值
-  isSVG = false,
+  namespace,
   prevChildren,
   parentComponent, // vnode 父组件实例
   parentSuspense,
-  unmountChildren
+  unmountChildren,
 ) => {
+  const isSVG = namespace === 'svg'
   if (key === 'class') {
     patchClass(el, nextValue, isSVG) // 添加 class属性
   } else if (key === 'style') {
@@ -57,8 +58,17 @@ export const patchProp: DOMRendererOptions['patchProp'] = (
       prevChildren,
       parentComponent,
       parentSuspense,
-      unmountChildren
+      unmountChildren,
     )
+    // #6007 also set form state as attributes so they work with
+    // <input type="reset"> or libs / extensions that expect attributes
+    // #11163 custom elements may use value as an prop and set it as object
+    if (
+      !el.tagName.includes('-') &&
+      (key === 'value' || key === 'checked' || key === 'selected')
+    ) {
+      patchAttr(el, key, nextValue, isSVG, parentComponent, key !== 'value')
+    }
   } else {
     // dom 标签属性(即一些非dom实例属性)： 即直接添加到标签到属性列表上，如value 或 一些自定义到属性 data-xxx
     // special case for <input v-model type="checkbox"> with
@@ -79,7 +89,7 @@ function shouldSetAsProp(
   el: Element, // vnode 的dom实例el
   key: string, // prop属性名
   value: unknown, // prop属性值
-  isSVG: boolean
+  isSVG: boolean,
 ) {
   if (isSVG) {
     // most keys must be set as attribute on svg elements to work

@@ -1,60 +1,99 @@
-import { CodegenOptions } from './options'
+import type { CodegenOptions } from './options'
 import {
-  RootNode,
-  TemplateChildNode,
-  TextNode,
-  CommentNode,
-  ExpressionNode,
+  type ArrayExpression,
+  type AssignmentExpression,
+  type CacheExpression,
+  type CallExpression,
+  type CommentNode,
+  type CompoundExpressionNode,
+  type ConditionalExpression,
+  type ExpressionNode,
+  type FunctionExpression,
+  type IfStatement,
+  type InterpolationNode,
+  type JSChildNode,
   NodeTypes,
-  JSChildNode,
-  CallExpression,
-  ArrayExpression,
-  ObjectExpression,
-  Position,
-  InterpolationNode,
-  CompoundExpressionNode,
-  SimpleExpressionNode,
-  FunctionExpression,
-  ConditionalExpression,
-  CacheExpression,
-  locStub,
-  SSRCodegenNode,
-  TemplateLiteral,
-  IfStatement,
-  AssignmentExpression,
-  ReturnStatement,
-  VNodeCall,
-  SequenceExpression,
+  type ObjectExpression,
+  type Position,
+  type ReturnStatement,
+  type RootNode,
+  type SSRCodegenNode,
+  type SequenceExpression,
+  type SimpleExpressionNode,
+  type TemplateChildNode,
+  type TemplateLiteral,
+  type TextNode,
+  type VNodeCall,
   getVNodeBlockHelper,
-  getVNodeHelper
+  getVNodeHelper,
+  locStub,
 } from './ast'
-import { SourceMapGenerator, RawSourceMap } from 'source-map-js'
+import { SourceMapGenerator } from 'source-map-js'
 import {
   advancePositionWithMutation,
   assert,
   isSimpleIdentifier,
-  toValidAssetId
+  toValidAssetId,
 } from './utils'
-import { isString, isArray, isSymbol } from '@vue/shared'
+import { isArray, isString, isSymbol } from '@vue/shared'
 import {
-  helperNameMap,
-  TO_DISPLAY_STRING,
+  CREATE_COMMENT,
+  CREATE_ELEMENT_VNODE,
+  CREATE_STATIC,
+  CREATE_TEXT,
   CREATE_VNODE,
+  OPEN_BLOCK,
+  POP_SCOPE_ID,
+  PUSH_SCOPE_ID,
   RESOLVE_COMPONENT,
   RESOLVE_DIRECTIVE,
+  RESOLVE_FILTER,
   SET_BLOCK_TRACKING,
-  CREATE_COMMENT,
-  CREATE_TEXT,
-  PUSH_SCOPE_ID,
-  POP_SCOPE_ID,
-  WITH_DIRECTIVES,
-  CREATE_ELEMENT_VNODE,
-  OPEN_BLOCK,
-  CREATE_STATIC,
+  TO_DISPLAY_STRING,
   WITH_CTX,
-  RESOLVE_FILTER
+  WITH_DIRECTIVES,
+  helperNameMap,
 } from './runtimeHelpers'
-import { ImportItem } from './transform'
+import type { ImportItem } from './transform'
+
+/**
+ * The `SourceMapGenerator` type from `source-map-js` is a bit incomplete as it
+ * misses `toJSON()`. We also need to add types for internal properties which we
+ * need to access for better performance.
+ *
+ * Since TS 5.3, dts generation starts to strangely include broken triple slash
+ * references for source-map-js, so we are inlining all source map related types
+ * here to to workaround that.
+ */
+export interface CodegenSourceMapGenerator {
+  setSourceContent(sourceFile: string, sourceContent: string): void
+  // SourceMapGenerator has this method but the types do not include it
+  toJSON(): RawSourceMap
+  _sources: Set<string>
+  _names: Set<string>
+  _mappings: {
+    add(mapping: MappingItem): void
+  }
+}
+
+export interface RawSourceMap {
+  file?: string
+  sourceRoot?: string
+  version: string
+  sources: string[]
+  names: string[]
+  sourcesContent?: string[]
+  mappings: string
+}
+
+interface MappingItem {
+  source: string
+  generatedLine: number
+  generatedColumn: number
+  originalLine: number
+  originalColumn: number
+  name: string | null
+}
 
 // 注意注意！最好别在源码注释中添加字符串：/*#__PURE__*/
 // 否则！可能会导致源码不能正常调试，浏览器无法执行该注释之后的代码，无法进行断点设置
@@ -71,6 +110,13 @@ export interface CodegenResult {
   map?: RawSourceMap
 }
 
+enum NewlineType {
+  Start = 0,
+  End = -1,
+  None = -2,
+  Unknown = -3,
+}
+
 export interface CodegenContext
   extends Omit<Required<CodegenOptions>, 'bindingMetadata' | 'inline'> {
   source: string
@@ -80,9 +126,9 @@ export interface CodegenContext
   offset: number
   indentLevel: number
   pure: boolean
-  map?: SourceMapGenerator
+  map?: CodegenSourceMapGenerator
   helper(key: symbol): string
-  push(code: string, node?: CodegenNode): void
+  push(code: string, newlineIndex?: number, node?: CodegenNode): void
   indent(): void
   deindent(withoutNewLine?: boolean): void
   newline(): void
@@ -102,8 +148,8 @@ function createCodegenContext(
     ssrRuntimeModuleName = 'vue/server-renderer',
     ssr = false,
     isTS = false,
-    inSSR = false
-  }: CodegenOptions
+    inSSR = false,
+  }: CodegenOptions,
 ): CodegenContext {
   const context: CodegenContext = {
     mode, // function
@@ -118,7 +164,7 @@ function createCodegenContext(
     ssr, // false
     isTS,
     inSSR,
-    source: ast.loc.source, // 模版template源码
+    source: ast.source, // 模版template源码
     code: ``, // 渲染源码
     column: 1,
     line: 1,
@@ -130,7 +176,7 @@ function createCodegenContext(
       return `_${helperNameMap[key]}`
     },
     // 增加 渲染源码片段
-    push(code, node) {
+    push(code, newlineIndex = NewlineType.None, node) {
       context.code += code
       if (!__BROWSER__ && context.map) {
         if (node) {
@@ -143,7 +189,41 @@ function createCodegenContext(
           }
           addMapping(node.loc.start, name)
         }
-        advancePositionWithMutation(context, code)
+        if (newlineIndex === NewlineType.Unknown) {
+          // multiple newlines, full iteration
+          advancePositionWithMutation(context, code)
+        } else {
+          // fast paths
+          context.offset += code.length
+          if (newlineIndex === NewlineType.None) {
+            // no newlines; fast path to avoid newline detection
+            if (__TEST__ && code.includes('\n')) {
+              throw new Error(
+                `CodegenContext.push() called newlineIndex: none, but contains` +
+                  `newlines: ${code.replace(/\n/g, '\\n')}`,
+              )
+            }
+            context.column += code.length
+          } else {
+            // single newline at known index
+            if (newlineIndex === NewlineType.End) {
+              newlineIndex = code.length - 1
+            }
+            if (
+              __TEST__ &&
+              (code.charAt(newlineIndex) !== '\n' ||
+                code.slice(0, newlineIndex).includes('\n') ||
+                code.slice(newlineIndex + 1).includes('\n'))
+            ) {
+              throw new Error(
+                `CodegenContext.push() called with newlineIndex: ${newlineIndex} ` +
+                  `but does not conform: ${code.replace(/\n/g, '\\n')}`,
+              )
+            }
+            context.line++
+            context.column = code.length - newlineIndex
+          }
+        }
         if (node && node.loc !== locStub) {
           addMapping(node.loc.end)
         }
@@ -164,33 +244,36 @@ function createCodegenContext(
     // 换行并保持缩进
     newline() {
       newline(context.indentLevel)
-    }
+    },
   }
 
   // 换行并缩进
   function newline(n: number) {
-    context.push('\n' + `  `.repeat(n))
+    context.push('\n' + `  `.repeat(n), NewlineType.Start)
   }
 
-  function addMapping(loc: Position, name?: string) {
-    context.map!.addMapping({
+  function addMapping(loc: Position, name: string | null = null) {
+    // we use the private property to directly add the mapping
+    // because the addMapping() implementation in source-map-js has a bunch of
+    // unnecessary arg and validation checks that are pure overhead in our case.
+    const { _names, _mappings } = context.map!
+    if (name !== null && !_names.has(name)) _names.add(name)
+    _mappings.add({
+      originalLine: loc.line,
+      originalColumn: loc.column - 1, // source-map column is 0 based
+      generatedLine: context.line,
+      generatedColumn: context.column - 1,
+      source: filename,
       name,
-      source: context.filename,
-      original: {
-        line: loc.line,
-        column: loc.column - 1 // source-map column is 0 based
-      },
-      generated: {
-        line: context.line,
-        column: context.column - 1
-      }
     })
   }
 
   if (!__BROWSER__ && sourceMap) {
     // lazy require source-map implementation, only in non-browser builds
-    context.map = new SourceMapGenerator()
-    context.map!.setSourceContent(filename, context.source)
+    context.map =
+      new SourceMapGenerator() as unknown as CodegenSourceMapGenerator
+    context.map.setSourceContent(filename, context.source)
+    context.map._sources.add(filename)
   }
 
   return context
@@ -213,7 +296,7 @@ export function generate(
   ast: RootNode, // js渲染源码ast
   options: CodegenOptions & {
     onContextCreated?: (context: CodegenContext) => void
-  } = {}
+  } = {},
 ): CodegenResult {
   // 初始化codegen上下文
   const context = createCodegenContext(ast, options)
@@ -227,7 +310,7 @@ export function generate(
     deindent,
     newline,
     scopeId,
-    ssr
+    ssr,
   } = context
 
   const helpers = Array.from(ast.helpers)
@@ -298,37 +381,11 @@ export function generate(
     // function mode const declarations should be inside with block
     // also they should be renamed to avoid collision with user properties
     if (hasHelpers) {
-      push(`const { ${helpers.map(aliasHelper).join(', ')} } = _Vue`)
-      push(`\n`)
-      newline() // 换行并保持缩进
-    }
-
-    // 针对存在静态提升节点，如：<div><i :class="red">1</i>abc</div>
-    // 解析结果为：
-    // 'const _Vue = Vue'
-    // 'const { createTextVNode: _createTextVNode } = _Vue'
-    // ''
-    // 'const _hoisted_1 = /*#__PURE__*/_createTextVNode("abc")'
-    // ''
-    // 'return function render(_ctx, _cache) {'
-    // '  with (_ctx) {'
-    // '    const { createVNode: _createVNode, createTextVNode: _createTextVNode, openBlock: _openBlock, createBlock: _createBlock } = _Vue\n\n'
-  }
-
-  // 生成 组件定义 源码
-  // 如：'const _component_hello__world = _resolveComponent("hello-world")' // 解析组件
-  // generate asset resolution statements
-  if (ast.components.length) {
-    // 自定义组件列表，在transformElement中初始化
-    // 如 template: '<div><hello-world></hello-world><good-bye></good-bye></div>'
-    // code:
-    // 'const _component_hello__world = _resolveComponent("hello-world")'
-    // 'const _component_good_bye = _resolveComponent("good-bye")'
-    genAssets(ast.components, 'component', context)
-
-    // 换行
-    if (ast.directives.length || ast.temps > 0) {
-      newline() // 添加新行并缩进
+      push(
+        `const { ${helpers.map(aliasHelper).join(', ')} } = _Vue\n`,
+        NewlineType.End,
+      )
+      newline()
     }
   }
 
@@ -356,7 +413,7 @@ export function generate(
     }
   }
   if (ast.components.length || ast.directives.length || ast.temps) {
-    push(`\n`) // 不用缩进
+    push(`\n`, NewlineType.Start) // 不用缩进
     newline() // 添加新行并缩进
   }
 
@@ -418,9 +475,8 @@ export function generate(
   return {
     ast,
     code: context.code,
-    preamble: isSetupInlined ? preambleContext.code : ``, // TODO: cfs
-    // SourceMapGenerator does have toJSON() method but it's not in the types
-    map: context.map ? (context.map as any).toJSON() : undefined // TODO: cfs
+    preamble: isSetupInlined ? preambleContext.code : ``,
+    map: context.map ? context.map.toJSON() : undefined,
   }
 }
 
@@ -433,7 +489,7 @@ function genFunctionPreamble(ast: RootNode, context: CodegenContext) {
     newline, // function
     runtimeModuleName, // 'Vue'
     runtimeGlobalName, // 'Vue'
-    ssrRuntimeModuleName
+    ssrRuntimeModuleName,
   } = context
   // 绑定变量Vue，如：const _Vue = Vue
   const VueBinding =
@@ -447,15 +503,16 @@ function genFunctionPreamble(ast: RootNode, context: CodegenContext) {
   const helpers = Array.from(ast.helpers)
   if (helpers.length > 0) {
     if (!__BROWSER__ && prefixIdentifiers) {
-      // TODO: cfs - !__BROWSER__
-      push(`const { ${helpers.map(aliasHelper).join(', ')} } = ${VueBinding}\n`)
+      push(
+        `const { ${helpers.map(aliasHelper).join(', ')} } = ${VueBinding}\n`,
+        NewlineType.End,
+      )
     } else {
       // "with" mode.
 
       // save Vue in a separate variable to avoid collision
       // context.code = 'const _Vue = Vue\n'
-      push(`const _Vue = ${VueBinding}\n`) // context.code += code
-
+      push(`const _Vue = ${VueBinding}\n`, NewlineType.End)
       // in "with" mode, helpers are declared inside the with block to avoid
       // has check cost, but hoists are lifted out of the function - we need
       // to provide the helper here.
@@ -483,16 +540,15 @@ function genFunctionPreamble(ast: RootNode, context: CodegenContext) {
           CREATE_ELEMENT_VNODE,
           CREATE_COMMENT, // Symbol(__DEV__ ? `createCommentVNode` : ``) // 静态注释
           CREATE_TEXT, // Symbol(__DEV__ ? `createTextVNode` : ``)  // 静态文本
-          CREATE_STATIC // Symbol(__DEV__ ? `createStaticVNode` : ``) // 非Browser, transform stringifyStatic
+          CREATE_STATIC, // Symbol(__DEV__ ? `createStaticVNode` : ``) // 非Browser, transform stringifyStatic
         ]
           .filter(helper => helpers.includes(helper))
           .map(aliasHelper)
           .join(', ') // 如：'createVNode: _createVNode, createTextVNode: _createTextVNode'
-
         // ast code:
         // 'const _Vue = Vue\n' +
         // 'const { createVNode: _createVNode, createTextVNode: _createTextVNode } = _Vue\n'
-        push(`const { ${staticHelpers} } = _Vue\n`)
+        push(`const { ${staticHelpers} } = _Vue\n`, NewlineType.End)
       }
     }
   }
@@ -504,7 +560,8 @@ function genFunctionPreamble(ast: RootNode, context: CodegenContext) {
     push(
       `const { ${ast.ssrHelpers
         .map(aliasHelper)
-        .join(', ')} } = require("${ssrRuntimeModuleName}")\n`
+        .join(', ')} } = require("${ssrRuntimeModuleName}")\n`,
+      NewlineType.End,
     )
   }
 
@@ -528,14 +585,14 @@ function genModulePreamble(
   ast: RootNode,
   context: CodegenContext,
   genScopeId: boolean,
-  inline?: boolean
+  inline?: boolean,
 ) {
   const {
     push,
     newline,
     optimizeImports,
     runtimeModuleName,
-    ssrRuntimeModuleName
+    ssrRuntimeModuleName,
   } = context
 
   if (genScopeId && ast.hoists.length) {
@@ -555,18 +612,21 @@ function genModulePreamble(
       push(
         `import { ${helpers
           .map(s => helperNameMap[s])
-          .join(', ')} } from ${JSON.stringify(runtimeModuleName)}\n`
+          .join(', ')} } from ${JSON.stringify(runtimeModuleName)}\n`,
+        NewlineType.End,
       )
       push(
         `\n// Binding optimization for webpack code-split\nconst ${helpers
           .map(s => `_${helperNameMap[s]} = ${helperNameMap[s]}`)
-          .join(', ')}\n`
+          .join(', ')}\n`,
+        NewlineType.End,
       )
     } else {
       push(
         `import { ${helpers
           .map(s => `${helperNameMap[s]} as _${helperNameMap[s]}`)
-          .join(', ')} } from ${JSON.stringify(runtimeModuleName)}\n`
+          .join(', ')} } from ${JSON.stringify(runtimeModuleName)}\n`,
+        NewlineType.End,
       )
     }
   }
@@ -575,7 +635,8 @@ function genModulePreamble(
     push(
       `import { ${ast.ssrHelpers
         .map(s => `${helperNameMap[s]} as _${helperNameMap[s]}`)
-        .join(', ')} } from "${ssrRuntimeModuleName}"\n`
+        .join(', ')} } from "${ssrRuntimeModuleName}"\n`,
+      NewlineType.End,
     )
   }
 
@@ -597,14 +658,14 @@ function genModulePreamble(
 function genAssets(
   assets: string[], // 自定义组件标签名
   type: 'component' | 'directive' | 'filter',
-  { helper, push, newline, isTS }: CodegenContext
+  { helper, push, newline, isTS }: CodegenContext,
 ) {
   const resolver = helper(
     __COMPAT__ && type === 'filter'
       ? RESOLVE_FILTER
       : type === 'component'
         ? RESOLVE_COMPONENT
-        : RESOLVE_DIRECTIVE
+        : RESOLVE_DIRECTIVE,
   )
   for (let i = 0; i < assets.length; i++) {
     let id = assets[i]
@@ -618,7 +679,7 @@ function genAssets(
       // code: 'const _component_hello__world = _resolveComponent("hello-world")()'
       `const ${toValidAssetId(id, type)} = ${resolver}(${JSON.stringify(id)}${
         maybeSelfReference ? `, true` : ``
-      })${isTS ? `!` : ``}`
+      })${isTS ? `!` : ``}`,
     )
     // 换行
     if (i < assets.length - 1) {
@@ -644,10 +705,11 @@ function genHoists(hoists: (JSChildNode | null)[], context: CodegenContext) {
 
   // generate inlined withScopeId helper
   if (genScopeId) {
+    const param = context.isTS ? '(n: any)' : 'n'
     push(
-      `const _withScopeId = n => (${helper(
-        PUSH_SCOPE_ID
-      )}("${scopeId}"),n=n(),${helper(POP_SCOPE_ID)}(),n)`
+      `const _withScopeId = ${param} => (${helper(
+        PUSH_SCOPE_ID,
+      )}("${scopeId}"),n=n(),${helper(POP_SCOPE_ID)}(),n)`,
     )
     newline()
   }
@@ -662,7 +724,7 @@ function genHoists(hoists: (JSChildNode | null)[], context: CodegenContext) {
         `const _hoisted_${i + 1} = ${
           // 'const _hoisted_1 = ' 按添加顺序命名
           needScopeIdWrapper ? `${PURE_ANNOTATION} _withScopeId(() => ` : ``
-        }`
+        }`,
       )
       genNode(exp, context) // 生成静态节点的渲染源码
       if (needScopeIdWrapper) {
@@ -704,7 +766,7 @@ function isText(n: string | CodegenNode) {
 // 如 生成元素节点 多个的class属性列表code，'["red", "blue"]'
 function genNodeListAsArray(
   nodes: (string | CodegenNode | TemplateChildNode[])[],
-  context: CodegenContext
+  context: CodegenContext,
 ) {
   const multilines =
     nodes.length > 3 ||
@@ -736,13 +798,13 @@ function genNodeList(
   nodes: (string | symbol | CodegenNode | TemplateChildNode[])[], // genVNodeCall中 [tag, props, children, patchFlag, dynamicProps]
   context: CodegenContext,
   multilines: boolean = false,
-  comma: boolean = true
+  comma: boolean = true,
 ) {
   const { push, newline } = context
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i]
     if (isString(node)) {
-      push(node)
+      push(node, NewlineType.Unknown)
     } else if (isArray(node)) {
       // 如果 标签有多个children, 如 <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} ! <i>123</i></div>
       // children对应的code 则为 code +=
@@ -769,7 +831,7 @@ function genNodeList(
 // node：ast节点的 codegenNode
 function genNode(node: CodegenNode | symbol | string, context: CodegenContext) {
   if (isString(node)) {
-    context.push(node)
+    context.push(node, NewlineType.Unknown)
     return
   }
 
@@ -787,7 +849,7 @@ function genNode(node: CodegenNode | symbol | string, context: CodegenContext) {
         assert(
           node.codegenNode != null,
           `Codegen node is missing for element/if/for node. ` +
-            `Apply appropriate transforms first.`
+            `Apply appropriate transforms first.`,
         )
       // <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} ! <i>123</i></div>
       // 如genNodeList 解析其中子元素时，解析其 i 标签元素
@@ -892,9 +954,9 @@ function genNode(node: CodegenNode | symbol | string, context: CodegenContext) {
 // 生成 文本节点 的渲染代码片段
 function genText(
   node: TextNode | SimpleExpressionNode,
-  context: CodegenContext
+  context: CodegenContext,
 ) {
-  context.push(JSON.stringify(node.content), node)
+  context.push(JSON.stringify(node.content), NewlineType.Unknown, node)
 }
 
 // 生成 字符串或某个变量 的渲染片段表达式
@@ -903,7 +965,11 @@ function genExpression(node: SimpleExpressionNode, context: CodegenContext) {
   // 如<div style="color: blue;" :class="red" data-test="123">hello {{ someone }} !</div>
   // 其中style属性值 "color: blue;"， isStatic 为false
   // 其中data-test属性值 "123"， isStatic 为true
-  context.push(isStatic ? JSON.stringify(content) : content, node)
+  context.push(
+    isStatic ? JSON.stringify(content) : content,
+    NewlineType.Unknown,
+    node,
+  )
 }
 
 // 生成 文本插值 的渲染源码代码
@@ -929,13 +995,13 @@ function genInterpolation(node: InterpolationNode, context: CodegenContext) {
 // 则： context.code += '"hello " + _toDisplayString(who) + " !'
 function genCompoundExpression(
   node: CompoundExpressionNode,
-  context: CodegenContext
+  context: CodegenContext,
 ) {
   for (let i = 0; i < node.children!.length; i++) {
     const child = node.children![i]
     if (isString(child)) {
       // 如 ' + '
-      context.push(child)
+      context.push(child, NewlineType.Unknown)
     } else {
       // TEXT: push(JSON.stringify(node.content))
       // INTERPOLATION: push('_toDisplayString(who)')
@@ -950,7 +1016,7 @@ function genCompoundExpression(
 // 如果标签元素只有静态属性节点，则会被静态标记，不走该流程
 function genExpressionAsPropertyKey(
   node: ExpressionNode,
-  context: CodegenContext
+  context: CodegenContext,
 ) {
   const { push } = context
   if (node.type === NodeTypes.COMPOUND_EXPRESSION) {
@@ -968,13 +1034,13 @@ function genExpressionAsPropertyKey(
     const text = isSimpleIdentifier(node.content) // 非数字开头，且都是'[\$A-Za-z0-9_]'，如：'$foo_123'
       ? node.content // 'class'、'style'、onClick
       : JSON.stringify(node.content)
-    push(text, node)
+    push(text, NewlineType.None, node)
   } else {
     // 处理动态指令参数
     // 如：<div class="red" :[attrObjs]="someAttrs">hello {{ someone }} !</div>
     // 则：node.content = 'attrObjs || ""'
     // 则 code += '['attrObjs || ""']'
-    push(`[${node.content}]`, node)
+    push(`[${node.content}]`, NewlineType.Unknown, node)
   }
 }
 
@@ -983,7 +1049,11 @@ function genComment(node: CommentNode, context: CodegenContext) {
   if (pure) {
     push(PURE_ANNOTATION)
   }
-  push(`${helper(CREATE_COMMENT)}(${JSON.stringify(node.content)})`, node)
+  push(
+    `${helper(CREATE_COMMENT)}(${JSON.stringify(node.content)})`,
+    NewlineType.Unknown,
+    node,
+  )
 }
 
 // 生成 标签元素节点 的渲染源码片段 code
@@ -999,7 +1069,7 @@ function genVNodeCall(node: VNodeCall, context: CodegenContext) {
     directives,
     isBlock,
     disableTracking,
-    isComponent
+    isComponent,
   } = node
   if (directives) {
     // 需要在运行时，重新处理的指令，如：v-model、v-show、用户自定义指令
@@ -1021,7 +1091,8 @@ function genVNodeCall(node: VNodeCall, context: CodegenContext) {
   const callHelper: symbol = isBlock
     ? getVNodeBlockHelper(context.inSSR, isComponent)
     : getVNodeHelper(context.inSSR, isComponent)
-  push(helper(callHelper) + `(`, node)
+
+  push(helper(callHelper) + `(`, NewlineType.None, node)
 
   // 生成 标签节点、属性节点、子节点、patchFlag、dynamicProps节点的 渲染代码
   // 如 template: <div style="color: blue;" :class="red" @click="handleClick">hello {{ someone }} !</div>
@@ -1042,7 +1113,7 @@ function genVNodeCall(node: VNodeCall, context: CodegenContext) {
     // genNullableArgs(arg1, arg2, arg3, null), 则 [arg1, arg2, arg3] // 最后的直接截断
     // genNullableArgs(arg1, arg2, null, arg3), 则 [arg1, arg2, 'null', arg3]
     genNullableArgs([tag, props, children, patchFlag, dynamicProps]),
-    context
+    context,
   )
   push(`)`)
   if (isBlock) {
@@ -1079,7 +1150,7 @@ function genCallExpression(node: CallExpression, context: CodegenContext) {
     // 静态提升、单独使用函数时
     push(PURE_ANNOTATION) // context.code += `/*#_PURE__*/`   // 注意 此注释 __PURE__ 故意写错，否则导致源码不能调试，即之后的一行push(...) 没有执行
   }
-  push(callee + `(`, node)
+  push(callee + `(`, NewlineType.None, node)
   // 转换参数个数，如静态节点 'abc'
   // context.code += 'abc'
   genNodeList(node.arguments, context) // 待执行函数 的参数列表
@@ -1099,7 +1170,7 @@ function genObjectExpression(node: ObjectExpression, context: CodegenContext) {
 
   const { properties } = node // node 为 props节点，注意去重合并的prop节点类型为JS_ARRAY_EXPRESSION
   if (!properties.length) {
-    push(`{}`, node)
+    push(`{}`, NewlineType.None, node)
     return
   }
   const multilines =
@@ -1161,7 +1232,7 @@ function genArrayExpression(node: ArrayExpression, context: CodegenContext) {
 //       })
 function genFunctionExpression(
   node: FunctionExpression,
-  context: CodegenContext
+  context: CodegenContext,
 ) {
   const { push, indent, deindent } = context
   const { params, returns, body, newline, isSlot } = node
@@ -1170,10 +1241,8 @@ function genFunctionExpression(
     // wrap slot functions with owner context
     push(`_${helperNameMap[WITH_CTX]}(`)
   }
-
   // 箭头函数
-
-  push(`(`, node)
+  push(`(`, NewlineType.None, node)
   if (isArray(params)) {
     genNodeList(params, context)
   } else if (params) {
@@ -1215,7 +1284,7 @@ function genFunctionExpression(
 // 如 组件的 slot v-if： boolean条件 ? true... : false...
 function genConditionalExpression(
   node: ConditionalExpression,
-  context: CodegenContext
+  context: CodegenContext,
 ) {
   const { test, consequent, alternate, newline: needNewline } = node
   const { push, indent, deindent, newline } = context
@@ -1313,7 +1382,7 @@ function genTemplateLiteral(node: TemplateLiteral, context: CodegenContext) {
   for (let i = 0; i < l; i++) {
     const e = node.elements[i]
     if (isString(e)) {
-      push(e.replace(/(`|\$|\\)/g, '\\$1'))
+      push(e.replace(/(`|\$|\\)/g, '\\$1'), NewlineType.Unknown)
     } else {
       push('${')
       if (multilines) indent()
@@ -1353,7 +1422,7 @@ function genIfStatement(node: IfStatement, context: CodegenContext) {
 /*** SSR ***/
 function genAssignmentExpression(
   node: AssignmentExpression,
-  context: CodegenContext
+  context: CodegenContext,
 ) {
   genNode(node.left, context)
   context.push(` = `)
@@ -1363,7 +1432,7 @@ function genAssignmentExpression(
 /*** SSR ***/
 function genSequenceExpression(
   node: SequenceExpression,
-  context: CodegenContext
+  context: CodegenContext,
 ) {
   context.push(`(`)
   genNodeList(node.expressions, context)
@@ -1373,7 +1442,7 @@ function genSequenceExpression(
 /*** SSR ***/
 function genReturnStatement(
   { returns }: ReturnStatement,
-  context: CodegenContext
+  context: CodegenContext,
 ) {
   context.push(`return `)
   if (isArray(returns)) {

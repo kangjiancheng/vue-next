@@ -1,71 +1,70 @@
-import { NodeTransform, TransformContext } from '../transform'
+import type { NodeTransform, TransformContext } from '../transform'
 import {
-  NodeTypes,
+  type ArrayExpression,
+  type CallExpression,
+  type ComponentNode,
+  ConstantTypes,
+  type DirectiveArguments,
+  type DirectiveNode,
+  type ElementNode,
   ElementTypes,
-  CallExpression,
-  ObjectExpression,
-  ElementNode,
-  DirectiveNode,
-  ExpressionNode,
-  ArrayExpression,
-  createCallExpression,
+  type ExpressionNode,
+  type JSChildNode,
+  NodeTypes,
+  type ObjectExpression,
+  type Property,
+  type TemplateTextChildNode,
+  type VNodeCall,
   createArrayExpression,
+  createCallExpression,
+  createObjectExpression,
   createObjectProperty,
   createSimpleExpression,
-  createObjectExpression,
-  Property,
-  ComponentNode,
-  VNodeCall,
-  TemplateTextChildNode,
-  DirectiveArguments,
   createVNodeCall,
-  ConstantTypes,
-  JSChildNode
 } from '../ast'
 import {
-  PatchFlags,
   PatchFlagNames,
-  isSymbol,
-  isOn,
-  isObject,
-  isReservedProp,
-  capitalize,
+  PatchFlags,
   camelize,
-  isBuiltInDirective
+  capitalize,
+  isBuiltInDirective,
+  isObject,
+  isOn,
+  isReservedProp,
+  isSymbol,
 } from '@vue/shared'
-import { createCompilerError, ErrorCodes } from '../errors'
+import { ErrorCodes, createCompilerError } from '../errors'
 import {
-  RESOLVE_DIRECTIVE,
-  RESOLVE_COMPONENT,
-  RESOLVE_DYNAMIC_COMPONENT,
+  GUARD_REACTIVE_PROPS,
+  KEEP_ALIVE,
   MERGE_PROPS,
   NORMALIZE_CLASS,
-  NORMALIZE_STYLE,
   NORMALIZE_PROPS,
-  TO_HANDLERS,
-  TELEPORT,
-  KEEP_ALIVE,
+  NORMALIZE_STYLE,
+  RESOLVE_COMPONENT,
+  RESOLVE_DIRECTIVE,
+  RESOLVE_DYNAMIC_COMPONENT,
   SUSPENSE,
+  TELEPORT,
+  TO_HANDLERS,
   UNREF,
-  GUARD_REACTIVE_PROPS
 } from '../runtimeHelpers'
 import {
-  getInnerRange,
-  toValidAssetId,
   findProp,
   isCoreComponent,
   isStaticArgOf,
-  findDir,
-  isStaticExp
+  isStaticExp,
+  toValidAssetId,
 } from '../utils'
 import { buildSlots } from './vSlot'
 import { getConstantType } from './hoistStatic'
 import { BindingTypes } from '../options'
 import {
-  checkCompatEnabled,
   CompilerDeprecationTypes,
-  isCompatEnabled
+  checkCompatEnabled,
+  isCompatEnabled,
 } from '../compat/compatConfig'
+import { processExpression } from './transformExpression'
 
 // some directive transforms (e.g. v-model) may return a symbol for runtime
 // import, which should be used instead of a resolveDirective call.
@@ -138,7 +137,7 @@ export const transformElement: NodeTransform = (node, context) => {
         // This is technically web-specific, but splitting the logic out of core
         // leads to too much unnecessary complexity.
         // web规范的一些特殊标签
-        (tag === 'svg' || tag === 'foreignObject'))
+        (tag === 'svg' || tag === 'foreignObject' || tag === 'math'))
 
     // 节点 props
     if (props.length > 0) {
@@ -151,7 +150,7 @@ export const transformElement: NodeTransform = (node, context) => {
         context,
         undefined,
         isComponent,
-        isDynamicComponent
+        isDynamicComponent,
       )
       vnodeProps = propsBuildResult.props // 解析后的props列表
       patchFlag = propsBuildResult.patchFlag // 根据相关prop信息，进行二进制运算设置patchFlag
@@ -160,7 +159,7 @@ export const transformElement: NodeTransform = (node, context) => {
       vnodeDirectives =
         directives && directives.length
           ? (createArrayExpression(
-              directives.map(dir => buildDirectiveArgs(dir, context)) // 进一步解析 buildProps() 中的 runtimeDirectives：v-show、v-model、用户自定义指令；处理要运行的指令的参数、值、修饰符
+              directives.map(dir => buildDirectiveArgs(dir, context)), // 进一步解析 buildProps() 中的 runtimeDirectives：v-show、v-model、用户自定义指令；处理要运行的指令的参数、值、修饰符
             ) as DirectiveArguments)
           : undefined
 
@@ -195,8 +194,8 @@ export const transformElement: NodeTransform = (node, context) => {
               // <KeepAlive> expects exactly one child component.
               start: node.children[0].loc.start,
               end: node.children[node.children.length - 1].loc.end,
-              source: ''
-            })
+              source: '',
+            }),
           )
         }
       }
@@ -312,7 +311,7 @@ export const transformElement: NodeTransform = (node, context) => {
       !!shouldUseBlock, // 是否使用block，如：动态is组件或TELEPORT或SUSPENSE；或是非组件当是特殊标签如svg，普通元素绑定了动态 :key； 或是 keep-alive组件，注意for节点/if节点(transform vIf)、root节点（transform createRootCodegen）
       false /* disableTracking */, // 默认 false
       isComponent,
-      node.loc
+      node.loc,
     )
   }
 }
@@ -321,14 +320,14 @@ export const transformElement: NodeTransform = (node, context) => {
 export function resolveComponentType(
   node: ComponentNode, // 当前节点 即组件节点
   context: TransformContext, // transform 上下文
-  ssr = false
+  ssr = false,
 ) {
   let { tag } = node
 
   // 1. dynamic component
   // 存在is属性（动态组件）
   const isExplicitDynamic = isComponentTag(tag)
-  const isProp = findProp(node, 'is')
+  const isProp = findProp(node, 'is', false, true /* allow empty */)
   if (isProp) {
     // 如 存在属性is：'<component is="HelloWorld" />' 或 '<component :is="HelloWorld" />'
     // 或 存在指令is：'<hello-world v-is="Welcome" />'
@@ -337,18 +336,28 @@ export function resolveComponentType(
       (__COMPAT__ &&
         isCompatEnabled(
           CompilerDeprecationTypes.COMPILER_IS_ON_ELEMENT,
-          context
+          context,
         ))
     ) {
-      const exp =
-        isProp.type === NodeTypes.ATTRIBUTE // 静态dom属性
-          ? isProp.value && createSimpleExpression(isProp.value.content, true) // 转换为指令值节点格式
-          : isProp.exp // 指令值节点
+      let exp: ExpressionNode | undefined
+      if (isProp.type === NodeTypes.ATTRIBUTE) {
+        // 静态dom属性
+        exp = isProp.value && createSimpleExpression(isProp.value.content, true) // 转换为指令值节点格式
+      } else {
+        exp = isProp.exp // 指令值节点
+        if (!exp) {
+          // #10469 handle :is shorthand
+          exp = createSimpleExpression(`is`, false, isProp.loc)
+          if (!__BROWSER__) {
+            exp = isProp.exp = processExpression(exp, context)
+          }
+        }
+      }
       if (exp) {
         // 创建一个类型为 JS_CALL_EXPRESSION 的渲染源码树codegen节点
         // Symbol(`resolveDynamicComponent`) 为执行的方法 callee
         return createCallExpression(context.helper(RESOLVE_DYNAMIC_COMPONENT), [
-          exp
+          exp,
         ])
       }
     } else if (
@@ -361,19 +370,6 @@ export function resolveComponentType(
       // compat mode where all is values are considered components
       tag = isProp.value!.content.slice(4)
     }
-  }
-
-  // 1.5 v-is (TODO: remove in 3.4)
-  const isDir = !isExplicitDynamic && findDir(node, 'is')
-  if (isDir && isDir.exp) {
-    if (__DEV__) {
-      context.onWarn(
-        createCompilerError(ErrorCodes.DEPRECATION_V_IS, isDir.loc)
-      )
-    }
-    return createCallExpression(context.helper(RESOLVE_DYNAMIC_COMPONENT), [
-      isDir.exp
-    ])
   }
 
   // 2. built-in components (Teleport, Transition, KeepAlive, Suspense...)
@@ -490,7 +486,7 @@ export function buildProps(
   props: ElementNode['props'] = node.props, // 节点上的属性列表
   isComponent: boolean,
   isDynamicComponent: boolean,
-  ssr = false
+  ssr = false,
 ): {
   props: PropsExpression | undefined
   directives: DirectiveNode[]
@@ -526,7 +522,7 @@ export function buildProps(
         //   loc,
         //   properties // 已经合并去重
         // }
-        createObjectExpression(dedupeProperties(properties), elementLoc)
+        createObjectExpression(dedupeProperties(properties), elementLoc),
       )
       // 如果存在v-bind/v-on指令，之后都依据mergeArgs合并后的列表
       properties = []
@@ -537,6 +533,18 @@ export function buildProps(
   // 根据属性列表设置相应的 PatchFlag 值
   // directiveTransforms后，进一步分析指令props属性节点：v-on、v-bind、v-model、v-html、v-text
   // prop属性节点 createObjectProperty(key, value)
+  // mark template ref on v-for
+  const pushRefVForMarker = () => {
+    if (context.scopes.vFor > 0) {
+      properties.push(
+        createObjectProperty(
+          createSimpleExpression('ref_for', true),
+          createSimpleExpression('true'),
+        ),
+      )
+    }
+  }
+
   const analyzePatchFlag = ({ key, value }: Property) => {
     if (isStaticExp(key)) {
       // 静态属性指令
@@ -622,19 +630,12 @@ export function buildProps(
     if (prop.type === NodeTypes.ATTRIBUTE) {
       // dom 静态属性，节点光标位置、属性名、属性值
       // 注意 静态style 已经被转换为动态style，即 style="color: blue;" 转换为 :style='{"color": "blue"}'
-      const { loc, name, value } = prop
+      const { loc, name, nameLoc, value } = prop
       let isStatic = true
       if (name === 'ref') {
         // 存在ref属性
         hasRef = true
-        if (context.scopes.vFor > 0) {
-          properties.push(
-            createObjectProperty(
-              createSimpleExpression('ref_for', true),
-              createSimpleExpression('true')
-            )
-          )
-        }
+        pushRefVForMarker()
         // in inline mode there is no setupState object, so we can't use string
         // keys to set the ref. Instead, we need to transform it to pass the
         // actual ref instead.
@@ -649,8 +650,8 @@ export function buildProps(
             properties.push(
               createObjectProperty(
                 createSimpleExpression('ref_key', true),
-                createSimpleExpression(value.content, true, value.loc)
-              )
+                createSimpleExpression(value.content, true, value.loc),
+              ),
             )
           }
         }
@@ -663,7 +664,7 @@ export function buildProps(
           (__COMPAT__ &&
             isCompatEnabled(
               CompilerDeprecationTypes.COMPILER_IS_ON_ELEMENT,
-              context
+              context,
             )))
       ) {
         // 跳过 <component>, 或者 is="vue:xxx"
@@ -675,18 +676,15 @@ export function buildProps(
         // 创建静态prop属性对应的js形式属性对象objProp: {type, loc, key, value}
         createObjectProperty(
           // objProp.key: {type, loc, content, isStatic, constType }
-          createSimpleExpression(
-            // 创建 属性名表达式对象 （形如ast指令属性值节点的结构）
-            name, // 静态属性名，'class'
-            true, // 静态属性
-            getInnerRange(loc, 0, name.length) // 获取属性名的模版解析的光标位置信息
-          ),
+          // 创建 属性名表达式对象 （形如ast指令属性值节点的结构）
+          // 静态属性名，'class'
+          createSimpleExpression(name, true, nameLoc),
           createSimpleExpression(
             value ? value.content : '',
             isStatic,
-            value ? value.loc : loc
-          )
-        )
+            value ? value.loc : loc,
+          ),
+        ),
       )
     } else {
       // directives 指令属性，合并去重，转换处理指令
@@ -699,7 +697,7 @@ export function buildProps(
       if (name === 'slot') {
         if (!isComponent) {
           context.onError(
-            createCompilerError(ErrorCodes.X_V_SLOT_MISPLACED, loc) // v-slot can only be used on components or <template> tags
+            createCompilerError(ErrorCodes.X_V_SLOT_MISPLACED, loc),
           )
         }
         continue
@@ -720,7 +718,7 @@ export function buildProps(
             (__COMPAT__ &&
               isCompatEnabled(
                 CompilerDeprecationTypes.COMPILER_IS_ON_ELEMENT,
-                context
+                context,
               ))))
       ) {
         continue
@@ -745,13 +743,8 @@ export function buildProps(
         shouldUseBlock = true
       }
 
-      if (isVBind && isStaticArgOf(arg, 'ref') && context.scopes.vFor > 0) {
-        properties.push(
-          createObjectProperty(
-            createSimpleExpression('ref_for', true),
-            createSimpleExpression('true')
-          )
-        )
+      if (isVBind && isStaticArgOf(arg, 'ref')) {
+        pushRefVForMarker()
       }
 
       // special case for v-bind and v-on with no argument
@@ -762,6 +755,8 @@ export function buildProps(
           if (isVBind) {
             // 如：<span class="red" :class="['blue', { green: true}]" v-bind="{ class: 'yellow'}"></span>
             // 直接保存v-bind属性值节点
+            // #10696 in case a v-bind object contains ref
+            pushRefVForMarker()
             // have to merge early for compat build check
             pushMergeArg()
             if (__COMPAT__) {
@@ -791,7 +786,7 @@ export function buildProps(
                   checkCompatEnabled(
                     CompilerDeprecationTypes.COMPILER_V_BIND_OBJECT_ORDER,
                     context,
-                    loc
+                    loc,
                   )
                 }
               }
@@ -799,7 +794,7 @@ export function buildProps(
               if (
                 isCompatEnabled(
                   CompilerDeprecationTypes.COMPILER_V_BIND_OBJECT_ORDER,
-                  context
+                  context,
                 )
               ) {
                 mergeArgs.unshift(exp)
@@ -817,7 +812,7 @@ export function buildProps(
               type: NodeTypes.JS_CALL_EXPRESSION, // codegen 执行表达式
               loc,
               callee: context.helper(TO_HANDLERS), // TO_HANDLERS = Symbol('toHandlers')
-              arguments: isComponent ? [exp] : [exp, `true`] // 属性值
+              arguments: isComponent ? [exp] : [exp, `true`], // 属性值
             })
           }
         } else {
@@ -827,8 +822,8 @@ export function buildProps(
               isVBind
                 ? ErrorCodes.X_V_BIND_NO_EXPRESSION // 缺少v-bind值表达式
                 : ErrorCodes.X_V_ON_NO_EXPRESSION,
-              loc
-            )
+              loc,
+            ),
           )
         }
         continue
@@ -911,7 +906,7 @@ export function buildProps(
       propsExpression = createCallExpression(
         context.helper(MERGE_PROPS),
         mergeArgs,
-        elementLoc
+        elementLoc,
       )
     } else {
       // 元素节点属性 只有v-on或v-bind(无参数)一个属性，则不需要创建合并函数
@@ -924,7 +919,7 @@ export function buildProps(
     // 如 <span class="red"></span>
     propsExpression = createObjectExpression(
       dedupeProperties(properties),
-      elementLoc
+      elementLoc,
     )
   }
 
@@ -990,7 +985,7 @@ export function buildProps(
           if (classProp && !isStaticExp(classProp.value)) {
             classProp.value = createCallExpression(
               context.helper(NORMALIZE_CLASS),
-              [classProp.value]
+              [classProp.value],
             )
           }
           if (
@@ -1006,14 +1001,14 @@ export function buildProps(
           ) {
             styleProp.value = createCallExpression(
               context.helper(NORMALIZE_STYLE),
-              [styleProp.value]
+              [styleProp.value],
             )
           }
         } else {
           // dynamic key binding, wrap with `normalizeProps`
           propsExpression = createCallExpression(
             context.helper(NORMALIZE_PROPS),
-            [propsExpression]
+            [propsExpression],
           )
         }
         break
@@ -1026,9 +1021,9 @@ export function buildProps(
           context.helper(NORMALIZE_PROPS),
           [
             createCallExpression(context.helper(GUARD_REACTIVE_PROPS), [
-              propsExpression
-            ])
-          ]
+              propsExpression,
+            ]),
+          ],
         )
         break
     }
@@ -1039,7 +1034,7 @@ export function buildProps(
     directives: runtimeDirectives, // 运行时的指令
     patchFlag,
     dynamicPropNames, // 静态指令属性名列表，且非 ref、style、class，且该指令没有被设置缓存,
-    shouldUseBlock
+    shouldUseBlock,
   }
 }
 
@@ -1104,7 +1099,7 @@ function mergeAsArray(existing: Property, incoming: Property) {
     // }
     existing.value = createArrayExpression(
       [existing.value, incoming.value],
-      existing.loc
+      existing.loc,
     )
   }
 }
@@ -1113,7 +1108,7 @@ function mergeAsArray(existing: Property, incoming: Property) {
 // 解析其中： 指令名、指令值、指令参数、参数修饰符
 export function buildDirectiveArgs( // 解析后的指令节点：key/value
   dir: DirectiveNode,
-  context: TransformContext
+  context: TransformContext,
 ): ArrayExpression {
   const dirArgs: ArrayExpression['elements'] = []
 
@@ -1178,10 +1173,10 @@ export function buildDirectiveArgs( // 解析后的指令节点：key/value
       // 创建一个 对象格式 的来保存修饰符列表值
       createObjectExpression(
         dir.modifiers.map(modifier =>
-          createObjectProperty(modifier, trueExpression)
+          createObjectProperty(modifier, trueExpression),
         ),
-        loc
-      )
+        loc,
+      ),
     )
   }
 

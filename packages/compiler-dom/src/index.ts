@@ -2,15 +2,15 @@
  * 编译template模板入口，得到render函数
  */
 import {
+  type CodegenResult,
+  type CompilerOptions,
+  type DirectiveTransform,
+  type NodeTransform,
+  type ParserOptions,
+  type RootNode,
   baseCompile,
   baseParse,
-  CompilerOptions,
-  CodegenResult,
-  ParserOptions,
-  RootNode,
   noopDirectiveTransform,
-  NodeTransform,
-  DirectiveTransform
 } from '@vue/compiler-core'
 import { parserOptions } from './parserOptions'
 import { transformStyle } from './transforms/transformStyle'
@@ -29,7 +29,7 @@ export { parserOptions }
 // 生成ast语法树后，transform阶段，其中dom节点需要进一步调整的内容
 export const DOMNodeTransforms: NodeTransform[] = [
   transformStyle, // 转换ast语法树中的静态style属性节点为指令属性节点
-  ...(__DEV__ ? [transformTransition] : []) // transition 组件下只能接收一个子元素/子组件
+  ...(__DEV__ ? [transformTransition] : []), // transition 组件下只能接收一个子元素/子组件
 ]
 
 // 在解析ast语法树后，在transform阶段中，执行转换transformElement时，会解析以下指令
@@ -38,17 +38,17 @@ export const DOMDirectiveTransforms: Record<string, DirectiveTransform> = {
   html: transformVHtml, // 解析 v-html指令，属性值必须存在，覆盖子内容
   text: transformVText, // 解析 v-text指令，属性值必须存在，覆盖子内容
   model: transformModel, // 先在compiler-core中解析指令属性节点，再进一步针对dom元素上的v-model，解析使用环境，如需在文本框中使用，并设置needRuntime，过滤一些只在组件上有意义的v-model属性节点信息
-  on: transformOn, // 先在compiler-core on，再处理指令修饰符modifiers，进一步转换属性值节点、属性名节点格式
-  show: transformShow // 解析v-show，必须设置属性值，返回空属性列表，设置needRuntime
+  on: transformOn, // override compiler-core 先在compiler-core on，再处理指令修饰符modifiers，进一步转换属性值节点、属性名节点格式
+  show: transformShow, // override compiler-core 解析v-show，必须设置属性值，返回空属性列表，设置needRuntime
 }
 
 // 开始编译 template模板，得到render函数
 export function compile(
-  template: string,
-  options: CompilerOptions = {}
+  src: string | RootNode,
+  options: CompilerOptions = {},
 ): CodegenResult {
   return baseCompile(
-    template,
+    src,
     extend({}, parserOptions, options, {
       // transform阶段
       nodeTransforms: [
@@ -57,17 +57,17 @@ export function compile(
         // by compiler-ssr to generate vnode fallback branches
         ignoreSideEffectTags, // 生成ast语法树后，在transform阶段 移除 script 与 style 标签节点
         ...DOMNodeTransforms,
-        ...(options.nodeTransforms || [])
+        ...(options.nodeTransforms || []),
       ],
       // transform阶段
       directiveTransforms: extend(
         {},
         DOMDirectiveTransforms,
-        options.directiveTransforms || {}
+        options.directiveTransforms || {},
       ),
       // hoistStatic 静态提升
-      transformHoist: __BROWSER__ ? null : stringifyStatic
-    })
+      transformHoist: __BROWSER__ ? null : stringifyStatic,
+    }),
   )
 }
 
@@ -77,5 +77,9 @@ export function parse(template: string, options: ParserOptions = {}): RootNode {
 
 export * from './runtimeHelpers'
 export { transformStyle } from './transforms/transformStyle'
-export { createDOMCompilerError, DOMErrorCodes } from './errors'
+export {
+  createDOMCompilerError,
+  DOMErrorCodes,
+  DOMErrorMessages,
+} from './errors'
 export * from '@vue/compiler-core'

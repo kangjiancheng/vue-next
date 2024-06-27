@@ -1,17 +1,25 @@
 // This entry is the "full-build" that includes both the runtime
 // and the compiler, and supports on-the-fly compilation of the template option.
 import { initDev } from './dev'
-import { compile, CompilerOptions, CompilerError } from '@vue/compiler-dom'
-import { registerRuntimeCompiler, RenderFunction, warn } from '@vue/runtime-dom'
+import {
+  type CompilerError,
+  type CompilerOptions,
+  compile,
+} from '@vue/compiler-dom'
+import {
+  type RenderFunction,
+  registerRuntimeCompiler,
+  warn,
+} from '@vue/runtime-dom'
 import * as runtimeDom from '@vue/runtime-dom'
 import {
-  isString,
+  EMPTY_OBJ,
   NOOP,
-  generateCodeFrame,
   extend,
-  EMPTY_OBJ
+  generateCodeFrame,
+  isString,
 } from '@vue/shared'
-import { InternalRenderFunction } from 'packages/runtime-core/src/component'
+import type { InternalRenderFunction } from 'packages/runtime-core/src/component'
 
 if (__DEV__) {
   initDev()
@@ -35,7 +43,7 @@ function getCache(options?: CompilerOptions) {
 // 当执行完setup函数后：编译vue模版源码template得到对应的js渲染函数，即得到
 function compileToFunction(
   template: string | HTMLElement,
-  options?: CompilerOptions
+  options?: CompilerOptions,
 ): RenderFunction {
   if (!isString(template)) {
     if (template.nodeType) {
@@ -71,9 +79,9 @@ function compileToFunction(
       hoistStatic: true, // 静态提升
       // 解析失败时，比如解析注释失败，当 template = 'abc<!--123' 错误提示：'Template compilation error: Unexpected EOF in comment.'
       onError: __DEV__ ? onError : undefined,
-      onWarn: __DEV__ ? e => onError(e, true) : NOOP
+      onWarn: __DEV__ ? e => onError(e, true) : NOOP,
     } as CompilerOptions,
-    options
+    options,
   )
 
   if (!opts.isCustomElement && typeof customElements !== 'undefined') {
@@ -93,7 +101,7 @@ function compileToFunction(
         // 输出 '错误源码'
         template as string,
         err.loc.start.offset,
-        err.loc.end.offset
+        err.loc.end.offset,
       )
     // 控制台输出错误信息
     warn(codeFrame ? `${message}\n${codeFrame}` : message)

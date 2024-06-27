@@ -1,14 +1,14 @@
 import {
+  type ComponentOptions,
+  type ConcreteComponent,
   currentInstance,
-  ConcreteComponent,
-  ComponentOptions,
-  getComponentName
+  getComponentName,
 } from '../component'
 import { currentRenderingInstance } from '../componentRenderContext'
-import { Directive } from '../directives'
+import type { Directive } from '../directives'
 import { camelize, capitalize, isString } from '@vue/shared'
 import { warn } from '../warning'
-import { VNodeTypes } from '../vnode'
+import type { VNodeTypes } from '../vnode'
 
 export const COMPONENTS = 'components'
 export const DIRECTIVES = 'directives'
@@ -24,7 +24,7 @@ export type AssetTypes = typeof COMPONENTS | typeof DIRECTIVES | typeof FILTERS
  */
 export function resolveComponent(
   name: string,
-  maybeSelfReference?: boolean
+  maybeSelfReference?: boolean,
 ): ConcreteComponent | string {
   return resolveAsset(COMPONENTS, name, true, maybeSelfReference) || name
 }
@@ -72,12 +72,12 @@ function resolveAsset(
   type: typeof COMPONENTS, // 组件
   name: string,
   warnMissing?: boolean,
-  maybeSelfReference?: boolean
+  maybeSelfReference?: boolean,
 ): ConcreteComponent | undefined
 // overload 2: directives
 function resolveAsset(
   type: typeof DIRECTIVES, // 指令
-  name: string
+  name: string,
 ): Directive | undefined
 // implementation
 // overload 3: filters (compat only)
@@ -87,7 +87,7 @@ function resolveAsset(
   type: AssetTypes, // 'components'/'directives'/'FILTERS' - 组件对象的选项属性名
   name: string,
   warnMissing = true,
-  maybeSelfReference = false
+  maybeSelfReference = false,
 ) {
   // 当前渲染的组件实例
   const instance = currentRenderingInstance || currentInstance
@@ -100,7 +100,7 @@ function resolveAsset(
       // 获取组件名
       const selfName = getComponentName(
         Component,
-        false /* do not include inferred name to avoid breaking existing code */
+        false /* do not include inferred name to avoid breaking existing code */,
       )
       if (
         selfName &&
@@ -138,7 +138,7 @@ function resolveAsset(
   } else if (__DEV__) {
     warn(
       `resolve${capitalize(type.slice(0, -1))} ` +
-        `can only be used in render() or setup().`
+        `can only be used in render() or setup().`,
     )
   }
 }

@@ -2,7 +2,7 @@
 // Reason: potentially setting innerHTML.
 // This can come from explicit usage of v-html or innerHTML as a prop in render
 
-import { warn, DeprecationTypes, compatUtils } from '@vue/runtime-core'
+import { DeprecationTypes, compatUtils, warn } from '@vue/runtime-core'
 import { includeBooleanAttr } from '@vue/shared'
 
 // 添加 vnode dom实例el 的属性，如 id、innerHTML
@@ -17,7 +17,7 @@ export function patchDOMProp(
   prevChildren: any,
   parentComponent: any, // vnode 父组件实例
   parentSuspense: any,
-  unmountChildren: any
+  unmountChildren: any,
 ) {
   // v-html、v-text
   if (key === 'innerHTML' || key === 'textContent') {
@@ -37,20 +37,21 @@ export function patchDOMProp(
     // custom elements may use _value internally
     !tag.includes('-')
   ) {
-    // store value as _value as well since
-    // non-string values will be stringified.
-    el._value = value
     // #4956: <option> value will fallback to its text content so we need to
     // compare against its attribute value instead.
-    const oldValue = tag === 'OPTION' ? el.getAttribute('value') : el.value
-    const newValue = value == null ? '' : value
-    if (oldValue !== newValue) {
+    const oldValue =
+      tag === 'OPTION' ? el.getAttribute('value') || '' : el.value
+    const newValue = value == null ? '' : String(value)
+    if (oldValue !== newValue || !('_value' in el)) {
       // 如果属性值不一样，就替换
       el.value = newValue
     }
     if (value == null) {
       el.removeAttribute(key)
     }
+    // store value as _value as well since
+    // non-string values will be stringified.
+    el._value = value
     return
   }
 
@@ -79,7 +80,7 @@ export function patchDOMProp(
       value === false &&
       compatUtils.isCompatEnabled(
         DeprecationTypes.ATTR_FALSE_VALUE,
-        parentComponent
+        parentComponent,
       )
     ) {
       const type = typeof el[key]
@@ -88,7 +89,7 @@ export function patchDOMProp(
           compatUtils.warnDeprecation(
             DeprecationTypes.ATTR_FALSE_VALUE,
             parentComponent,
-            key
+            key,
           )
         value = type === 'number' ? 0 : ''
         needRemove = true
@@ -107,7 +108,7 @@ export function patchDOMProp(
       warn(
         `Failed setting prop "${key}" on <${tag.toLowerCase()}>: ` +
           `value ${value} is invalid.`,
-        e
+        e,
       )
     }
   }

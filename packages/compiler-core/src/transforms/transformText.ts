@@ -1,16 +1,16 @@
-import { NodeTransform } from '../transform'
+import type { NodeTransform } from '../transform'
 import {
-  NodeTypes,
-  CompoundExpressionNode,
-  createCallExpression,
-  CallExpression,
-  ElementTypes,
+  type CallExpression,
+  type CompoundExpressionNode,
   ConstantTypes,
-  createCompoundExpression
+  ElementTypes,
+  NodeTypes,
+  createCallExpression,
+  createCompoundExpression,
 } from '../ast'
 import { isText } from '../utils'
 import { CREATE_TEXT } from '../runtimeHelpers'
-import { PatchFlags, PatchFlagNames } from '@vue/shared'
+import { PatchFlagNames, PatchFlags } from '@vue/shared'
 import { getConstantType } from './hoistStatic'
 
 // 合并处理节点的子文本节点内容
@@ -53,9 +53,10 @@ export const transformText: NodeTransform = (node, context) => {
               // 如果下一个也是文本/插值节点
               if (!currentContainer) {
                 // 将当前文本节点添加到 合并节点 列表中去，同时修改原ast对应的当前在处理的ast节点的子节点列表
-                currentContainer = children[i] = createCompoundExpression( // 合成表达式节点
+                currentContainer = children[i] = createCompoundExpression(
+                  // 合成表达式节点
                   [child], // NodeTypes.INTERPOLATION 、 NodeTypes.TEXT
-                  child.loc // 第一个信息
+                  child.loc, // 第一个信息
                 )
               }
               // merge adjacent text node into current
@@ -89,7 +90,7 @@ export const transformText: NodeTransform = (node, context) => {
               !node.props.find(
                 p =>
                   p.type === NodeTypes.DIRECTIVE &&
-                  !context.directiveTransforms[p.name]
+                  !context.directiveTransforms[p.name],
               ) &&
               // in compat mode, <template> tags with no special directives
               // will be rendered as a fragment so its children must be
@@ -134,7 +135,7 @@ export const transformText: NodeTransform = (node, context) => {
             callArgs.push(
               // 存储到插值元素的patch信息： ['插值子节点...', '1 /* TEXT */']
               PatchFlags.TEXT +
-                (__DEV__ ? ` /* ${PatchFlagNames[PatchFlags.TEXT]} */` : ``) // 输出 注释，表明diff时，是text patch 方式
+                (__DEV__ ? ` /* ${PatchFlagNames[PatchFlags.TEXT]} */` : ``), // 输出 注释，表明diff时，是text patch 方式
             )
           }
 
@@ -147,8 +148,8 @@ export const transformText: NodeTransform = (node, context) => {
               // 之后的静态提升与codegen生成节点对应的渲染源码时，会用到
               // 创建patch时相应的回调表达式，对应文本代码生成的配置节点
               context.helper(CREATE_TEXT), // patch 时的方法与描述信息：'Symbol(createTextVNode)'
-              callArgs // 对应参数列表， 元素1：INTERPOLATION 插值、 COMPOUND_EXPRESSION 合并后的连续子节点、 TEXT 纯文本子节点且不是空白； 元素2：插值表达式对于的patch flag 注释
-            )
+              callArgs, // 对应参数列表， 元素1：INTERPOLATION 插值、 COMPOUND_EXPRESSION 合并后的连续子节点、 TEXT 纯文本子节点且不是空白； 元素2：插值表达式对于的patch flag 注释
+            ),
           }
         }
       }

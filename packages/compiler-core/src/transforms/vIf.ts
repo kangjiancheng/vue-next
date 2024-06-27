@@ -1,43 +1,37 @@
 import {
+  type TransformContext,
   createStructuralDirectiveTransform,
-  TransformContext,
-  traverseNode
+  traverseNode,
 } from '../transform'
 import {
-  NodeTypes,
+  type AttributeNode,
+  type BlockCodegenNode,
+  type CacheExpression,
+  ConstantTypes,
+  type DirectiveNode,
+  type ElementNode,
   ElementTypes,
-  ElementNode,
-  DirectiveNode,
-  IfBranchNode,
-  SimpleExpressionNode,
+  type IfBranchNode,
+  type IfConditionalExpression,
+  type IfNode,
+  type MemoExpression,
+  NodeTypes,
+  type SimpleExpressionNode,
+  convertToBlock,
   createCallExpression,
   createConditionalExpression,
-  createSimpleExpression,
-  createObjectProperty,
   createObjectExpression,
-  IfConditionalExpression,
-  BlockCodegenNode,
-  IfNode,
+  createObjectProperty,
+  createSimpleExpression,
   createVNodeCall,
-  AttributeNode,
   locStub,
-  CacheExpression,
-  ConstantTypes,
-  MemoExpression,
-  convertToBlock
 } from '../ast'
-import { createCompilerError, ErrorCodes } from '../errors'
+import { ErrorCodes, createCompilerError } from '../errors'
 import { processExpression } from './transformExpression'
 import { validateBrowserExpression } from '../validateExpression'
-import { FRAGMENT, CREATE_COMMENT } from '../runtimeHelpers'
-import {
-  injectProp,
-  findDir,
-  findProp,
-  isBuiltInType,
-  getMemoedVNodeCall
-} from '../utils'
-import { PatchFlags, PatchFlagNames } from '@vue/shared'
+import { CREATE_COMMENT, FRAGMENT } from '../runtimeHelpers'
+import { findDir, findProp, getMemoedVNodeCall, injectProp } from '../utils'
+import { PatchFlagNames, PatchFlags } from '@vue/shared'
 
 /**
  * 创建v-if解析插件时，原理是基于 if分支流节点 来解析的，如一个分支流中可能是：if节点、else节点、else-if节点，构成的一个逻辑判断流程。
@@ -78,7 +72,7 @@ export const transformIf = createStructuralDirectiveTransform(
           ifNode.codegenNode = createCodegenNodeForBranch(
             branch, // if 节点的 对应branch节点
             key, // 记录 branch 在所有if分支流节点中的位置
-            context
+            context,
           ) as IfConditionalExpression
         } else {
           // 解析 else节点或 else-if节点，并将codegenNode链式绑定到if codegenNode的alternate属性上
@@ -87,12 +81,12 @@ export const transformIf = createStructuralDirectiveTransform(
           parentCondition.alternate = createCodegenNodeForBranch(
             branch, // else-f/else
             key + ifNode.branches.length - 1, // 记录 branch 在所有if分支流节点中的位置
-            context
+            context,
           )
         }
       }
     })
-  }
+  },
 )
 
 // 添加v-if解析插件
@@ -104,8 +98,8 @@ export function processIf(
   processCodegen?: (
     node: IfNode,
     branch: IfBranchNode,
-    isRoot: boolean
-  ) => (() => void) | undefined
+    isRoot: boolean,
+  ) => (() => void) | undefined,
 ) {
   // v-if/v-else-if  必须有表达式值
   if (
@@ -114,7 +108,7 @@ export function processIf(
   ) {
     const loc = dir.exp ? dir.exp.loc : node.loc
     context.onError(
-      createCompilerError(ErrorCodes.X_V_IF_NO_EXPRESSION, dir.loc) // v-if/v-else-if is missing expression
+      createCompilerError(ErrorCodes.X_V_IF_NO_EXPRESSION, dir.loc), // v-if/v-else-if is missing expression
     )
     dir.exp = createSimpleExpression(`true`, false, loc) // 默认设置为 true
   }
@@ -137,7 +131,7 @@ export function processIf(
     const ifNode: IfNode = {
       type: NodeTypes.IF,
       loc: node.loc,
-      branches: [branch] // if分支节点列表： 保存if节点 和 对应的else节点、else-if节点
+      branches: [branch], // if分支节点列表： 保存if节点 和 对应的else节点、else-if节点
     }
     context.replaceNode(ifNode)
     if (processCodegen) {
@@ -180,7 +174,7 @@ export function processIf(
           sibling.branches[sibling.branches.length - 1].condition === undefined
         ) {
           context.onError(
-            createCompilerError(ErrorCodes.X_V_ELSE_NO_ADJACENT_IF, node.loc)
+            createCompilerError(ErrorCodes.X_V_ELSE_NO_ADJACENT_IF, node.loc),
           )
         }
 
@@ -196,7 +190,8 @@ export function processIf(
           !(
             context.parent &&
             context.parent.type === NodeTypes.ELEMENT &&
-            isBuiltInType(context.parent.tag, 'transition')
+            (context.parent.tag === 'transition' ||
+              context.parent.tag === 'Transition')
           )
         ) {
           branch.children = [...comments, ...branch.children]
@@ -212,8 +207,8 @@ export function processIf(
                 context.onError(
                   createCompilerError(
                     ErrorCodes.X_V_IF_SAME_KEY, // v-if/else branches must use unique keys.
-                    branch.userKey!.loc
-                  )
+                    branch.userKey!.loc,
+                  ),
                 )
               }
             })
@@ -235,7 +230,7 @@ export function processIf(
       } else {
         // 前边未匹配到 if
         context.onError(
-          createCompilerError(ErrorCodes.X_V_ELSE_NO_ADJACENT_IF, node.loc) // v-else/v-else-if has no adjacent v-if.
+          createCompilerError(ErrorCodes.X_V_ELSE_NO_ADJACENT_IF, node.loc), // v-else/v-else-if has no adjacent v-if.
         )
       }
       break
@@ -254,15 +249,15 @@ function createIfBranch(node: ElementNode, dir: DirectiveNode): IfBranchNode {
     // <template v-if v-for>...</template> 或 <div v-if>...</div>
     children: isTemplateIf && !findDir(node, 'for') ? node.children : [node], // 当前if 或 else 节点
     userKey: findProp(node, `key`), // 获取 :key 指令节点
-    isTemplateIf
+    isTemplateIf,
   }
 }
 
 // 创建 if分支流节点的codegenNode
 function createCodegenNodeForBranch(
   branch: IfBranchNode, // 当前节点（if/else/else-if）对应的branch节点
-  keyIndex: number, // // 从前边的if系列开始计数
-  context: TransformContext
+  keyIndex: number, // 从前边的if系列开始计数
+  context: TransformContext,
 ): IfConditionalExpression | BlockCodegenNode | MemoExpression {
   if (branch.condition) {
     // 创建 if/else-if 条件表达式 codegenNode: NodeTypes.JS_CONDITIONAL_EXPRESSION,
@@ -273,8 +268,8 @@ function createCodegenNodeForBranch(
       createCallExpression(context.helper(CREATE_COMMENT), [
         // CREATE_COMMENT = Symbol(__DEV__ ? `createCommentVNode` : ``)
         __DEV__ ? '"v-if"' : '""',
-        'true' // make sure to pass in asBlock: true so that the comment node call closes the current block.
-      ])
+        'true',
+      ]),
     ) as IfConditionalExpression
   } else {
     // else节点 直接创建codegen
@@ -285,8 +280,8 @@ function createCodegenNodeForBranch(
 // 创建 if分支流节点 中的if、else-if、else节点的codegen
 function createChildrenCodegenNode(
   branch: IfBranchNode, // 节点（if/else/else-if）对应的branch节点
-  keyIndex: number, // // 当前节点branch，在所有if/else/else-if 节点中的位置
-  context: TransformContext
+  keyIndex: number, // 当前节点branch，在所有if/else/else-if 节点中的位置
+  context: TransformContext,
 ): BlockCodegenNode | MemoExpression {
   const { helper } = context
   const keyProperty = createObjectProperty(
@@ -295,8 +290,8 @@ function createChildrenCodegenNode(
       `${keyIndex}`,
       false,
       locStub,
-      ConstantTypes.CAN_HOIST
-    )
+      ConstantTypes.CAN_HOIST,
+    ),
   )
   const { children } = branch // 保存 注释/if/else/else-if节点
   const firstChild = children[0] // 即当前节点（if/else/else-if）/或注释节点
@@ -344,7 +339,7 @@ function createChildrenCodegenNode(
         true,
         false,
         false /* isComponent */,
-        branch.loc
+        branch.loc,
       )
     }
   } else {
@@ -366,7 +361,7 @@ function createChildrenCodegenNode(
 
 function isSameKey(
   a: AttributeNode | DirectiveNode | undefined,
-  b: AttributeNode | DirectiveNode
+  b: AttributeNode | DirectiveNode,
 ): boolean {
   if (!a || a.type !== b.type) {
     return false
@@ -395,7 +390,7 @@ function isSameKey(
 
 // 返回前边条件节点的codegenNode，即递归查找ifNode链上的最后一个codegenNode（即alternate）
 function getParentCondition(
-  node: IfConditionalExpression | CacheExpression // ifNode.codegenNode
+  node: IfConditionalExpression | CacheExpression, // ifNode.codegenNode
 ): IfConditionalExpression {
   while (true) {
     if (node.type === NodeTypes.JS_CONDITIONAL_EXPRESSION) {

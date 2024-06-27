@@ -1,13 +1,16 @@
 /**
  * 编译template模板，得到render函数
  */
-
-import { CompilerOptions } from './options'
-import { baseParse } from './parse'
-import { transform, NodeTransform, DirectiveTransform } from './transform'
-import { generate, CodegenResult } from './codegen'
-import { RootNode } from './ast'
-import { isString, extend } from '@vue/shared'
+import type { CompilerOptions } from './options'
+import { baseParse } from './parser'
+import {
+  type DirectiveTransform,
+  type NodeTransform,
+  transform,
+} from './transform'
+import { type CodegenResult, generate } from './codegen'
+import type { RootNode } from './ast'
+import { extend, isString } from '@vue/shared'
 import { transformIf } from './transforms/vIf'
 import { transformFor } from './transforms/vFor'
 import { transformExpression } from './transforms/transformExpression'
@@ -20,16 +23,16 @@ import { transformText } from './transforms/transformText'
 import { transformOnce } from './transforms/vOnce'
 import { transformModel } from './transforms/vModel'
 import { transformFilter } from './compat/transformFilter'
-import { defaultOnError, createCompilerError, ErrorCodes } from './errors'
+import { ErrorCodes, createCompilerError, defaultOnError } from './errors'
 import { transformMemo } from './transforms/vMemo'
 
 export type TransformPreset = [
   NodeTransform[],
-  Record<string, DirectiveTransform>
+  Record<string, DirectiveTransform>,
 ]
 
 export function getBaseTransformPreset(
-  prefixIdentifiers?: boolean
+  prefixIdentifiers?: boolean,
 ): TransformPreset {
   return [
     // 默认 nodeTransforms compiler-core
@@ -43,7 +46,7 @@ export function getBaseTransformPreset(
         ? [
             // order is important
             trackVForSlotScopes,
-            transformExpression
+            transformExpression,
           ]
         : __BROWSER__ && __DEV__
           ? [transformExpression] // 处理插值表达式内容，指令属性节点值表达式，排除v-for和v-on:arg属性节点，在浏览器中只需要节点验证表达式值的js语法规则：validateBrowserExpression
@@ -51,15 +54,15 @@ export function getBaseTransformPreset(
       transformSlotOutlet, // 处理插值表达式内容，指令属性节点值表达式，排除v-for和v-on:arg属性节点，在浏览器中只需要节点验证表达式值的js语法规则：validateBrowserExpression
       transformElement, // 处理html元素节点或组件节点，解析元素节点的prop属性列表（on/bind/model/text/html/show/is）、v-slot指令与默认/具名插槽转换、patchFlag信息、用户定义的指令等，为当前节点的ast生成对应的codegen vnode执行函数节点
       trackSlotScopes, // 处理并跟踪节点的slot指令，通过计数来识别出是否内嵌了slot指令，为transformElement检测是否定义了动态slot，创建对应的patchflag信息
-      transformText // 处理 连续子文本节点/表达式节点 的合并；或 如果即包含文本又包含其它类型节点时，则需要设置该子节点文本/表达式的diff patch codegenNode 信息，同时也重新定义当前节点的子节点配置
+      transformText, // 处理 连续子文本节点/表达式节点 的合并；或 如果即包含文本又包含其它类型节点时，则需要设置该子节点文本/表达式的diff patch codegenNode 信息，同时也重新定义当前节点的子节点配置
     ],
     // 默认 directiveTransforms
     // transformElement阶段
     {
       on: transformOn, // 转换指令属性名、校验属性值、属性值节点为codegen节点，校验属性值js语法
       bind: transformBind, // 转换v-bind指令属性节点，如转换属性名为小驼峰、校验属性值
-      model: transformModel // 解析dom/组件节点上 v-model指令，返回 { props: [属性名节点、属性值节点、修饰符节点]}，如校验属性值节点不能为空，属性值内容格式必须是一个有效的js变量应用：$_abc[foo][bar] 或 $_abc.foo.bar
-    }
+      model: transformModel, // 解析dom/组件节点上 v-model指令，返回 { props: [属性名节点、属性值节点、修饰符节点]}，如校验属性值节点不能为空，属性值内容格式必须是一个有效的js变量应用：$_abc[foo][bar] 或 $_abc.foo.bar
+    },
   ]
 }
 
@@ -73,8 +76,8 @@ export function getBaseTransformPreset(
 // we name it `baseCompile` so that higher order compilers like
 // @vue/compiler-dom can export `compile` while re-exporting everything else.
 export function baseCompile(
-  template: string | RootNode,
-  options: CompilerOptions = {}
+  source: string | RootNode,
+  options: CompilerOptions = {},
 ): CodegenResult {
   const onError = options.onError || defaultOnError
   const isModuleMode = options.mode === 'module'
@@ -96,9 +99,11 @@ export function baseCompile(
     onError(createCompilerError(ErrorCodes.X_SCOPE_ID_NOT_SUPPORTED))
   }
 
+  const resolvedOptions = extend({}, options, {
+    prefixIdentifiers,
+  })
   // 解析 vue模版源码 => vue模版源码ast
-  const ast = isString(template) ? baseParse(template, options) : template
-
+  const ast = isString(source) ? baseParse(source, resolvedOptions) : source
   const [nodeTransforms, directiveTransforms] =
     getBaseTransformPreset(prefixIdentifiers)
 
@@ -112,26 +117,20 @@ export function baseCompile(
   // 转换 vue模版源码ast => js渲染源码ast
   transform(
     ast,
-    extend({}, options, {
-      prefixIdentifiers,
+    extend({}, resolvedOptions, {
       nodeTransforms: [
         ...nodeTransforms, // 默认需要调整的配置
-        ...(options.nodeTransforms || []) // user transforms，不同环境下，用户可能需要额外调整，如删减style/script标签节点、将元素节点的静态style属性转换为指令属性
+        ...(options.nodeTransforms || []), // user transforms，不同环境下，用户可能需要额外调整，如删减style/script标签节点、将元素节点的静态style属性转换为指令属性
       ],
       directiveTransforms: extend(
         // 处理指令
         {},
         directiveTransforms,
-        options.directiveTransforms || {} // user transforms
-      )
-    })
+        options.directiveTransforms || {}, // user transforms
+      ),
+    }),
   )
 
   // js渲染源码ast =>  js渲染源码
-  return generate(
-    ast,
-    extend({}, options, {
-      prefixIdentifiers
-    })
-  )
+  return generate(ast, resolvedOptions)
 }

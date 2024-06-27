@@ -1,16 +1,16 @@
-import { DirectiveTransform, DirectiveTransformResult } from '../transform'
+import type { DirectiveTransform, DirectiveTransformResult } from '../transform'
 import {
+  type DirectiveNode,
+  ElementTypes,
+  type ExpressionNode,
+  NodeTypes,
+  type SimpleExpressionNode,
   createCompoundExpression,
   createObjectProperty,
   createSimpleExpression,
-  DirectiveNode,
-  ElementTypes,
-  ExpressionNode,
-  NodeTypes,
-  SimpleExpressionNode
 } from '../ast'
 import { camelize, toHandlerKey } from '@vue/shared'
-import { createCompilerError, ErrorCodes } from '../errors'
+import { ErrorCodes, createCompilerError } from '../errors'
 import { processExpression } from './transformExpression'
 import { validateBrowserExpression } from '../validateExpression'
 import { hasScopeRef, isMemberExpression } from '../utils'
@@ -25,7 +25,7 @@ import { TO_HANDLER_KEY } from '../runtimeHelpers'
 // 'param => '  或 '(param1, param2) => '
 // 或 'function foo ('
 const fnExpRE =
-  /^\s*([\w$_]+|(async\s*)?\([^)]*?\))\s*(:[^=]+)?=>|^\s*(async\s+)?function(?:\s+[\w$]+)?\s*\(/
+  /^\s*(async\s*)?(\([^)]*?\)|[\w$_]+)\s*(:[^=]+)?=>|^\s*(async\s+)?function(?:\s+[\w$]+)?\s*\(/
 
 export interface VOnDirectiveNode extends DirectiveNode {
   // v-on without arg is handled directly in ./transformElements.ts due to it affecting
@@ -41,7 +41,7 @@ export const transformOn: DirectiveTransform = (
   dir, // 指令属性节点
   node, // dom元素节点或组件节点
   context, // transform 上下文
-  augmentor
+  augmentor,
 ) => {
   // 如 template: '<button @click.stop.prevent="handleClick"></button>'
   // modifiers: ['stop', 'prevent']
@@ -59,9 +59,7 @@ export const transformOn: DirectiveTransform = (
       // 静态指令，如 '<button @click="handleClick"></button>'
       let rawName = arg.content // 指令名内容：'click'
       if (__DEV__ && rawName.startsWith('vnode')) {
-        context.onWarn(
-          createCompilerError(ErrorCodes.DEPRECATION_VNODE_HOOKS, arg.loc)
-        )
+        context.onError(createCompilerError(ErrorCodes.X_VNODE_HOOKS, arg.loc))
       }
       if (rawName.startsWith('vue:')) {
         rawName = `vnode-${rawName.slice(4)}`
@@ -90,7 +88,7 @@ export const transformOn: DirectiveTransform = (
         // ['_toHandlerKey(', arg, ')']
         `${context.helperString(TO_HANDLER_KEY)}(`,
         arg,
-        `)`
+        `)`,
       ])
     }
   } else {
@@ -135,7 +133,7 @@ export const transformOn: DirectiveTransform = (
         exp,
         context,
         false,
-        hasMultipleStatements
+        hasMultipleStatements,
       )
       isInlineStatement && context.removeIdentifiers(`$event`)
       // with scope analysis, the function is hoistable if it has no reference
@@ -175,7 +173,7 @@ export const transformOn: DirectiveTransform = (
         exp as SimpleExpressionNode,
         context,
         false,
-        hasMultipleStatements
+        hasMultipleStatements,
       )
     }
 
@@ -201,7 +199,7 @@ export const transformOn: DirectiveTransform = (
               }(...args)` // 函数
         } => ${hasMultipleStatements ? `{` : `(`}`,
         exp,
-        hasMultipleStatements ? `}` : `)`
+        hasMultipleStatements ? `}` : `)`,
       ])
     }
   }
@@ -211,9 +209,9 @@ export const transformOn: DirectiveTransform = (
       // 创建指令属性对应的js属性表达式节点
       createObjectProperty(
         eventName, // codegen指令属性名节点
-        exp || createSimpleExpression(`() => {}`, false, loc) // codegen指令属性值节点，如果不存在属性值或为空白，创建一个空的属性值节点
-      )
-    ]
+        exp || createSimpleExpression(`() => {}`, false, loc), // codegen指令属性值节点，如果不存在属性值或为空白，创建一个空的属性值节点
+      ),
+    ],
   }
 
   // apply extended compiler augmentor

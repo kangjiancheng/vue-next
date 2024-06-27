@@ -11,3 +11,4 @@ TODOs.md
 .eslintcache
 dts-build/packages
 *.tsbuildinfo
+*.tgz

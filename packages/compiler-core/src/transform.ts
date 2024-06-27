@@ -1,45 +1,45 @@
-import { TransformOptions } from './options'
+import type { TransformOptions } from './options'
 import {
-  RootNode,
-  NodeTypes,
-  ParentNode,
-  TemplateChildNode,
-  ElementNode,
-  DirectiveNode,
-  Property,
-  ExpressionNode,
-  createSimpleExpression,
-  JSChildNode,
-  SimpleExpressionNode,
-  ElementTypes,
-  CacheExpression,
-  createCacheExpression,
-  TemplateLiteral,
-  createVNodeCall,
+  type ArrayExpression,
+  type CacheExpression,
   ConstantTypes,
-  ArrayExpression,
-  convertToBlock
+  type DirectiveNode,
+  type ElementNode,
+  ElementTypes,
+  type ExpressionNode,
+  type JSChildNode,
+  NodeTypes,
+  type ParentNode,
+  type Property,
+  type RootNode,
+  type SimpleExpressionNode,
+  type TemplateChildNode,
+  type TemplateLiteral,
+  convertToBlock,
+  createCacheExpression,
+  createSimpleExpression,
+  createVNodeCall,
 } from './ast'
 import {
-  isString,
-  isArray,
-  NOOP,
-  PatchFlags,
-  PatchFlagNames,
   EMPTY_OBJ,
+  NOOP,
+  PatchFlagNames,
+  PatchFlags,
+  camelize,
   capitalize,
-  camelize
+  isArray,
+  isString,
 } from '@vue/shared'
 import { defaultOnError, defaultOnWarn } from './errors'
 import {
-  TO_DISPLAY_STRING,
+  CREATE_COMMENT,
   FRAGMENT,
+  TO_DISPLAY_STRING,
   helperNameMap,
-  CREATE_COMMENT
 } from './runtimeHelpers'
 import { isVSlot } from './utils'
 import { hoistStatic, isSingleElementRoot } from './transforms/hoistStatic'
-import { CompilerCompatOptions } from './compat/compatConfig'
+import type { CompilerCompatOptions } from './compat/compatConfig'
 
 // There are two types of transforms:
 //
@@ -48,7 +48,7 @@ import { CompilerCompatOptions } from './compat/compatConfig'
 //   replace or remove the node being processed.
 export type NodeTransform = (
   node: RootNode | TemplateChildNode,
-  context: TransformContext
+  context: TransformContext,
 ) => void | (() => void) | (() => void)[]
 
 // - DirectiveTransform:
@@ -60,7 +60,7 @@ export type DirectiveTransform = (
   context: TransformContext,
   // a platform specific compiler can import the base transform and augment
   // it by passing in this optional argument.
-  augmentor?: (ret: DirectiveTransformResult) => DirectiveTransformResult
+  augmentor?: (ret: DirectiveTransformResult) => DirectiveTransformResult,
 ) => DirectiveTransformResult
 
 export interface DirectiveTransformResult {
@@ -74,7 +74,7 @@ export interface DirectiveTransformResult {
 export type StructuralDirectiveTransform = (
   node: ElementNode,
   dir: DirectiveNode,
-  context: TransformContext
+  context: TransformContext,
 ) => void | (() => void)
 
 export interface ImportItem {
@@ -83,9 +83,7 @@ export interface ImportItem {
 }
 
 export interface TransformContext
-  extends Required<
-      Omit<TransformOptions, 'filename' | keyof CompilerCompatOptions>
-    >,
+  extends Required<Omit<TransformOptions, keyof CompilerCompatOptions>>,
     CompilerCompatOptions {
   selfName: string | null
   root: RootNode
@@ -104,6 +102,9 @@ export interface TransformContext
     vOnce: number
   }
   parent: ParentNode | null
+  // we could use a stack but in practice we've only ever needed two layers up
+  // so this is more efficient
+  grandParent: ParentNode | null
   childIndex: number
   currentNode: RootNode | TemplateChildNode | null
   inVOnce: boolean
@@ -147,12 +148,13 @@ export function createTransformContext(
     isTS = false,
     onError = defaultOnError,
     onWarn = defaultOnWarn,
-    compatConfig
-  }: TransformOptions
+    compatConfig,
+  }: TransformOptions,
 ): TransformContext {
   const nameMatch = filename.replace(/\?.*$/, '').match(/([^/\\]+)\.\w+$/)
   const context: TransformContext = {
     // options
+    filename,
     selfName: nameMatch && capitalize(camelize(nameMatch[1])),
     prefixIdentifiers,
     hoistStatic,
@@ -191,9 +193,10 @@ export function createTransformContext(
       vFor: 0,
       vSlot: 0, // 上下文识别到slot指令属性，添加transform slot插件时：加1；执行完transform slot插件时：减1，以此来判断是否包含在另一个slot中
       vPre: 0,
-      vOnce: 0
+      vOnce: 0,
     },
     parent: null,
+    grandParent: null,
     currentNode: root,
     childIndex: 0,
     inVOnce: false,
@@ -260,7 +263,7 @@ export function createTransformContext(
       }
       context.parent!.children.splice(removalIndex, 1)
     },
-    onNodeRemoved: () => {},
+    onNodeRemoved: NOOP,
     addIdentifiers(exp) {
       // identifier tracking only happens in non-browser builds.
       if (!__BROWSER__) {
@@ -296,14 +299,14 @@ export function createTransformContext(
         `_hoisted_${context.hoists.length}`, // 静态节点的变量名，按添加顺序命名
         false,
         exp.loc,
-        ConstantTypes.CAN_HOIST
+        ConstantTypes.CAN_HOIST,
       )
       identifier.hoisted = exp
       return identifier
     },
     cache(exp, isVNode = false) {
       return createCacheExpression(context.cached++, exp, isVNode)
-    }
+    },
   }
 
   if (__COMPAT__) {
@@ -360,6 +363,7 @@ export function transform(root: RootNode, options: TransformOptions) {
   root.hoists = context.hoists // 需要静态提升的 codegenNode列表
   root.temps = context.temps // 临时变量个数
   root.cached = context.cached // 缓存编译结果，如 v-once
+  root.transformed = true
 
   if (__COMPAT__) {
     root.filters = [...context.filters!]
@@ -424,7 +428,7 @@ function createRootCodegen(root: RootNode, context: TransformContext) {
       undefined,
       true,
       undefined,
-      false /* isComponent */
+      false /* isComponent */,
     )
   } else {
     // no children = noop. codegen will return null.
@@ -435,7 +439,7 @@ function createRootCodegen(root: RootNode, context: TransformContext) {
 // 处理当前节点的子节点
 export function traverseChildren(
   parent: ParentNode,
-  context: TransformContext
+  context: TransformContext,
 ) {
   let i = 0
   const nodeRemoved = () => {
@@ -445,6 +449,7 @@ export function traverseChildren(
   for (; i < parent.children.length; i++) {
     const child = parent.children[i]
     if (isString(child)) continue
+    context.grandParent = context.parent
     context.parent = parent // 当前节点的父节点
     context.childIndex = i // 子节点位置
     context.onNodeRemoved = nodeRemoved
@@ -459,7 +464,7 @@ export function traverseChildren(
  */
 export function traverseNode(
   node: RootNode | TemplateChildNode, // ast 语法树的根节点，或 如 v-if的子节点列表（在解析v-if指令时，会遍历解析其子节点）
-  context: TransformContext
+  context: TransformContext,
 ) {
   context.currentNode = node // 当前在处理的节点
   // apply transform plugins
@@ -566,7 +571,7 @@ export function traverseNode(
  */
 export function createStructuralDirectiveTransform(
   name: string | RegExp, // 指令名 如 ，/^(if|else|else-if)$/、'for'
-  fn: StructuralDirectiveTransform // 指令回调
+  fn: StructuralDirectiveTransform, // 指令回调
 ): NodeTransform {
   const matches = isString(name)
     ? (n: string) => n === name // 如 v-for 的 'for'

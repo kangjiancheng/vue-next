@@ -1,6 +1,6 @@
-import { SimpleExpressionNode } from './ast'
-import { TransformContext } from './transform'
-import { createCompilerError, ErrorCodes } from './errors'
+import type { SimpleExpressionNode } from './ast'
+import type { TransformContext } from './transform'
+import { ErrorCodes, createCompilerError } from './errors'
 
 // these keywords should not appear inside expressions, but operators like
 // 'typeof', 'instanceof', and 'in' are allowed
@@ -13,7 +13,7 @@ const prohibitedKeywordRE = new RegExp(
     )
       .split(',')
       .join('\\b|\\b') +
-    '\\b'
+    '\\b',
 )
 
 // strip strings in expressions
@@ -31,7 +31,7 @@ export function validateBrowserExpression(
   node: SimpleExpressionNode, // 如 v-on 的指令属性值 节点 或 v-for="item in [item1, item2]" v-for 中in/of的右侧遍历对象节点 '[item1, item2]'
   context: TransformContext,
   asParams = false, // 校验表达式语法方式：作为函数参数或函数体，将表达式放在函数参数位置还是函数体位置
-  asRawStatements = false // 是否作为原始的js语句，即不用return，如 '<button @click="count++; total-"></button>'
+  asRawStatements = false, // 是否作为原始的js语句，即不用return，如 '<button @click="count++; total-"></button>'
 ) {
   const exp = node.content // 指令值内容
 
@@ -46,7 +46,7 @@ export function validateBrowserExpression(
     new Function(
       asRawStatements // 如 v-on中存在分隔符 ';' 或 多行执行语句
         ? ` ${exp} ` // 如  <button @click="if (count > 1) count++; "></button> ，则exp='if (count > 1) count++;'，结果为 (function anonymous ) { if (count > 1) count++; })
-        : `return ${asParams ? `(${exp}) => {}` : `(${exp})`}` // 如 '<button @click="count++"></button>'， exp = node.content='count++' 转换后为 (function anonymous() { return (count++) })
+        : `return ${asParams ? `(${exp}) => {}` : `(${exp})`}`, // 如 '<button @click="count++"></button>'， exp = node.content='count++' 转换后为 (function anonymous() { return (count++) })
     )
     // 注意
   } catch (e: any) {
@@ -63,8 +63,8 @@ export function validateBrowserExpression(
         ErrorCodes.X_INVALID_EXPRESSION, // on/if/for 指令的属性值为不合理的js语句
         node.loc,
         undefined,
-        message
-      )
+        message,
+      ),
     )
   }
 }

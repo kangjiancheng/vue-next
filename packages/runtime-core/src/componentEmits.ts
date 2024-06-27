@@ -1,32 +1,32 @@
 import {
-  camelize,
   EMPTY_OBJ,
-  toHandlerKey,
+  type UnionToIntersection,
+  camelize,
   extend,
   hasOwn,
   hyphenate,
   isArray,
   isFunction,
   isObject,
-  isString,
   isOn,
-  UnionToIntersection,
-  looseToNumber
+  isString,
+  looseToNumber,
+  toHandlerKey,
 } from '@vue/shared'
 import {
-  ComponentInternalInstance,
-  ComponentOptions,
-  ConcreteComponent,
-  formatComponentName
+  type ComponentInternalInstance,
+  type ComponentOptions,
+  type ConcreteComponent,
+  formatComponentName,
 } from './component'
-import { callWithAsyncErrorHandling, ErrorCodes } from './errorHandling'
+import { ErrorCodes, callWithAsyncErrorHandling } from './errorHandling'
 import { warn } from './warning'
 import { devtoolsComponentEmit } from './devtools'
-import { AppContext } from './apiCreateApp'
+import type { AppContext } from './apiCreateApp'
 import { emit as compatInstanceEmit } from './compat/instanceEventEmitter'
 import {
+  compatModelEmit,
   compatModelEventPrefix,
-  compatModelEmit
 } from './compat/componentVModel'
 
 export type ObjectEmitsOptions = Record<
@@ -54,20 +54,30 @@ export type EmitsToProps<T extends EmitsOptions> = T extends string[]
       }
     : {}
 
+export type ShortEmitsToObject<E> =
+  E extends Record<string, any[]>
+    ? {
+        [K in keyof E]: (...args: E[K]) => any
+      }
+    : E
+
 export type EmitFn<
   Options = ObjectEmitsOptions,
-  Event extends keyof Options = keyof Options
-> = Options extends Array<infer V>
-  ? (event: V, ...args: any[]) => void
-  : {} extends Options // if the emit is empty object (usually the default value for emit) should be converted to function
-    ? (event: string, ...args: any[]) => void
-    : UnionToIntersection<
-        {
-          [key in Event]: Options[key] extends (...args: infer Args) => any
-            ? (event: key, ...args: Args) => void
-            : (event: key, ...args: any[]) => void
-        }[Event]
-      >
+  Event extends keyof Options = keyof Options,
+> =
+  Options extends Array<infer V>
+    ? (event: V, ...args: any[]) => void
+    : {} extends Options // if the emit is empty object (usually the default value for emit) should be converted to function
+      ? (event: string, ...args: any[]) => void
+      : UnionToIntersection<
+          {
+            [key in Event]: Options[key] extends (...args: infer Args) => any
+              ? (event: key, ...args: Args) => void
+              : Options[key] extends any[]
+                ? (event: key, ...args: Options[key]) => void
+                : (event: key, ...args: any[]) => void
+          }[Event]
+        >
 
 // 组件实例的emit方法
 // 调用组件实例instance.ctx的emit方法，其中事件直接从vnode.props里匹配，非instance.props里
@@ -91,7 +101,7 @@ export function emit(
   if (__DEV__) {
     const {
       emitsOptions,
-      propsOptions: [propsOptions]
+      propsOptions: [propsOptions],
     } = instance
     if (emitsOptions) {
       if (
@@ -105,7 +115,7 @@ export function emit(
         if (!propsOptions || !(toHandlerKey(event) in propsOptions)) {
           warn(
             `Component emitted event "${event}" but it is neither declared in ` +
-              `the emits option nor as an "${toHandlerKey(event)}" prop.`
+              `the emits option nor as an "${toHandlerKey(event)}" prop.`,
           )
         }
       } else {
@@ -114,7 +124,7 @@ export function emit(
           const isValid = validator(...rawArgs)
           if (!isValid) {
             warn(
-              `Invalid event arguments: event validation failed for event "${event}".`
+              `Invalid event arguments: event validation failed for event "${event}".`,
             )
           }
         }
@@ -159,11 +169,13 @@ export function emit(
         `Event "${lowerCaseEvent}" is emitted in component ` +
           `${formatComponentName(
             instance,
-            instance.type
+            instance.type,
           )} but the handler is registered for "${event}". ` +
           `Note that HTML attributes are case-insensitive and you cannot use ` +
           `v-on to listen to camelCase events when using in-DOM templates. ` +
-          `You should probably use "${hyphenate(event)}" instead of "${event}".`
+          `You should probably use "${hyphenate(
+            event,
+          )}" instead of "${event}".`,
       )
     }
   }
@@ -190,7 +202,7 @@ export function emit(
       handler,
       instance,
       ErrorCodes.COMPONENT_EVENT_HANDLER,
-      args
+      args,
     )
   }
 
@@ -206,7 +218,7 @@ export function emit(
       onceHandler,
       instance,
       ErrorCodes.COMPONENT_EVENT_HANDLER,
-      args
+      args,
     )
   }
 
@@ -220,7 +232,7 @@ export function emit(
 export function normalizeEmitsOptions(
   comp: ConcreteComponent,
   appContext: AppContext,
-  asMixin = false
+  asMixin = false,
 ): ObjectEmitsOptions | null {
   const cache = appContext.emitsCache
   const cached = cache.get(comp)
@@ -279,7 +291,7 @@ export function normalizeEmitsOptions(
 // both considered matched listeners.
 export function isEmitListener(
   options: ObjectEmitsOptions | null, // 组件的emits属性选项
-  key: string
+  key: string,
 ): boolean {
   if (!options || !isOn(key)) {
     return false

@@ -1,46 +1,48 @@
 import {
-  ConcreteComponent,
-  getCurrentInstance,
-  SetupContext,
-  ComponentInternalInstance,
+  type ComponentInternalInstance,
+  type ComponentOptions,
+  type ConcreteComponent,
+  type SetupContext,
   currentInstance,
   getComponentName,
-  ComponentOptions
+  getCurrentInstance,
 } from '../component'
 import {
-  VNode,
+  type VNode,
+  type VNodeProps,
   cloneVNode,
-  isVNode,
-  VNodeProps,
   invokeVNodeHook,
-  isSameVNodeType
+  isSameVNodeType,
+  isVNode,
 } from '../vnode'
 import { warn } from '../warning'
 import {
-  onBeforeUnmount,
   injectHook,
-  onUnmounted,
+  onBeforeUnmount,
   onMounted,
-  onUpdated
+  onUnmounted,
+  onUpdated,
 } from '../apiLifecycle'
 import {
-  isString,
+  ShapeFlags,
+  invokeArrayFns,
   isArray,
   isRegExp,
-  ShapeFlags,
+  isString,
   remove,
-  invokeArrayFns
 } from '@vue/shared'
 import { watch } from '../apiWatch'
 import {
-  RendererInternals,
-  queuePostRenderEffect,
+  type ElementNamespace,
   MoveType,
-  RendererElement,
-  RendererNode
+  type RendererElement,
+  type RendererInternals,
+  type RendererNode,
+  invalidateMount,
+  queuePostRenderEffect,
 } from '../renderer'
 import { setTransitionHooks } from './BaseTransition'
-import { ComponentRenderContext } from '../componentPublicInstance'
+import type { ComponentRenderContext } from '../componentPublicInstance'
 import { devtoolsComponentAdded } from '../devtools'
 import { isAsyncWrapper } from '../apiAsyncComponent'
 import { isSuspense } from './Suspense'
@@ -54,7 +56,7 @@ export interface KeepAliveProps {
   max?: number | string
 }
 
-type CacheKey = string | number | symbol | ConcreteComponent
+type CacheKey = PropertyKey | ConcreteComponent
 type Cache = Map<CacheKey, VNode>
 type Keys = Set<CacheKey>
 
@@ -64,8 +66,8 @@ export interface KeepAliveContext extends ComponentRenderContext {
     vnode: VNode,
     container: RendererElement,
     anchor: RendererNode | null,
-    isSVG: boolean,
-    optimized: boolean
+    namespace: ElementNamespace,
+    optimized: boolean,
   ) => void
   deactivate: (vnode: VNode) => void
 }
@@ -89,7 +91,7 @@ const KeepAliveImpl: ComponentOptions = {
   props: {
     include: [String, RegExp, Array],
     exclude: [String, RegExp, Array],
-    max: [String, Number]
+    max: [String, Number],
   },
 
   setup(props: KeepAliveProps, { slots }: SetupContext) {
@@ -125,14 +127,20 @@ const KeepAliveImpl: ComponentOptions = {
         p: patch,
         m: move,
         um: _unmount,
-        o: { createElement }
-      }
+        o: { createElement },
+      },
     } = sharedContext
     // 存储被缓存的组件vnode的el即真实dom
     const storageContainer = createElement('div')
 
     // 子组件切换时，触发激活函数 - vnode 为要被激活的子组件vnode - 为之前缓存的子组件vnode，在渲染函数中生成返回的
-    sharedContext.activate = (vnode, container, anchor, isSVG, optimized) => {
+    sharedContext.activate = (
+      vnode,
+      container,
+      anchor,
+      namespace,
+      optimized,
+    ) => {
       const instance = vnode.component!
       // 将缓存的子组件的el挂载到当前父dom下
       move(vnode, container, anchor, MoveType.ENTER, parentSuspense)
@@ -145,9 +153,9 @@ const KeepAliveImpl: ComponentOptions = {
         anchor,
         instance,
         parentSuspense,
-        isSVG,
+        namespace,
         vnode.slotScopeIds,
-        optimized
+        optimized,
       )
       queuePostRenderEffect(() => {
         // 将子组件标记为激活状态
@@ -171,6 +179,8 @@ const KeepAliveImpl: ComponentOptions = {
     sharedContext.deactivate = (vnode: VNode) => {
       // 要被销毁/缓存的子组件vnode
       const instance = vnode.component!
+      invalidateMount(instance.m)
+      invalidateMount(instance.a)
       // 将当前子组件挂载到缓存dom上
       move(vnode, storageContainer, null, MoveType.LEAVE, parentSuspense)
       // 在本轮更新后，执行该副作用回调
@@ -235,7 +245,7 @@ const KeepAliveImpl: ComponentOptions = {
         exclude && pruneCache(name => !matches(exclude, name))
       },
       // prune post-render after `current` has been updated
-      { flush: 'post', deep: true }
+      { flush: 'post', deep: true },
     )
 
     // cache sub tree after render
@@ -243,7 +253,15 @@ const KeepAliveImpl: ComponentOptions = {
     const cacheSubtree = () => {
       // fix #1621, the pendingCacheKey could be 0
       if (pendingCacheKey != null) {
-        cache.set(pendingCacheKey, getInnerChild(instance.subTree))
+        // if KeepAlive child is a Suspense, it needs to be cached after Suspense resolves
+        // avoid caching vnode that not been mounted
+        if (isSuspense(instance.subTree.type)) {
+          queuePostRenderEffect(() => {
+            cache.set(pendingCacheKey!, getInnerChild(instance.subTree))
+          }, instance.subTree.suspense)
+        } else {
+          cache.set(pendingCacheKey, getInnerChild(instance.subTree))
+        }
       }
     }
     // 挂载或更新后，都会缓存当前子组件vnode
@@ -300,7 +318,7 @@ const KeepAliveImpl: ComponentOptions = {
       const name = getComponentName(
         isAsyncWrapper(vnode)
           ? (vnode.type as ComponentOptions).__asyncResolved || {}
-          : comp
+          : comp,
       )
 
       const { include, exclude, max } = props
@@ -325,11 +343,11 @@ const KeepAliveImpl: ComponentOptions = {
           rawVNode.ssContent = vnode
         }
       }
-      // #1513 it's possible for the returned vnode to be cloned due to attr
+      // #1511 it's possible for the returned vnode to be cloned due to attr
       // fallthrough or scopeId, so the vnode here may not be the final vnode
       // that is mounted. Instead of caching it directly, we store the pending
       // key and cache `instance.subTree` (the normalized vnode) in
-      // beforeMount/beforeUpdate hooks.
+      // mounted/updated hooks.
       pendingCacheKey = key
 
       // 如果此子组件已被缓存到keep-alive组件上的话：复制其中缓存的数据
@@ -362,7 +380,7 @@ const KeepAliveImpl: ComponentOptions = {
       current = vnode
       return isSuspense(rawVNode.type) ? rawVNode : vnode // 返回子组件vnode
     }
-  }
+  },
 }
 
 if (__COMPAT__) {
@@ -395,14 +413,14 @@ function matches(pattern: MatchPattern, name: string): boolean {
 
 export function onActivated(
   hook: Function,
-  target?: ComponentInternalInstance | null
+  target?: ComponentInternalInstance | null,
 ) {
   registerKeepAliveHook(hook, LifecycleHooks.ACTIVATED, target)
 }
 
 export function onDeactivated(
   hook: Function,
-  target?: ComponentInternalInstance | null
+  target?: ComponentInternalInstance | null,
 ) {
   registerKeepAliveHook(hook, LifecycleHooks.DEACTIVATED, target)
 }
@@ -410,7 +428,7 @@ export function onDeactivated(
 function registerKeepAliveHook(
   hook: Function & { __wdc?: Function },
   type: LifecycleHooks,
-  target: ComponentInternalInstance | null = currentInstance
+  target: ComponentInternalInstance | null = currentInstance,
 ) {
   // cache the deactivate branch check wrapper for injected hooks so the same
   // hook can be properly deduped by the scheduler. "__wdc" stands for "with
@@ -449,7 +467,7 @@ function injectToKeepAliveRoot(
   hook: Function & { __weh?: Function },
   type: LifecycleHooks,
   target: ComponentInternalInstance,
-  keepAliveRoot: ComponentInternalInstance
+  keepAliveRoot: ComponentInternalInstance,
 ) {
   // injectHook wraps the original for error handling, so make sure to remove
   // the wrapped version.

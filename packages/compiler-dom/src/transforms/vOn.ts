@@ -1,21 +1,21 @@
 import {
-  transformOn as baseTransform,
-  DirectiveTransform,
-  createObjectProperty,
-  createCallExpression,
-  createSimpleExpression,
-  NodeTypes,
-  createCompoundExpression,
-  ExpressionNode,
-  SimpleExpressionNode,
-  isStaticExp,
   CompilerDeprecationTypes,
-  TransformContext,
-  SourceLocation,
-  checkCompatEnabled
+  type DirectiveTransform,
+  type ExpressionNode,
+  NodeTypes,
+  type SimpleExpressionNode,
+  type SourceLocation,
+  type TransformContext,
+  transformOn as baseTransform,
+  checkCompatEnabled,
+  createCallExpression,
+  createCompoundExpression,
+  createObjectProperty,
+  createSimpleExpression,
+  isStaticExp,
 } from '@vue/compiler-core'
-import { V_ON_WITH_MODIFIERS, V_ON_WITH_KEYS } from '../runtimeHelpers'
-import { makeMap, capitalize } from '@vue/shared'
+import { V_ON_WITH_KEYS, V_ON_WITH_MODIFIERS } from '../runtimeHelpers'
+import { capitalize, makeMap } from '@vue/shared'
 
 const isEventOptionModifier = /*#__PURE__*/ makeMap(`passive,once,capture`)
 const isNonKeyModifier = /*#__PURE__*/ makeMap(
@@ -24,7 +24,7 @@ const isNonKeyModifier = /*#__PURE__*/ makeMap(
     // system modifiers + exact
     `ctrl,shift,alt,meta,exact,` +
     // mouse
-    `middle`
+    `middle`,
 )
 // 可能是鼠标，也可能是键盘上的按键事件
 // left & right could be mouse or key modifiers based on event type
@@ -32,7 +32,7 @@ const maybeKeyModifier = /*#__PURE__*/ makeMap('left,right')
 // 判断触发事件
 const isKeyboardEvent = /*#__PURE__*/ makeMap(
   `onkeyup,onkeydown,onkeypress`,
-  true
+  true,
 )
 
 /**
@@ -44,7 +44,7 @@ const resolveModifiers = (
   key: ExpressionNode,
   modifiers: string[],
   context: TransformContext,
-  loc: SourceLocation
+  loc: SourceLocation,
 ) => {
   const keyModifiers = []
   const nonKeyModifiers = []
@@ -59,7 +59,7 @@ const resolveModifiers = (
       checkCompatEnabled(
         CompilerDeprecationTypes.COMPILER_V_ON_NATIVE,
         context,
-        loc
+        loc,
       )
     ) {
       eventOptionModifiers.push(modifier)
@@ -102,7 +102,7 @@ const resolveModifiers = (
   return {
     keyModifiers, // 具体键盘按键，如回车键修饰符：@keyup.enter
     nonKeyModifiers, // 特殊键盘按键 如 shift、ctrl、或 鼠标middle 或 事件流程 prevent、stop
-    eventOptionModifiers // 事件流程 passive,once,capture
+    eventOptionModifiers, // 事件流程 passive,once,capture
   }
 }
 
@@ -122,7 +122,7 @@ const transformClick = (key: ExpressionNode, event: string) => {
           key,
           `) === "onClick" ? "${event}" : (`,
           key,
-          `)`
+          `)`,
         ])
       : key // 已经是复合（在处理属性名阶段已经进行转换）
 }
@@ -169,7 +169,7 @@ export const transformOn: DirectiveTransform = (dir, node, context) => {
       // 如 <button @click.prevent="handleClick"></button>
       handlerExp = createCallExpression(context.helper(V_ON_WITH_MODIFIERS), [
         handlerExp, // 指令属性值
-        JSON.stringify(nonKeyModifiers)
+        JSON.stringify(nonKeyModifiers),
       ])
     }
 
@@ -182,7 +182,7 @@ export const transformOn: DirectiveTransform = (dir, node, context) => {
       // 如 <button @[eventName].enter="handleEnter"></button>，其中eventName如 'keyup'、'keypress'
       handlerExp = createCallExpression(context.helper(V_ON_WITH_KEYS), [
         handlerExp,
-        JSON.stringify(keyModifiers)
+        JSON.stringify(keyModifiers),
       ])
     }
 
@@ -199,7 +199,7 @@ export const transformOn: DirectiveTransform = (dir, node, context) => {
 
     // 调整指令属性名节点、指令属性值节点
     return {
-      props: [createObjectProperty(key, handlerExp)]
+      props: [createObjectProperty(key, handlerExp)],
     }
   })
 }

@@ -1,48 +1,48 @@
 import {
+  type ComputedRef,
+  type DebuggerOptions,
+  type EffectScheduler,
+  ReactiveEffect,
+  ReactiveFlags,
+  type ReactiveMarker,
+  type Ref,
+  getCurrentScope,
+  isReactive,
   isRef,
   isShallow,
-  Ref,
-  ComputedRef,
-  ReactiveEffect,
-  isReactive,
-  ReactiveFlags,
-  EffectScheduler,
-  DebuggerOptions,
-  getCurrentScope
 } from '@vue/reactivity'
-import { SchedulerJob, queueJob } from './scheduler'
+import { type SchedulerJob, queueJob } from './scheduler'
 import {
   EMPTY_OBJ,
-  isObject,
+  NOOP,
+  extend,
+  hasChanged,
   isArray,
   isFunction,
-  isString,
-  hasChanged,
-  NOOP,
-  remove,
   isMap,
-  isSet,
+  isObject,
   isPlainObject,
-  extend
+  isSet,
+  isString,
+  remove,
 } from '@vue/shared'
 import {
+  type ComponentInternalInstance,
   currentInstance,
-  ComponentInternalInstance,
   isInSSRComponentSetup,
   setCurrentInstance,
-  unsetCurrentInstance
 } from './component'
 import {
   ErrorCodes,
+  callWithAsyncErrorHandling,
   callWithErrorHandling,
-  callWithAsyncErrorHandling
 } from './errorHandling'
 import { queuePostRenderEffect } from './renderer'
 import { warn } from './warning'
 import { DeprecationTypes } from './compat/compatConfig'
 import { checkCompatEnabled, isCompatEnabled } from './compat/compatConfig'
-import { ObjectWatchOptionItem } from './componentOptions'
-import { useSSRContext } from '@vue/runtime-core'
+import type { ObjectWatchOptionItem } from './componentOptions'
+import { useSSRContext } from './helpers/useSsrContext'
 
 export type WatchEffect = (onCleanup: OnCleanup) => void
 
@@ -51,22 +51,20 @@ export type WatchSource<T = any> = Ref<T> | ComputedRef<T> | (() => T)
 export type WatchCallback<V = any, OV = any> = (
   value: V,
   oldValue: OV,
-  onCleanup: OnCleanup
+  onCleanup: OnCleanup,
 ) => any
+
+type MaybeUndefined<T, I> = I extends true ? T | undefined : T
 
 type MapSources<T, Immediate> = {
   [K in keyof T]: T[K] extends WatchSource<infer V>
-    ? Immediate extends true
-      ? V | undefined
-      : V
+    ? MaybeUndefined<V, Immediate>
     : T[K] extends object
-      ? Immediate extends true
-        ? T[K] | undefined
-        : T[K]
+      ? MaybeUndefined<T[K], Immediate>
       : never
 }
 
-type OnCleanup = (cleanupFn: () => void) => void
+export type OnCleanup = (cleanupFn: () => void) => void
 
 export interface WatchOptionsBase extends DebuggerOptions {
   flush?: 'pre' | 'post' | 'sync'
@@ -75,6 +73,7 @@ export interface WatchOptionsBase extends DebuggerOptions {
 export interface WatchOptions<Immediate = boolean> extends WatchOptionsBase {
   immediate?: Immediate
   deep?: boolean
+  once?: boolean
 }
 
 export type WatchStopHandle = () => void
@@ -82,30 +81,30 @@ export type WatchStopHandle = () => void
 // Simple effect.
 export function watchEffect(
   effect: WatchEffect,
-  options?: WatchOptionsBase
+  options?: WatchOptionsBase,
 ): WatchStopHandle {
   return doWatch(effect, null, options)
 }
 
 export function watchPostEffect(
   effect: WatchEffect,
-  options?: DebuggerOptions
+  options?: DebuggerOptions,
 ) {
   return doWatch(
     effect,
     null,
-    __DEV__ ? extend({}, options as any, { flush: 'post' }) : { flush: 'post' }
+    __DEV__ ? extend({}, options as any, { flush: 'post' }) : { flush: 'post' },
   )
 }
 
 export function watchSyncEffect(
   effect: WatchEffect,
-  options?: DebuggerOptions
+  options?: DebuggerOptions,
 ) {
   return doWatch(
     effect,
     null,
-    __DEV__ ? extend({}, options as any, { flush: 'sync' }) : { flush: 'sync' }
+    __DEV__ ? extend({}, options as any, { flush: 'sync' }) : { flush: 'sync' },
   )
 }
 
@@ -114,56 +113,56 @@ const INITIAL_WATCHER_VALUE = {}
 
 type MultiWatchSources = (WatchSource<unknown> | object)[]
 
-// overload: array of multiple sources + cb
-export function watch<
-  T extends MultiWatchSources,
-  Immediate extends Readonly<boolean> = false
->(
-  sources: [...T],
-  cb: WatchCallback<MapSources<T, false>, MapSources<T, Immediate>>,
-  options?: WatchOptions<Immediate>
-): WatchStopHandle
-
-// overload: multiple sources w/ `as const`
-// watch([foo, bar] as const, () => {})
-// somehow [...T] breaks when the type is readonly
-export function watch<
-  T extends Readonly<MultiWatchSources>,
-  Immediate extends Readonly<boolean> = false
->(
-  source: T,
-  cb: WatchCallback<MapSources<T, false>, MapSources<T, Immediate>>,
-  options?: WatchOptions<Immediate>
-): WatchStopHandle
-
 // overload: single source + cb
 export function watch<T, Immediate extends Readonly<boolean> = false>(
   source: WatchSource<T>,
-  cb: WatchCallback<T, Immediate extends true ? T | undefined : T>,
-  options?: WatchOptions<Immediate>
+  cb: WatchCallback<T, MaybeUndefined<T, Immediate>>,
+  options?: WatchOptions<Immediate>,
+): WatchStopHandle
+
+// overload: reactive array or tuple of multiple sources + cb
+export function watch<
+  T extends Readonly<MultiWatchSources>,
+  Immediate extends Readonly<boolean> = false,
+>(
+  sources: readonly [...T] | T,
+  cb: [T] extends [ReactiveMarker]
+    ? WatchCallback<T, MaybeUndefined<T, Immediate>>
+    : WatchCallback<MapSources<T, false>, MapSources<T, Immediate>>,
+  options?: WatchOptions<Immediate>,
+): WatchStopHandle
+
+// overload: array of multiple sources + cb
+export function watch<
+  T extends MultiWatchSources,
+  Immediate extends Readonly<boolean> = false,
+>(
+  sources: [...T],
+  cb: WatchCallback<MapSources<T, false>, MapSources<T, Immediate>>,
+  options?: WatchOptions<Immediate>,
 ): WatchStopHandle
 
 // overload: watching reactive object w/ cb
 export function watch<
   T extends object,
-  Immediate extends Readonly<boolean> = false
+  Immediate extends Readonly<boolean> = false,
 >(
   source: T,
-  cb: WatchCallback<T, Immediate extends true ? T | undefined : T>,
-  options?: WatchOptions<Immediate>
+  cb: WatchCallback<T, MaybeUndefined<T, Immediate>>,
+  options?: WatchOptions<Immediate>,
 ): WatchStopHandle
 
 // implementation
 export function watch<T = any, Immediate extends Readonly<boolean> = false>(
   source: T | WatchSource<T>,
   cb: any,
-  options?: WatchOptions<Immediate>
+  options?: WatchOptions<Immediate>,
 ): WatchStopHandle {
   if (__DEV__ && !isFunction(cb)) {
     warn(
       `\`watch(fn, options?)\` signature has been moved to a separate API. ` +
         `Use \`watchEffect(fn, options?)\` instead. \`watch\` now only ` +
-        `supports \`watch(source, cb, options?) signature.`
+        `supports \`watch(source, cb, options?) signature.`,
     )
   }
   // 初始化：执行source的effect，track 进行监听目标依赖项 收集与跟踪
@@ -176,8 +175,31 @@ export function watch<T = any, Immediate extends Readonly<boolean> = false>(
 function doWatch(
   source: WatchSource | WatchSource[] | WatchEffect | object,
   cb: WatchCallback | null,
-  { immediate, deep, flush, onTrack, onTrigger }: WatchOptions = EMPTY_OBJ
+  {
+    immediate,
+    deep,
+    flush,
+    once,
+    onTrack,
+    onTrigger,
+  }: WatchOptions = EMPTY_OBJ,
 ): WatchStopHandle {
+  if (cb && once) {
+    const _cb = cb
+    cb = (...args) => {
+      _cb(...args)
+      unwatch()
+    }
+  }
+
+  // TODO remove in 3.5
+  if (__DEV__ && deep !== void 0 && typeof deep === 'number') {
+    warn(
+      `watch() "deep" option with number value will be used as watch depth in future versions. ` +
+        `Please use a boolean instead to avoid potential breakage.`,
+    )
+  }
+
   if (__DEV__ && !cb) {
     // 当使用：watchEffect(effect, options)，immediate、deep 就不需要了
 
@@ -185,14 +207,20 @@ function doWatch(
       // 仅适用于 watch()
       warn(
         `watch() "immediate" option is only respected when using the ` +
-          `watch(source, callback, options?) signature.`
+          `watch(source, callback, options?) signature.`,
       )
     }
     if (deep !== undefined) {
       // 仅适用于 watch()
       warn(
         `watch() "deep" option is only respected when using the ` +
-          `watch(source, callback, options?) signature.`
+          `watch(source, callback, options?) signature.`,
+      )
+    }
+    if (once !== undefined) {
+      warn(
+        `watch() "once" option is only respected when using the ` +
+          `watch(source, callback, options?) signature.`,
       )
     }
   }
@@ -203,13 +231,17 @@ function doWatch(
       `Invalid watch source: `,
       s,
       `A watch source can only be a getter/effect function, a ref, ` +
-        `a reactive object, or an array of these types.`
+        `a reactive object, or an array of these types.`,
     )
   }
 
-  const instance = // 在执行组件的setup函数期间，会执行watch，所以instance为当前组件实例
-    getCurrentScope() === currentInstance?.scope ? currentInstance : null
-  // const instance = currentInstance
+  const instance = currentInstance // 在执行组件的setup函数期间，会执行watch，所以instance为当前组件实例
+  const reactiveGetter = (source: object) =>
+    deep === true
+      ? source // traverse will happen in wrapped getter below
+      : // for deep: false, only traverse root-level properties
+        traverse(source, deep === false ? 1 : undefined)
+
   let getter: () => any // ref、reactive、数组、getter => ...
   let forceTrigger = false
   let isMultiSource = false
@@ -220,8 +252,8 @@ function doWatch(
     forceTrigger = isShallow(source)
   } else if (isReactive(source)) {
     // reactive 响应对象 __v_isReactive
-    getter = () => source
-    deep = true
+    getter = () => reactiveGetter(source)
+    forceTrigger = true
   } else if (isArray(source)) {
     isMultiSource = true
     forceTrigger = source.some(isReactive)
@@ -232,7 +264,7 @@ function doWatch(
         if (isRef(s)) {
           return s.value
         } else if (isReactive(s)) {
-          return traverse(s) // 遍历访问所有数据，为了响应式依赖收集
+          return reactiveGetter(s)
         } else if (isFunction(s)) {
           return callWithErrorHandling(s, instance, ErrorCodes.WATCH_GETTER)
         } else {
@@ -247,9 +279,6 @@ function doWatch(
     } else {
       // no cb -> simple effect
       getter = () => {
-        if (instance && instance.isUnmounted) {
-          return
-        }
         if (cleanup) {
           cleanup()
         }
@@ -257,7 +286,7 @@ function doWatch(
           source, // getter
           instance,
           ErrorCodes.WATCH_CALLBACK,
-          [onCleanup]
+          [onCleanup],
         )
       }
     }
@@ -308,7 +337,7 @@ function doWatch(
       callWithAsyncErrorHandling(cb, instance, ErrorCodes.WATCH_CALLBACK, [
         getter(),
         isMultiSource ? [] : undefined,
-        onCleanup
+        onCleanup,
       ])
     }
     if (flush === 'sync') {
@@ -325,8 +354,7 @@ function doWatch(
     : INITIAL_WATCHER_VALUE
   // 执行runner
   const job: SchedulerJob = () => {
-    if (!effect.active) {
-      // 当执行stop后
+    if (!effect.active || !effect.dirty) {
       return
     }
     if (cb) {
@@ -355,7 +383,7 @@ function doWatch(
             : isMultiSource && oldValue[0] === INITIAL_WATCHER_VALUE
               ? []
               : oldValue, // 首次改变时
-          onCleanup
+          onCleanup,
         ])
         oldValue = newValue // 执行完回调后，该值变为旧值，为下一次更新做准备
       }
@@ -385,7 +413,16 @@ function doWatch(
   }
 
   // 创建监听目标getter的effect函数
-  const effect = new ReactiveEffect(getter, scheduler) //scheduler: 修改getter值时，在trigger中触发更新订阅目标cb
+  const effect = new ReactiveEffect(getter, NOOP, scheduler) //scheduler: 修改getter值时，在trigger中触发更新订阅目标cb
+
+  const scope = getCurrentScope()
+  // 返回一个可以停止监听的函数
+  const unwatch = () => {
+    effect.stop() // 停止active，并在此effect的依赖列表中deps - 移除 对此监听目标依赖项数据 的该依赖effect
+    if (scope) {
+      remove(scope.effects, effect)
+    }
+  }
 
   if (__DEV__) {
     effect.onTrack = onTrack
@@ -403,19 +440,11 @@ function doWatch(
     // 初次运行时，渲染函数后即挂载组件之后 执行
     queuePostRenderEffect(
       effect.run.bind(effect),
-      instance && instance.suspense
+      instance && instance.suspense,
     )
   } else {
     // watchEffect，会立刻执行getter，同时会进行依赖收集
     effect.run()
-  }
-
-  // 返回一个可以停止监听的函数
-  const unwatch = () => {
-    effect.stop() // 停止active，并在此effect的依赖列表中deps - 移除 对此监听目标依赖项数据 的该依赖effect
-    if (instance && instance.scope) {
-      remove(instance.scope.effects!, effect)
-    }
   }
 
   if (__SSR__ && ssrCleanup) ssrCleanup.push(unwatch)
@@ -427,7 +456,7 @@ export function instanceWatch(
   this: ComponentInternalInstance,
   source: string | Function,
   value: WatchCallback | ObjectWatchOptionItem,
-  options?: WatchOptions
+  options?: WatchOptions,
 ): WatchStopHandle {
   const publicThis = this.proxy as any
   const getter = isString(source)
@@ -442,14 +471,9 @@ export function instanceWatch(
     cb = value.handler as Function
     options = value
   }
-  const cur = currentInstance
-  setCurrentInstance(this)
+  const reset = setCurrentInstance(this)
   const res = doWatch(getter, cb.bind(publicThis), options)
-  if (cur) {
-    setCurrentInstance(cur)
-  } else {
-    unsetCurrentInstance()
-  }
+  reset()
   return res
 }
 
@@ -465,31 +489,42 @@ export function createPathGetter(ctx: any, path: string) {
   }
 }
 
-export function traverse(value: unknown, seen?: Set<unknown>) {
-  if (!isObject(value) || (value as any)[ReactiveFlags.SKIP]) {
+export function traverse(
+  value: unknown,
+  depth = Infinity,
+  seen?: Set<unknown>,
+) {
+  if (depth <= 0 || !isObject(value) || (value as any)[ReactiveFlags.SKIP]) {
     return value
   }
+
   seen = seen || new Set()
   if (seen.has(value)) {
     return value
   }
   seen.add(value)
+  depth--
   if (isRef(value)) {
     // ref 引用
-    traverse(value.value, seen)
+    traverse(value.value, depth, seen)
   } else if (isArray(value)) {
     // Array 数组
     for (let i = 0; i < value.length; i++) {
-      traverse(value[i], seen)
+      traverse(value[i], depth, seen)
     }
   } else if (isSet(value) || isMap(value)) {
     // Set集合、Map字典
     value.forEach((v: any) => {
-      traverse(v, seen)
+      traverse(v, depth, seen)
     })
   } else if (isPlainObject(value)) {
     for (const key in value) {
-      traverse(value[key], seen)
+      traverse(value[key], depth, seen)
+    }
+    for (const key of Object.getOwnPropertySymbols(value)) {
+      if (Object.prototype.propertyIsEnumerable.call(value, key)) {
+        traverse(value[key as any], depth, seen)
+      }
     }
   }
   return value

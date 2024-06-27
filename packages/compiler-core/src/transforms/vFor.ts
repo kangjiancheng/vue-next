@@ -1,54 +1,53 @@
 import {
+  type TransformContext,
   createStructuralDirectiveTransform,
-  TransformContext
 } from '../transform'
 import {
+  type BlockCodegenNode,
+  ConstantTypes,
+  type DirectiveNode,
+  type ElementNode,
+  type ExpressionNode,
+  type ForCodegenNode,
+  type ForIteratorExpression,
+  type ForNode,
+  type ForParseResult,
+  type ForRenderListExpression,
   NodeTypes,
-  ExpressionNode,
-  createSimpleExpression,
-  SourceLocation,
-  SimpleExpressionNode,
+  type PlainElementNode,
+  type RenderSlotCall,
+  type SimpleExpressionNode,
+  type SlotOutletNode,
+  type VNodeCall,
+  createBlockStatement,
   createCallExpression,
+  createCompoundExpression,
   createFunctionExpression,
   createObjectExpression,
   createObjectProperty,
-  ForCodegenNode,
-  RenderSlotCall,
-  SlotOutletNode,
-  ElementNode,
-  DirectiveNode,
-  ForNode,
-  PlainElementNode,
+  createSimpleExpression,
   createVNodeCall,
-  VNodeCall,
-  ForRenderListExpression,
-  BlockCodegenNode,
-  ForIteratorExpression,
-  ConstantTypes,
-  createBlockStatement,
-  createCompoundExpression,
   getVNodeBlockHelper,
-  getVNodeHelper
+  getVNodeHelper,
 } from '../ast'
-import { createCompilerError, ErrorCodes } from '../errors'
+import { ErrorCodes, createCompilerError } from '../errors'
 import {
-  getInnerRange,
-  findProp,
-  isTemplateNode,
-  isSlotOutlet,
-  injectProp,
   findDir,
-  forAliasRE
+  findProp,
+  injectProp,
+  isSlotOutlet,
+  isTemplateNode,
 } from '../utils'
 import {
-  RENDER_LIST,
-  OPEN_BLOCK,
   FRAGMENT,
-  IS_MEMO_SAME
+  IS_MEMO_SAME,
+  OPEN_BLOCK,
+  RENDER_LIST,
 } from '../runtimeHelpers'
 import { processExpression } from './transformExpression'
 import { validateBrowserExpression } from '../validateExpression'
-import { PatchFlags, PatchFlagNames } from '@vue/shared'
+import { PatchFlagNames, PatchFlags } from '@vue/shared'
+import { transformBindShorthand } from './vBind'
 
 // 先通过结构化创建插件
 export const transformFor = createStructuralDirectiveTransform(
@@ -70,20 +69,27 @@ export const transformFor = createStructuralDirectiveTransform(
       // 其中 arguments - 遍历回调： 在执行transform阶段 设置，并重新调整子列表
       const renderExp = createCallExpression(helper(RENDER_LIST), [
         // RENDER_LIST = Symbol(__DEV__ ? `renderList` : ``)
-        forNode.source // 遍历目标信息
+        forNode.source, // 遍历目标信息
       ]) as ForRenderListExpression
 
       const isTemplate = isTemplateNode(node)
       const memo = findDir(node, 'memo')
       // 设置 key 属性
       // 如 <div v-for="(item, index) in items" :key="index"></div>
-      const keyProp = findProp(node, `key`)
+      const keyProp = findProp(node, `key`, false, true)
+      if (keyProp && keyProp.type === NodeTypes.DIRECTIVE && !keyProp.exp) {
+        // resolve :key shorthand #10882
+        transformBindShorthand(keyProp, context)
+      }
       const keyExp =
         keyProp &&
         (keyProp.type === NodeTypes.ATTRIBUTE
-          ? createSimpleExpression(keyProp.value!.content, true)
-          : keyProp.exp!)
-      const keyProperty = keyProp ? createObjectProperty(`key`, keyExp!) : null // 如果不存在， 就不设置
+          ? keyProp.value
+            ? createSimpleExpression(keyProp.value.content, true)
+            : undefined
+          : keyProp.exp)
+      const keyProperty =
+        keyProp && keyExp ? createObjectProperty(`key`, keyExp) : null // 如果不存在， 就不设置
 
       if (!__BROWSER__ && isTemplate) {
         // #2085 / #5288 process :key and v-memo expressions need to be
@@ -93,13 +99,13 @@ export const transformFor = createStructuralDirectiveTransform(
         if (memo) {
           memo.exp = processExpression(
             memo.exp! as SimpleExpressionNode,
-            context
+            context,
           )
         }
         if (keyProperty && keyProp!.type !== NodeTypes.ATTRIBUTE) {
           keyProperty.value = processExpression(
             keyProperty.value as SimpleExpressionNode,
-            context
+            context,
           )
         }
       }
@@ -126,7 +132,7 @@ export const transformFor = createStructuralDirectiveTransform(
         true /* isBlock */,
         !isStableFragment /* disableTracking */,
         false /* isComponent */,
-        node.loc
+        node.loc,
       ) as ForCodegenNode
 
       // 执行 transform for 插件（以上为 添加 插件阶段）
@@ -147,8 +153,8 @@ export const transformFor = createStructuralDirectiveTransform(
                 context.onError(
                   createCompilerError(
                     ErrorCodes.X_V_FOR_TEMPLATE_KEY_PLACEMENT, // <template v-for> key should be placed on the <template> tag.
-                    key.loc
-                  )
+                    key.loc,
+                  ),
                 )
                 return true
               }
@@ -200,7 +206,7 @@ export const transformFor = createStructuralDirectiveTransform(
             undefined,
             true, // 创建块
             undefined,
-            false /* isComponent */
+            false /* isComponent */,
           )
         } else {
           // 只有一个子节点，且是标签元素
@@ -220,12 +226,12 @@ export const transformFor = createStructuralDirectiveTransform(
               // switch from block to vnode
               removeHelper(OPEN_BLOCK)
               removeHelper(
-                getVNodeBlockHelper(context.inSSR, childBlock.isComponent)
+                getVNodeBlockHelper(context.inSSR, childBlock.isComponent),
               )
             } else {
               // switch from vnode to block
               removeHelper(
-                getVNodeHelper(context.inSSR, childBlock.isComponent)
+                getVNodeHelper(context.inSSR, childBlock.isComponent),
               )
             }
           }
@@ -241,8 +247,8 @@ export const transformFor = createStructuralDirectiveTransform(
         if (memo) {
           const loop = createFunctionExpression(
             createForLoopParams(forNode.parseResult, [
-              createSimpleExpression(`_cached`)
-            ])
+              createSimpleExpression(`_cached`),
+            ]),
           )
           loop.body = createBlockStatement([
             createCompoundExpression([`const _memo = (`, memo.exp!, `)`]),
@@ -250,30 +256,30 @@ export const transformFor = createStructuralDirectiveTransform(
               `if (_cached`,
               ...(keyExp ? [` && _cached.key === `, keyExp] : []),
               ` && ${context.helperString(
-                IS_MEMO_SAME
-              )}(_cached, _memo)) return _cached`
+                IS_MEMO_SAME,
+              )}(_cached, _memo)) return _cached`,
             ]),
             createCompoundExpression([`const _item = `, childBlock as any]),
             createSimpleExpression(`_item.memo = _memo`),
-            createSimpleExpression(`return _item`)
+            createSimpleExpression(`return _item`),
           ])
           renderExp.arguments.push(
             loop as ForIteratorExpression,
             createSimpleExpression(`_cache`),
-            createSimpleExpression(String(context.cached++))
+            createSimpleExpression(String(context.cached++)),
           )
         } else {
           renderExp.arguments.push(
             createFunctionExpression(
               createForLoopParams(forNode.parseResult),
               childBlock,
-              true /* force newline */
-            ) as ForIteratorExpression
+              true /* force newline */,
+            ) as ForIteratorExpression,
           )
         }
       }
     })
-  }
+  },
 )
 
 // target-agnostic transform used for both Client and SSR
@@ -281,30 +287,27 @@ export function processFor(
   node: ElementNode,
   dir: DirectiveNode,
   context: TransformContext,
-  processCodegen?: (forNode: ForNode) => (() => void) | undefined
+  processCodegen?: (forNode: ForNode) => (() => void) | undefined,
 ) {
   if (!dir.exp) {
     // v-for 需要表达式值
     context.onError(
-      createCompilerError(ErrorCodes.X_V_FOR_NO_EXPRESSION, dir.loc) // v-for is missing expression.
+      createCompilerError(ErrorCodes.X_V_FOR_NO_EXPRESSION, dir.loc), // v-for is missing expression.
     )
     return
   }
 
   // 解析v-for 表达式值
-  const parseResult = parseForExpression(
-    // can only be simple expression because vFor transform is applied
-    // before expression transform. 即 插件transformExpression 之前
-    dir.exp as SimpleExpressionNode,
-    context
-  )
+  const parseResult = dir.forParseResult
 
   if (!parseResult) {
     context.onError(
-      createCompilerError(ErrorCodes.X_V_FOR_MALFORMED_EXPRESSION, dir.loc)
+      createCompilerError(ErrorCodes.X_V_FOR_MALFORMED_EXPRESSION, dir.loc),
     )
     return
   }
+
+  finalizeForParseResult(parseResult, context)
 
   const { addIdentifiers, removeIdentifiers, scopes } = context
   const { source, value, key, index } = parseResult
@@ -318,7 +321,7 @@ export function processFor(
     keyAlias: key, // key 节点
     objectIndexAlias: index, // index 节点
     parseResult, // v-for 表达式解析结果
-    children: isTemplateNode(node) ? node.children : [node] // <template v-for="xxx"><div>...</div></template>
+    children: isTemplateNode(node) ? node.children : [node], // <template v-for="xxx"><div>...</div></template>
   }
 
   // 替换当前的for node 节点
@@ -353,177 +356,65 @@ export function processFor(
   }
 }
 
-// This regex doesn't cover the case if key or index aliases have destructuring,
-// but those do not make sense in the first place, so this works in practice.
-const forIteratorRE = /,([^,\}\]]*)(?:,([^,\}\]]*))?$/ // in/of 左侧内容，如 v-for="item in items" 或 v-for="(value, key, index) in object" 匹配其中 ', key, index'
-const stripParensRE = /^\(|\)$/g // v-for= "(...) in/of ..." 左侧括号
+export function finalizeForParseResult(
+  result: ForParseResult,
+  context: TransformContext,
+) {
+  if (result.finalized) return
 
-export interface ForParseResult {
-  source: ExpressionNode
-  value: ExpressionNode | undefined
-  key: ExpressionNode | undefined
-  index: ExpressionNode | undefined
-}
-
-// 解析 v-for 表达式值，分析 in/of 左侧/右侧内容，并设置左侧的key、value、index节点信息，同时也进行了js语法校验
-export function parseForExpression(
-  input: SimpleExpressionNode, // v-for指令节点的表达式值
-  context: TransformContext
-): ForParseResult | undefined {
-  const loc = input.loc
-  const exp = input.content
-
-  // 匹配for规则： /([\s\S]*?)\s+(?:in|of)\s+([\s\S]*)/
-  //
-  // 其中 \s 匹配任何空白字符、 \S 匹配任何非空白字符，如：
-  //
-  //    <div v-for="item in items"></div>
-  //    <div v-for="(item, index) in items"></div>
-  //    <div v-for="(item, index) in [item1, item2...]"></div>
-  //    <div v-for="(value, key) in object"></div>
-  //    <div v-for="(value, key, index) in object"></div>
-
-  const inMatch = exp.match(forAliasRE)
-  if (!inMatch) return
-
-  // 如 <div v-for="(item, index) in items"></div>
-  // LHS: 表示 in/of 左边内容 （正则捕获组1） '(item, index)'
-  // RHS: 表示 in/of 右边内容 （正则捕获组2） 'items'
-  // 均不包括in/of相邻的空白
-  const [, LHS, RHS] = inMatch
-
-  const result: ForParseResult = {
-    // 右侧目标 createSimpleExpression，js ast 函数参数节点
-    source: createAliasExpression(
-      // 创建一个表达式节点，且带单独针对in/of左侧内容的光标位置信息
-      loc,
-      RHS.trim(), // 遍历目标
-      exp.indexOf(RHS, LHS.length) // 遍历目标的位置，跳过in/of左边内容
-    ),
-    // 左侧目标
-    value: undefined, // createAliasExpression(loc, valueContent, trimmedOffset)
-    key: undefined, // createAliasExpression(loc, keyContent, keyOffset)
-    index: undefined // createAliasExpression(loc, indexContent, index源码光标位置)
-  }
-
-  // TODO: analyze - !__BROWSER__
   if (!__BROWSER__ && context.prefixIdentifiers) {
     result.source = processExpression(
       result.source as SimpleExpressionNode,
-      context
+      context,
     )
-  }
-  if (__DEV__ && __BROWSER__) {
-    // 检查for in/of 右侧遍历目标的js语法是否规范
-    validateBrowserExpression(result.source as SimpleExpressionNode, context)
-  }
-
-  // 解析 in/of 左边内容: value, key, index  以逗号 ',' 分隔
-
-  // value， 如 <div v-for="(value, key, index) in object"></div> 其中的 'value, key, index'
-  let valueContent = LHS.trim().replace(stripParensRE, '').trim() // 去掉括号 /^\(|\)$/g
-  const trimmedOffset = LHS.indexOf(valueContent) // 内容位置
-
-  const iteratorMatch = valueContent.match(forIteratorRE) // 匹配展示的值内容，如 <div v-for="(value, key, index) in object"></div> 其中的 'value, key, index'
-  if (iteratorMatch) {
-    // 如 <div v-for="(value, key, index) in object"></div> 其中的 'value, key, index'
-    // match[0] 为 匹配到的内容 ', key, index'
-    // match[1] 为 key
-    // match[2] 为 index
-
-    // 解析 v-for value， 去掉 ', key, index' 保留其中 'value' 内容部分
-    valueContent = valueContent.replace(forIteratorRE, '').trim()
-
-    // 解析 v-for key，创建 key 的 js ast 节点
-    const keyContent = iteratorMatch[1].trim()
-    let keyOffset: number | undefined
-    if (keyContent) {
-      keyOffset = exp.indexOf(keyContent, trimmedOffset + valueContent.length) // key 相对左侧偏移量
-      result.key = createAliasExpression(loc, keyContent, keyOffset) // 创建 key 节点
-
-      // TODO: analyze - !__BROWSER__
-      if (!__BROWSER__ && context.prefixIdentifiers) {
-        result.key = processExpression(result.key, context, true)
-      }
-      if (__DEV__ && __BROWSER__) {
-        // 校验 key js 语法
-        validateBrowserExpression(
-          result.key as SimpleExpressionNode,
-          context,
-          true // js 语法验证 result.key.content 是否以参数，还是函数体
-        )
-      }
+    if (result.key) {
+      result.key = processExpression(
+        result.key as SimpleExpressionNode,
+        context,
+        true,
+      )
     }
-
-    // 解析 v-for index
-    if (iteratorMatch[2]) {
-      const indexContent = iteratorMatch[2].trim()
-
-      if (indexContent) {
-        // 创建 index 的 js ast 节点
-        result.index = createAliasExpression(
-          loc,
-          indexContent,
-          exp.indexOf(
-            // 定位 index 源码位置
-            indexContent,
-            result.key
-              ? keyOffset! + keyContent.length // 存在 key，如 <div v-for="(value, key, index) in object"></div>
-              : trimmedOffset + valueContent.length // 不存在key，如 <div v-for="(value, , index) in object"></div>
-          )
-        )
-
-        // TODO: analyze - !__BROWSER__
-        if (!__BROWSER__ && context.prefixIdentifiers) {
-          result.index = processExpression(result.index, context, true)
-        }
-
-        if (__DEV__ && __BROWSER__) {
-          // 校验 index js 语法
-          validateBrowserExpression(
-            result.index as SimpleExpressionNode,
-            context,
-            true
-          )
-        }
-      }
+    if (result.index) {
+      result.index = processExpression(
+        result.index as SimpleExpressionNode,
+        context,
+        true,
+      )
     }
-  }
-
-  // 解析 value
-
-  if (valueContent) {
-    result.value = createAliasExpression(loc, valueContent, trimmedOffset)
-
-    // TODO: analyze - !__BROWSER__
-    if (!__BROWSER__ && context.prefixIdentifiers) {
-      result.value = processExpression(result.value, context, true)
-    }
-
-    if (__DEV__ && __BROWSER__) {
-      // 验证 value js 语法
-      validateBrowserExpression(
+    if (result.value) {
+      result.value = processExpression(
         result.value as SimpleExpressionNode,
         context,
-        true
+        true,
       )
     }
   }
 
-  return result
-}
-
-// 创建一个表达式节点，且带单独的光标位置信息
-function createAliasExpression(
-  range: SourceLocation, // 节点在模版中的位置信息
-  content: string, // 当前内容
-  offset: number // 偏移量
-): SimpleExpressionNode {
-  return createSimpleExpression(
-    content,
-    false,
-    getInnerRange(range, offset, content.length) // 获取content在ast模版中的光标位置
-  )
+  if (__DEV__ && __BROWSER__) {
+    validateBrowserExpression(result.source as SimpleExpressionNode, context)
+    if (result.key) {
+      validateBrowserExpression(
+        result.key as SimpleExpressionNode,
+        context,
+        true,
+      )
+    }
+    if (result.index) {
+      validateBrowserExpression(
+        result.index as SimpleExpressionNode,
+        context,
+        true,
+      )
+    }
+    if (result.value) {
+      validateBrowserExpression(
+        result.value as SimpleExpressionNode,
+        context,
+        true,
+      )
+    }
+  }
+  result.finalized = true
 }
 
 // v-for 渲染源码回调函数的参数：item, key, index
@@ -537,13 +428,13 @@ function createAliasExpression(
 //       }
 export function createForLoopParams(
   { value, key, index }: ForParseResult,
-  memoArgs: ExpressionNode[] = []
+  memoArgs: ExpressionNode[] = [],
 ): ExpressionNode[] {
   return createParamsList([value, key, index, ...memoArgs])
 }
 
 function createParamsList(
-  args: (ExpressionNode | undefined)[]
+  args: (ExpressionNode | undefined)[],
 ): ExpressionNode[] {
   let i = args.length
   while (i--) {

@@ -1,10 +1,10 @@
-import { isArray, isString, isObject, hyphenate } from './general'
+import { hyphenate, isArray, isObject, isString } from './general'
 
 export type NormalizedStyle = Record<string, string | number>
 
 // 规范style为对象，并合并
 export function normalizeStyle(
-  value: unknown
+  value: unknown,
 ): NormalizedStyle | string | undefined {
   if (isArray(value)) {
     const res: NormalizedStyle = {}
@@ -50,7 +50,7 @@ export function parseStringStyle(cssText: string): NormalizedStyle {
 }
 
 export function stringifyStyle(
-  styles: NormalizedStyle | string | undefined
+  styles: NormalizedStyle | string | undefined,
 ): string {
   let ret = ''
   if (!styles || isString(styles)) {
@@ -58,8 +58,8 @@ export function stringifyStyle(
   }
   for (const key in styles) {
     const value = styles[key]
-    const normalizedKey = key.startsWith(`--`) ? key : hyphenate(key)
     if (isString(value) || typeof value === 'number') {
+      const normalizedKey = key.startsWith(`--`) ? key : hyphenate(key)
       // only render valid values
       ret += `${normalizedKey}:${value};`
     }

@@ -1,10 +1,10 @@
 import {
-  NodeTransform,
+  ConstantTypes,
+  type NodeTransform,
   NodeTypes,
+  type SimpleExpressionNode,
+  type SourceLocation,
   createSimpleExpression,
-  SimpleExpressionNode,
-  SourceLocation,
-  ConstantTypes
 } from '@vue/compiler-core'
 import { parseStringStyle } from '@vue/shared'
 
@@ -31,7 +31,7 @@ export const transformStyle: NodeTransform = node => {
           arg: createSimpleExpression(`style`, true, p.loc), // 创建对应的行内 style 表达式配置对象
           exp: parseInlineCSS(p.value.content, p.loc), // 创建对应的style 表达式配置对象
           modifiers: [],
-          loc: p.loc
+          loc: p.loc,
         }
       }
     })
@@ -41,7 +41,7 @@ export const transformStyle: NodeTransform = node => {
 // 转换 为对象表格式 style="color: blue;" 转换为 :style='{"color": "blue"}'
 const parseInlineCSS = (
   cssText: string,
-  loc: SourceLocation
+  loc: SourceLocation,
 ): SimpleExpressionNode => {
   // cssText="color: blue;" 格式化对象 cssText = {"color": "blue"}
   const normalized = parseStringStyle(cssText)
@@ -50,6 +50,6 @@ const parseInlineCSS = (
     JSON.stringify(normalized), // style表达式 字符串化'{"color": "blue"}'
     false, // 动态表达式
     loc, // style 节点信息
-    ConstantTypes.CAN_STRINGIFY //
+    ConstantTypes.CAN_STRINGIFY,
   )
 }

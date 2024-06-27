@@ -1,45 +1,44 @@
 import {
-  toRaw,
+  TriggerOpTypes,
   shallowReactive,
+  shallowReadonly,
+  toRaw,
   trigger,
-  TriggerOpTypes
 } from '@vue/reactivity'
 import {
-  EMPTY_OBJ,
-  camelize,
-  hyphenate,
-  capitalize,
-  isString,
-  isFunction,
-  isArray,
-  isObject,
-  hasOwn,
-  toRawType,
-  PatchFlags,
-  makeMap,
-  isReservedProp,
   EMPTY_ARR,
-  def,
+  EMPTY_OBJ,
+  type IfAny,
+  PatchFlags,
+  camelize,
+  capitalize,
   extend,
+  hasOwn,
+  hyphenate,
+  isArray,
+  isFunction,
+  isObject,
   isOn,
-  IfAny
+  isReservedProp,
+  isString,
+  makeMap,
+  toRawType,
 } from '@vue/shared'
 import { warn } from './warning'
 import {
-  Data,
-  ComponentInternalInstance,
-  ComponentOptions,
-  ConcreteComponent,
+  type ComponentInternalInstance,
+  type ComponentOptions,
+  type ConcreteComponent,
+  type Data,
   setCurrentInstance,
-  unsetCurrentInstance
 } from './component'
 import { isEmitListener } from './componentEmits'
-import { InternalObjectKey } from './vnode'
-import { AppContext } from './apiCreateApp'
+import type { AppContext } from './apiCreateApp'
 import { createPropsDefaultThis } from './compat/props'
 import { isCompatEnabled, softAssertCompatEnabled } from './compat/compatConfig'
 import { DeprecationTypes } from './compat/compatConfig'
 import { shouldSkipAttr } from './compat/attrsFallthrough'
+import { createInternalObject } from './internalObject'
 
 export type ComponentPropsOptions<P = Data> =
   | ComponentObjectPropsOptions<P>
@@ -57,7 +56,7 @@ export interface PropOptions<T = any, D = T> {
   type?: PropType<T> | true | null
   required?: boolean
   default?: D | DefaultFactory<D> | null | undefined | object
-  validator?(value: unknown): boolean
+  validator?(value: unknown, props: Data): boolean
   /**
    * @internal
    */
@@ -76,7 +75,7 @@ type PropConstructor<T = any> =
   | PropMethod<T>
 
 type PropMethod<T, TConstructor = any> = [T] extends [
-  ((...args: any) => any) | undefined
+  ((...args: any) => any) | undefined,
 ] // if is function with args, allowing non-required functions
   ? { new (): TConstructor; (): T; readonly prototype: TConstructor } // Create Function like constructor
   : never
@@ -164,9 +163,9 @@ export type ExtractPublicPropTypes<O> = {
   [K in keyof Pick<O, PublicOptionalKeys<O>>]?: InferPropType<O[K]>
 }
 
-const enum BooleanFlags {
+enum BooleanFlags {
   shouldCast,
-  shouldCastTrue
+  shouldCastTrue,
 }
 
 // extract props which defined with default from prop options
@@ -198,13 +197,10 @@ export function initProps(
   instance: ComponentInternalInstance, // 组件实例
   rawProps: Data | null, // 组件vnode的props
   isStateful: number, // result of bitwise flag comparison
-  isSSR = false
+  isSSR = false,
 ) {
   const props: Data = {} // 保存 在组件props属性选项里的 vnode props属性，即 已经赋值后 的组件prop属性选项
-  const attrs: Data = {} // 不在组件props属性选项里 也不在组件emits属性选项里 的 vnode props属性
-
-  // 设定 attrs.__vInternal = 1
-  def(attrs, InternalObjectKey, 1)
+  const attrs: Data = createInternalObject() // 不在组件props属性选项里 也不在组件emits属性选项里 的 vnode props属性
 
   instance.propsDefaults = Object.create(null)
 
@@ -255,12 +251,12 @@ export function updateProps(
   instance: ComponentInternalInstance,
   rawProps: Data | null, // 组件渲染模版template vnode props
   rawPrevProps: Data | null, // 组件节点 vnode props
-  optimized: boolean
+  optimized: boolean,
 ) {
   const {
     props, // 组件props选项（已赋值）
-    attrs, //
-    vnode: { patchFlag }
+    attrs,
+    vnode: { patchFlag },
   } = instance
   const rawCurrentProps = toRaw(props)
   const [options] = instance.propsOptions // 组件props选项列表
@@ -302,7 +298,7 @@ export function updateProps(
               camelizedKey,
               value,
               instance,
-              false /* isAbsent */
+              false /* isAbsent */,
             )
           }
         } else {
@@ -351,7 +347,7 @@ export function updateProps(
               key,
               undefined,
               instance,
-              true /* isAbsent */
+              true /* isAbsent */,
             )
           }
         } else {
@@ -377,7 +373,7 @@ export function updateProps(
 
   // trigger updates for $attrs in case it's used in component slots
   if (hasAttrsChanged) {
-    trigger(instance, TriggerOpTypes.SET, '$attrs')
+    trigger(instance.attrs, TriggerOpTypes.SET, '')
   }
 
   if (__DEV__) {
@@ -390,7 +386,7 @@ function setFullProps(
   instance: ComponentInternalInstance,
   rawProps: Data | null, // 组件vnode的props 即组件节点dom元素 上的属性
   props: Data, // 存储 组件接收到的props，已经进行类型检测、默认值处理、赋值操作等。
-  attrs: Data // 存储 vnode.props中存在 但 组件props属性选项中不存在 的属性
+  attrs: Data, // 存储 vnode.props中存在 但 组件props属性选项中不存在 的属性
 ) {
   // options - 组件 props 属性选项
   const [options, needCastKeys] = instance.propsOptions
@@ -411,7 +407,7 @@ function setFullProps(
           softAssertCompatEnabled(
             DeprecationTypes.INSTANCE_EVENT_HOOKS,
             instance,
-            key.slice(2).toLowerCase()
+            key.slice(2).toLowerCase(),
           )
         }
         if (key === 'inline-template') {
@@ -465,7 +461,7 @@ function setFullProps(
         key, // 传入的prop，
         castValues[key],
         instance,
-        !hasOwn(castValues, key)
+        !hasOwn(castValues, key),
       )
     }
   }
@@ -480,7 +476,7 @@ function resolvePropValue(
   key: string, // 存在 boolean类型或默认值 的属性
   value: unknown, // vnode 的props属性 prop value
   instance: ComponentInternalInstance,
-  isAbsent: boolean
+  isAbsent: boolean,
 ) {
   const opt = options[key] // 组件上声明的prop
 
@@ -501,15 +497,15 @@ function resolvePropValue(
         if (key in propsDefaults) {
           value = propsDefaults[key]
         } else {
-          setCurrentInstance(instance)
+          const reset = setCurrentInstance(instance)
           value = propsDefaults[key] = defaultValue.call(
             __COMPAT__ &&
               isCompatEnabled(DeprecationTypes.PROPS_DEFAULT_THIS, instance)
               ? createPropsDefaultThis(instance, props, key)
               : null,
-            props
+            props,
           )
-          unsetCurrentInstance()
+          reset()
         }
       } else {
         // 默认属性值
@@ -544,7 +540,7 @@ function resolvePropValue(
 export function normalizePropsOptions(
   comp: ConcreteComponent, // 组件对象
   appContext: AppContext, // app 上下文
-  asMixin = false
+  asMixin = false,
 ): NormalizedPropsOptions {
   const cache = appContext.propsCache
   const cached = cache.get(comp)
@@ -670,7 +666,7 @@ export function normalizePropsOptions(
 }
 
 function validatePropName(key: string) {
-  if (key[0] !== '$') {
+  if (key[0] !== '$' && !isReservedProp(key)) {
     return true
   } else if (__DEV__) {
     warn(`Invalid prop name: "${key}" is a reserved property.`)
@@ -681,9 +677,23 @@ function validatePropName(key: string) {
 // use function string name to check type constructors
 // so that it works across vms / iframes.
 function getType(ctor: Prop<any>): string {
-  // 返回一个类型
-  const match = ctor && ctor.toString().match(/^\s*(function|class) (\w+)/)
-  return match ? match[2] : ctor === null ? 'null' : ''
+  // Early return for null to avoid unnecessary computations
+  if (ctor === null) {
+    return 'null'
+  }
+
+  // Avoid using regex for common cases by checking the type directly
+  if (typeof ctor === 'function') {
+    // Using name property to avoid converting function to string
+    return ctor.name || ''
+  } else if (typeof ctor === 'object') {
+    // Attempting to directly access constructor name if possible
+    const name = ctor.constructor && ctor.constructor.name
+    return name || ''
+  }
+
+  // Fallback for other types (though they're less likely to have meaningful names here)
+  return ''
 }
 
 function isSameType(a: Prop<any>, b: Prop<any>): boolean {
@@ -693,7 +703,7 @@ function isSameType(a: Prop<any>, b: Prop<any>): boolean {
 // 获取某个类型在某个类型集合中的位置
 function getTypeIndex(
   type: Prop<any>,
-  expectedTypes: PropType<any> | void | null | true // prop的type值，即prop的值
+  expectedTypes: PropType<any> | void | null | true, // prop的type值，即prop的值
 ): number {
   if (isArray(expectedTypes)) {
     // 返回 指定类型的索引
@@ -711,7 +721,7 @@ function getTypeIndex(
 function validateProps(
   rawProps: Data,
   props: Data, // props 为组件接收到的属性集合，且已规范格式和设置完默认值
-  instance: ComponentInternalInstance
+  instance: ComponentInternalInstance,
 ) {
   const resolvedValues = toRaw(props)
   const options = instance.propsOptions[0] // 已规范后的组件的props属性列表
@@ -722,7 +732,8 @@ function validateProps(
       key,
       resolvedValues[key],
       opt,
-      !hasOwn(rawProps, key) && !hasOwn(rawProps, hyphenate(key))
+      __DEV__ ? shallowReadonly(resolvedValues) : resolvedValues,
+      !hasOwn(rawProps, key) && !hasOwn(rawProps, hyphenate(key)),
     )
   }
 }
@@ -734,7 +745,8 @@ function validateProp(
   name: string, // 组件上声明prop的 key 键名
   value: unknown, // 组件接收到的prop的值
   prop: PropOptions, // 组件上声明prop的 value 值
-  isAbsent: boolean // 组件上key 是否在 在已接收的props里
+  props: Data,
+  isAbsent: boolean, // 组件上key 是否在 在已接收的props里
 ) {
   const { type, required, validator, skipCheck } = prop
   // required!
@@ -771,13 +783,13 @@ function validateProp(
 
   // 自定义 验证，返回值为false，则验证失败
   // custom validator
-  if (validator && !validator(value)) {
+  if (validator && !validator(value, props)) {
     warn('Invalid prop: custom validator check failed for prop "' + name + '".')
   }
 }
 
 const isSimpleType = /*#__PURE__*/ makeMap(
-  'String,Number,Boolean,Function,Symbol,BigInt'
+  'String,Number,Boolean,Function,Symbol,BigInt',
 )
 
 type AssertionResult = {
@@ -816,7 +828,7 @@ function assertType(value: unknown, type: PropConstructor): AssertionResult {
   }
   return {
     valid,
-    expectedType
+    expectedType,
   }
 }
 
@@ -827,7 +839,7 @@ function assertType(value: unknown, type: PropConstructor): AssertionResult {
 function getInvalidTypeMessage(
   name: string,
   value: unknown,
-  expectedTypes: string[]
+  expectedTypes: string[],
 ): string {
   if (expectedTypes.length === 0) {
     return (

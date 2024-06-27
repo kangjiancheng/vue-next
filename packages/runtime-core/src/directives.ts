@@ -11,19 +11,23 @@ return withDirectives(h(comp), [
 ])
 */
 
-import { VNode } from './vnode'
-import { isFunction, EMPTY_OBJ, isBuiltInDirective } from '@vue/shared'
+import type { VNode } from './vnode'
+import { EMPTY_OBJ, isBuiltInDirective, isFunction } from '@vue/shared'
 import { warn } from './warning'
-import { ComponentInternalInstance, Data, getExposeProxy } from './component'
+import {
+  type ComponentInternalInstance,
+  type Data,
+  getComponentPublicInstance,
+} from './component'
 import { currentRenderingInstance } from './componentRenderContext'
-import { callWithAsyncErrorHandling, ErrorCodes } from './errorHandling'
-import { ComponentPublicInstance } from './componentPublicInstance'
+import { ErrorCodes, callWithAsyncErrorHandling } from './errorHandling'
+import type { ComponentPublicInstance } from './componentPublicInstance'
 import { mapCompatDirectiveHook } from './compat/customDirective'
 import { pauseTracking, resetTracking } from '@vue/reactivity'
 import { traverse } from './apiWatch'
 
 export interface DirectiveBinding<V = any> {
-  instance: ComponentPublicInstance | null
+  instance: ComponentPublicInstance | Record<string, any> | null
   value: V
   oldValue: V | null
   arg?: string
@@ -35,12 +39,12 @@ export type DirectiveHook<T = any, Prev = VNode<any, T> | null, V = any> = (
   el: T,
   binding: DirectiveBinding<V>,
   vnode: VNode<any, T>,
-  prevVNode: Prev
+  prevVNode: Prev,
 ) => void
 
-export type SSRDirectiveHook = (
-  binding: DirectiveBinding,
-  vnode: VNode
+export type SSRDirectiveHook<V> = (
+  binding: DirectiveBinding<V>,
+  vnode: VNode,
 ) => Data | undefined
 
 export interface ObjectDirective<T = any, V = any> {
@@ -51,7 +55,7 @@ export interface ObjectDirective<T = any, V = any> {
   updated?: DirectiveHook<T, VNode<any, T>, V>
   beforeUnmount?: DirectiveHook<T, null, V>
   unmounted?: DirectiveHook<T, null, V>
-  getSSRProps?: SSRDirectiveHook
+  getSSRProps?: SSRDirectiveHook<V>
   deep?: boolean
 }
 
@@ -106,16 +110,13 @@ export type DirectiveArguments = Array<
 // 为渲染节点vnode添加指令列表dirs
 export function withDirectives<T extends VNode>(
   vnode: T, // 渲染节点vnode
-  directives: DirectiveArguments // 指令参数列表
+  directives: DirectiveArguments, // 指令参数列表
 ): T {
-  const internalInstance = currentRenderingInstance // 组件渲染节点实例
-  if (internalInstance === null) {
+  if (currentRenderingInstance === null) {
     __DEV__ && warn(`withDirectives can only be used inside render functions.`)
     return vnode
   }
-  const instance =
-    (getExposeProxy(internalInstance) as ComponentPublicInstance) ||
-    internalInstance.proxy // （父）组件实例ctx
+  const instance = getComponentPublicInstance(currentRenderingInstance) // （父）组件实例ctx
   const bindings: DirectiveBinding[] = vnode.dirs || (vnode.dirs = [])
   for (let i = 0; i < directives.length; i++) {
     // 指令内容、指令属性值、指令属性参数、指令属性修饰符
@@ -125,7 +126,7 @@ export function withDirectives<T extends VNode>(
         // 函数指令
         dir = {
           mounted: dir,
-          updated: dir
+          updated: dir,
         } as ObjectDirective
       }
       if (dir.deep) {
@@ -137,7 +138,7 @@ export function withDirectives<T extends VNode>(
         value, // 指令属性值
         oldValue: void 0, // vnode的旧指令
         arg, // 指令参数
-        modifiers // 指令修饰符
+        modifiers, // 指令修饰符
       })
     }
   }
@@ -149,7 +150,7 @@ export function invokeDirectiveHook(
   vnode: VNode,
   prevVNode: VNode | null,
   instance: ComponentInternalInstance | null, // vnode 父组件节点实例
-  name: keyof ObjectDirective // 指令hook：created、
+  name: keyof ObjectDirective, // 指令hook：created、
 ) {
   const bindings = vnode.dirs!
   const oldBindings = prevVNode && prevVNode.dirs!
@@ -179,7 +180,7 @@ export function invokeDirectiveHook(
         vnode.el, // vnode el 实例
         binding, // vnode 指令节点（包括：指令对象、指令属性值、指令属性参数、指令属性修饰符）
         vnode, // vnode 节点
-        prevVNode // 旧vnode
+        prevVNode, // 旧vnode
       ])
       resetTracking()
     }

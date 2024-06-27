@@ -1,4 +1,4 @@
-import { ElementWithTransition, vtcKey } from '../components/Transition'
+import { type ElementWithTransition, vtcKey } from '../components/Transition'
 
 // 添加vnode dom实例的class
 // compiler should normalize class + :class bindings on the same element

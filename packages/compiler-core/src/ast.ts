@@ -1,31 +1,32 @@
 import { isString } from '@vue/shared'
-import { ForParseResult } from './transforms/vFor'
 import {
-  RENDER_SLOT,
-  CREATE_SLOTS,
-  RENDER_LIST,
-  OPEN_BLOCK,
-  FRAGMENT,
-  WITH_DIRECTIVES,
-  WITH_MEMO,
-  CREATE_VNODE,
-  CREATE_ELEMENT_VNODE,
   CREATE_BLOCK,
-  CREATE_ELEMENT_BLOCK
+  CREATE_ELEMENT_BLOCK,
+  CREATE_ELEMENT_VNODE,
+  type CREATE_SLOTS,
+  CREATE_VNODE,
+  type FRAGMENT,
+  OPEN_BLOCK,
+  type RENDER_LIST,
+  type RENDER_SLOT,
+  WITH_DIRECTIVES,
+  type WITH_MEMO,
 } from './runtimeHelpers'
-import { PropsExpression } from './transforms/transformElement'
-import { ImportItem, TransformContext } from './transform'
+import type { PropsExpression } from './transforms/transformElement'
+import type { ImportItem, TransformContext } from './transform'
+import type { Node as BabelNode } from '@babel/types'
 
 // Vue template is a platform-agnostic superset of HTML (syntax only).
-// More namespaces like SVG and MathML are declared by platform specific
-// compilers.
+// More namespaces can be declared by platform specific compilers.
 export type Namespace = number
 
-export const enum Namespaces {
-  HTML
+export enum Namespaces {
+  HTML,
+  SVG,
+  MATH_ML,
 }
 
-export const enum NodeTypes {
+export enum NodeTypes {
   ROOT,
   ELEMENT,
   TEXT,
@@ -58,14 +59,14 @@ export const enum NodeTypes {
   JS_IF_STATEMENT,
   JS_ASSIGNMENT_EXPRESSION,
   JS_SEQUENCE_EXPRESSION,
-  JS_RETURN_STATEMENT
+  JS_RETURN_STATEMENT,
 }
 
-export const enum ElementTypes {
+export enum ElementTypes {
   ELEMENT,
   COMPONENT,
   SLOT,
-  TEMPLATE
+  TEMPLATE,
 }
 
 export interface Node {
@@ -104,6 +105,7 @@ export type TemplateChildNode =
 
 export interface RootNode extends Node {
   type: NodeTypes.ROOT
+  source: string
   children: TemplateChildNode[]
   helpers: Set<symbol>
   components: string[]
@@ -114,6 +116,7 @@ export interface RootNode extends Node {
   temps: number
   ssrHelpers?: symbol[]
   codegenNode?: TemplateChildNode | JSChildNode | BlockStatement
+  transformed?: boolean
 
   // v2 compat only
   filters?: string[]
@@ -130,9 +133,10 @@ export interface BaseElementNode extends Node {
   ns: Namespace
   tag: string
   tagType: ElementTypes
-  isSelfClosing: boolean
   props: Array<AttributeNode | DirectiveNode>
   children: TemplateChildNode[]
+  isSelfClosing?: boolean
+  innerLoc?: SourceLocation // only for SFC root level elements
 }
 
 export interface PlainElementNode extends BaseElementNode {
@@ -184,19 +188,28 @@ export interface CommentNode extends Node {
 export interface AttributeNode extends Node {
   type: NodeTypes.ATTRIBUTE
   name: string
+  nameLoc: SourceLocation
   value: TextNode | undefined
 }
 
 export interface DirectiveNode extends Node {
   type: NodeTypes.DIRECTIVE
+  /**
+   * the normalized name without prefix or shorthands, e.g. "bind", "on"
+   */
   name: string
+  /**
+   * the raw attribute name, preserving shorthand, and including arg & modifiers
+   * this is only used during parse.
+   */
+  rawName?: string
   exp: ExpressionNode | undefined
   arg: ExpressionNode | undefined
   modifiers: string[]
   /**
    * optional property to cache the expression parse result for v-for
    */
-  parseResult?: ForParseResult
+  forParseResult?: ForParseResult
 }
 
 /**
@@ -204,11 +217,11 @@ export interface DirectiveNode extends Node {
  * Higher levels implies lower levels. e.g. a node that can be stringified
  * can always be hoisted and skipped for patch.
  */
-export const enum ConstantTypes {
+export enum ConstantTypes {
   NOT_CONSTANT = 0,
   CAN_SKIP_PATCH,
   CAN_HOIST,
-  CAN_STRINGIFY // 高级别包含低级别
+  CAN_STRINGIFY, // 高级别包含低级别
 }
 
 export interface SimpleExpressionNode extends Node {
@@ -216,6 +229,12 @@ export interface SimpleExpressionNode extends Node {
   content: string
   isStatic: boolean
   constType: ConstantTypes
+  /**
+   * - `null` means the expression is a simple identifier that doesn't need
+   *    parsing
+   * - `false` means there was a parsing error
+   */
+  ast?: BabelNode | null | false
   /**
    * Indicates this is an identifier for a hoist vnode call and points to the
    * hoisted node.
@@ -236,6 +255,12 @@ export interface InterpolationNode extends Node {
 
 export interface CompoundExpressionNode extends Node {
   type: NodeTypes.COMPOUND_EXPRESSION
+  /**
+   * - `null` means the expression is a simple identifier that doesn't need
+   *    parsing
+   * - `false` means there was a parsing error
+   */
+  ast?: BabelNode | null | false
   children: (
     | SimpleExpressionNode
     | CompoundExpressionNode
@@ -276,6 +301,14 @@ export interface ForNode extends Node {
   parseResult: ForParseResult
   children: TemplateChildNode[]
   codegenNode?: ForCodegenNode
+}
+
+export interface ForParseResult {
+  source: ExpressionNode
+  value: ExpressionNode | undefined
+  key: ExpressionNode | undefined
+  index: ExpressionNode | undefined
+  finalized: boolean
 }
 
 export interface TextCallNode extends Node {
@@ -464,7 +497,7 @@ export interface RenderSlotCall extends CallExpression {
         string,
         string | ExpressionNode,
         PropsExpression | '{}',
-        TemplateChildNode[]
+        TemplateChildNode[],
       ]
 }
 
@@ -540,7 +573,7 @@ export interface ForRenderListExpression extends CallExpression {
 }
 
 export interface ForIteratorExpression extends FunctionExpression {
-  returns: BlockCodegenNode
+  returns?: BlockCodegenNode
 }
 
 // AST Utilities ---------------------------------------------------------------
@@ -549,17 +582,18 @@ export interface ForIteratorExpression extends FunctionExpression {
 // associated with template nodes, so their source locations are just a stub.
 // Container types like CompoundExpression also don't need a real location.
 export const locStub: SourceLocation = {
-  source: '',
   start: { line: 1, column: 1, offset: 0 },
-  end: { line: 1, column: 1, offset: 0 }
+  end: { line: 1, column: 1, offset: 0 },
+  source: '',
 }
 
 export function createRoot(
   children: TemplateChildNode[],
-  loc = locStub
+  source = '',
 ): RootNode {
   return {
     type: NodeTypes.ROOT,
+    source,
     children,
     helpers: new Set(),
     components: [],
@@ -569,7 +603,7 @@ export function createRoot(
     cached: 0,
     temps: 0,
     codegenNode: undefined,
-    loc
+    loc: locStub,
   }
 }
 
@@ -585,7 +619,7 @@ export function createVNodeCall(
   isBlock: VNodeCall['isBlock'] = false,
   disableTracking: VNodeCall['disableTracking'] = false,
   isComponent: VNodeCall['isComponent'] = false,
-  loc = locStub
+  loc = locStub,
 ): VNodeCall {
   if (context) {
     // 渲染源码 引入 将要用到的辅助函数的定义，如：'const { openBlock: _openBlock } = _Vue'
@@ -611,18 +645,18 @@ export function createVNodeCall(
     isBlock,
     disableTracking,
     isComponent,
-    loc
+    loc,
   }
 }
 
 export function createArrayExpression(
   elements: ArrayExpression['elements'],
-  loc: SourceLocation = locStub
+  loc: SourceLocation = locStub,
 ): ArrayExpression {
   return {
     type: NodeTypes.JS_ARRAY_EXPRESSION,
     loc,
-    elements
+    elements,
   }
 }
 
@@ -630,25 +664,25 @@ export function createArrayExpression(
 // 如创建slots节点列表的对象格式： { name: "default", fn: ... }
 export function createObjectExpression(
   properties: ObjectExpression['properties'], // 对象属性节点列表
-  loc: SourceLocation = locStub
+  loc: SourceLocation = locStub,
 ): ObjectExpression {
   return {
     type: NodeTypes.JS_OBJECT_EXPRESSION,
     loc,
-    properties
+    properties,
   }
 }
 
 // 转换元素节点的属性节点
 export function createObjectProperty(
-  key: Property['key'] | string, // key
-  value: Property['value'] // value
+  key: Property['key'] | string,
+  value: Property['value'],
 ): Property {
   return {
     type: NodeTypes.JS_PROPERTY,
     loc: locStub,
     key: isString(key) ? createSimpleExpression(key, true) : key,
-    value
+    value,
   }
 }
 
@@ -658,40 +692,40 @@ export function createSimpleExpression(
   content: SimpleExpressionNode['content'],
   isStatic: SimpleExpressionNode['isStatic'] = false,
   loc: SourceLocation = locStub,
-  constType: ConstantTypes = ConstantTypes.NOT_CONSTANT
+  constType: ConstantTypes = ConstantTypes.NOT_CONSTANT,
 ): SimpleExpressionNode {
   return {
     type: NodeTypes.SIMPLE_EXPRESSION,
     loc,
     content, // 字符串
     isStatic, // 静态表达式
-    constType: isStatic ? ConstantTypes.CAN_STRINGIFY : constType
+    constType: isStatic ? ConstantTypes.CAN_STRINGIFY : constType,
   }
 }
 
 // 创建一个插值
 export function createInterpolation(
   content: InterpolationNode['content'] | string,
-  loc: SourceLocation
+  loc: SourceLocation,
 ): InterpolationNode {
   return {
     type: NodeTypes.INTERPOLATION,
     loc,
     content: isString(content)
       ? createSimpleExpression(content, false, loc)
-      : content
+      : content,
   }
 }
 
 // 创建一个复合/合成表达式，如 ast的连续文本节点合并后就是该类型、或者是动态指令on的transform
 export function createCompoundExpression(
   children: CompoundExpressionNode['children'],
-  loc: SourceLocation = locStub
+  loc: SourceLocation = locStub,
 ): CompoundExpressionNode {
   return {
     type: NodeTypes.COMPOUND_EXPRESSION,
     loc,
-    children
+    children,
   }
 }
 
@@ -704,13 +738,13 @@ type InferCodegenNodeType<T> = T extends typeof RENDER_SLOT
 export function createCallExpression<T extends CallExpression['callee']>(
   callee: T, // 如 transforms的上下文context.helpers集合
   args: CallExpression['arguments'] = [],
-  loc: SourceLocation = locStub
+  loc: SourceLocation = locStub,
 ): InferCodegenNodeType<T> {
   return {
     type: NodeTypes.JS_CALL_EXPRESSION,
     loc,
     callee, // 正在调用的函数
-    arguments: args // 函数的参数列表
+    arguments: args, // 函数的参数列表
   } as InferCodegenNodeType<T>
 }
 
@@ -729,7 +763,7 @@ export function createFunctionExpression(
   returns: FunctionExpression['returns'] = undefined,
   newline: boolean = false,
   isSlot: boolean = false, // 创建slot 函数
-  loc: SourceLocation = locStub
+  loc: SourceLocation = locStub,
 ): FunctionExpression {
   return {
     type: NodeTypes.JS_FUNCTION_EXPRESSION,
@@ -737,7 +771,7 @@ export function createFunctionExpression(
     returns, // 函数返回值
     newline, // 是否换行
     isSlot, // 是否是slot节点
-    loc
+    loc,
   }
 }
 
@@ -746,7 +780,7 @@ export function createConditionalExpression(
   test: ConditionalExpression['test'],
   consequent: ConditionalExpression['consequent'],
   alternate: ConditionalExpression['alternate'],
-  newline = true
+  newline = true,
 ): ConditionalExpression {
   return {
     type: NodeTypes.JS_CONDITIONAL_EXPRESSION,
@@ -754,87 +788,87 @@ export function createConditionalExpression(
     consequent, // true 对应的slot节点
     alternate, // false 对应的slot节点
     newline,
-    loc: locStub
+    loc: locStub,
   }
 }
 
 export function createCacheExpression(
   index: number,
   value: JSChildNode,
-  isVNode: boolean = false
+  isVNode: boolean = false,
 ): CacheExpression {
   return {
     type: NodeTypes.JS_CACHE_EXPRESSION,
     index,
     value,
     isVNode,
-    loc: locStub
+    loc: locStub,
   }
 }
 
 export function createBlockStatement(
-  body: BlockStatement['body']
+  body: BlockStatement['body'],
 ): BlockStatement {
   return {
     type: NodeTypes.JS_BLOCK_STATEMENT,
     body,
-    loc: locStub
+    loc: locStub,
   }
 }
 
 export function createTemplateLiteral(
-  elements: TemplateLiteral['elements']
+  elements: TemplateLiteral['elements'],
 ): TemplateLiteral {
   return {
     type: NodeTypes.JS_TEMPLATE_LITERAL,
     elements,
-    loc: locStub
+    loc: locStub,
   }
 }
 
 export function createIfStatement(
   test: IfStatement['test'],
   consequent: IfStatement['consequent'],
-  alternate?: IfStatement['alternate']
+  alternate?: IfStatement['alternate'],
 ): IfStatement {
   return {
     type: NodeTypes.JS_IF_STATEMENT,
     test,
     consequent,
     alternate,
-    loc: locStub
+    loc: locStub,
   }
 }
 
 export function createAssignmentExpression(
   left: AssignmentExpression['left'],
-  right: AssignmentExpression['right']
+  right: AssignmentExpression['right'],
 ): AssignmentExpression {
   return {
     type: NodeTypes.JS_ASSIGNMENT_EXPRESSION,
     left,
     right,
-    loc: locStub
+    loc: locStub,
   }
 }
 
 export function createSequenceExpression(
-  expressions: SequenceExpression['expressions']
+  expressions: SequenceExpression['expressions'],
 ): SequenceExpression {
   return {
     type: NodeTypes.JS_SEQUENCE_EXPRESSION,
     expressions,
-    loc: locStub
+    loc: locStub,
   }
 }
 
 export function createReturnStatement(
-  returns: ReturnStatement['returns']
+  returns: ReturnStatement['returns'],
 ): ReturnStatement {
   return {
     type: NodeTypes.JS_RETURN_STATEMENT,
     returns,
-    loc: locStub
+    loc: locStub,
   }
 }
 
@@ -859,7 +893,7 @@ export function getVNodeBlockHelper(ssr: boolean, isComponent: boolean) {
 
 export function convertToBlock(
   node: VNodeCall,
-  { helper, removeHelper, inSSR }: TransformContext
+  { helper, removeHelper, inSSR }: TransformContext,
 ) {
   if (!node.isBlock) {
     node.isBlock = true

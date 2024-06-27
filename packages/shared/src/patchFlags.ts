@@ -16,9 +16,11 @@
  * Check the `patchElement` function in '../../runtime-core/src/renderer.ts' to see how the
  * flags are handled during diff.
  */
-
 // 可以在 packages/runtime-core/src/renderer.ts 查看这些标志是怎么在diff时被处理的
-export const enum PatchFlags {
+export enum PatchFlags {
+  /**
+   * Indicates an element with dynamic textContent (children fast path)
+   */
   // 当检测到节点 文本内容 变更 (children fast path)
   // 节点的子文本内容存在动态文本 即插值 {{}}
   // 在 transformElement 中赋值
@@ -107,7 +109,14 @@ export const enum PatchFlags {
   // 跳出 优化模式，比如：
   // 由 renderSlot() 生产的代码片段，当不是通过编译器生成slot（通过编写的渲染函数render()时，应该完全进行diff，不必要进入优化模式，没必要进行某个flag diff）
   // 或者 手动进行的cloneVNodes
-  BAIL = -2
+  /**
+   * A special flag that indicates that the diffing algorithm should bail out
+   * of optimized mode. For example, on block fragments created by renderSlot()
+   * when encountering non-compiler generated slots (i.e. manually written
+   * render functions, which should always be fully diffed)
+   * OR manually cloneVNodes
+   */
+  BAIL = -2,
 }
 
 /**
@@ -128,5 +137,5 @@ export const PatchFlagNames: Record<PatchFlags, string> = {
   [PatchFlags.DYNAMIC_SLOTS]: `DYNAMIC_SLOTS`, // 1024
   [PatchFlags.DEV_ROOT_FRAGMENT]: `DEV_ROOT_FRAGMENT`, // 2048
   [PatchFlags.HOISTED]: `HOISTED`, // -1
-  [PatchFlags.BAIL]: `BAIL` // -2
+  [PatchFlags.BAIL]: `BAIL`, // -2
 }

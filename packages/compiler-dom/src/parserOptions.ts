@@ -1,50 +1,32 @@
-import {
-  TextModes,
-  ParserOptions,
-  ElementNode,
-  NodeTypes,
-  isBuiltInType
-} from '@vue/compiler-core'
-import { makeMap, isVoidTag, isHTMLTag, isSVGTag } from '@vue/shared'
+import { Namespaces, NodeTypes, type ParserOptions } from '@vue/compiler-core'
+import { isHTMLTag, isMathMLTag, isSVGTag, isVoidTag } from '@vue/shared'
 import { TRANSITION, TRANSITION_GROUP } from './runtimeHelpers'
-import { decodeHtml } from './decodeHtml'
 import { decodeHtmlBrowser } from './decodeHtmlBrowser'
 
-const isRawTextContainer = /*#__PURE__*/ makeMap(
-  'style,iframe,script,noscript',
-  true
-)
-
-export const enum DOMNamespaces {
-  HTML = 0 /* Namespaces.HTML */,
-  SVG,
-  MATH_ML
-}
-
 export const parserOptions: ParserOptions = {
+  parseMode: 'html',
   isVoidTag,
-  isNativeTag: tag => isHTMLTag(tag) || isSVGTag(tag),
+  isNativeTag: tag => isHTMLTag(tag) || isSVGTag(tag) || isMathMLTag(tag),
   isPreTag: tag => tag === 'pre',
-  decodeEntities: __BROWSER__ ? decodeHtmlBrowser : decodeHtml,
+  decodeEntities: __BROWSER__ ? decodeHtmlBrowser : undefined,
 
-  isBuiltInComponent: (tag: string): symbol | undefined => {
-    if (isBuiltInType(tag, `Transition`)) {
+  isBuiltInComponent: tag => {
+    if (tag === 'Transition' || tag === 'transition') {
       // transition 或 Transition
       return TRANSITION // Symbol(__DEV__ ? `Transition` : ``)
-    } else if (isBuiltInType(tag, `TransitionGroup`)) {
+    } else if (tag === 'TransitionGroup' || tag === 'transition-group') {
       // transition-group 或 TransitionGroup
       return TRANSITION_GROUP
     }
   },
 
   // https://html.spec.whatwg.org/multipage/parsing.html#tree-construction-dispatcher
-  getNamespace(tag: string, parent: ElementNode | undefined): DOMNamespaces {
-    let ns = parent ? parent.ns : DOMNamespaces.HTML
-
-    if (parent && ns === DOMNamespaces.MATH_ML) {
+  getNamespace(tag, parent, rootNamespace) {
+    let ns = parent ? parent.ns : rootNamespace
+    if (parent && ns === Namespaces.MATH_ML) {
       if (parent.tag === 'annotation-xml') {
         if (tag === 'svg') {
-          return DOMNamespaces.SVG
+          return Namespaces.SVG
         }
         if (
           parent.props.some(
@@ -53,52 +35,36 @@ export const parserOptions: ParserOptions = {
               a.name === 'encoding' &&
               a.value != null &&
               (a.value.content === 'text/html' ||
-                a.value.content === 'application/xhtml+xml')
+                a.value.content === 'application/xhtml+xml'),
           )
         ) {
-          ns = DOMNamespaces.HTML
+          ns = Namespaces.HTML
         }
       } else if (
         /^m(?:[ions]|text)$/.test(parent.tag) &&
         tag !== 'mglyph' &&
         tag !== 'malignmark'
       ) {
-        ns = DOMNamespaces.HTML
+        ns = Namespaces.HTML
       }
-    } else if (parent && ns === DOMNamespaces.SVG) {
+    } else if (parent && ns === Namespaces.SVG) {
       if (
         parent.tag === 'foreignObject' ||
         parent.tag === 'desc' ||
         parent.tag === 'title'
       ) {
-        ns = DOMNamespaces.HTML
+        ns = Namespaces.HTML
       }
     }
 
-    if (ns === DOMNamespaces.HTML) {
+    if (ns === Namespaces.HTML) {
       if (tag === 'svg') {
-        return DOMNamespaces.SVG
+        return Namespaces.SVG
       }
       if (tag === 'math') {
-        return DOMNamespaces.MATH_ML
+        return Namespaces.MATH_ML
       }
     }
     return ns
   },
-
-  // https://html.spec.whatwg.org/multipage/parsing.html#parsing-html-fragments
-  getTextMode({ tag, ns }: ElementNode): TextModes {
-    if (ns === DOMNamespaces.HTML) {
-      if (tag === 'textarea' || tag === 'title') {
-        // 富文本框textarea 或 文档标题title标签
-        return TextModes.RCDATA
-      }
-      if (isRawTextContainer(tag)) {
-        // 解析为纯文本标签：style,iframe,script,noscript
-        return TextModes.RAWTEXT
-      }
-    }
-    // 默认值，如果不是以上标签，默认都是DATA
-    return TextModes.DATA
-  }
 }

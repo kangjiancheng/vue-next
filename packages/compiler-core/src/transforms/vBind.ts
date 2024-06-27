@@ -1,13 +1,16 @@
-import { DirectiveTransform } from '../transform'
+import type { DirectiveTransform, TransformContext } from '../transform'
 import {
+  type DirectiveNode,
+  type ExpressionNode,
+  NodeTypes,
+  type SimpleExpressionNode,
   createObjectProperty,
   createSimpleExpression,
-  ExpressionNode,
-  NodeTypes
 } from '../ast'
-import { createCompilerError, ErrorCodes } from '../errors'
+import { ErrorCodes, createCompilerError } from '../errors'
 import { camelize } from '@vue/shared'
 import { CAMELIZE } from '../runtimeHelpers'
+import { processExpression } from './transformExpression'
 
 // v-bind without arg is handled directly in ./transformElements.ts due to it affecting
 // codegen for the entire props object. This transform here is only for v-bind
@@ -20,13 +23,56 @@ import { CAMELIZE } from '../runtimeHelpers'
  * @param context
  */
 export const transformBind: DirectiveTransform = (dir, _node, context) => {
-  // 指令值、修饰符、模版位置信息
-  const { exp, modifiers, loc } = dir
+  // 修饰符、模版位置信息
+  const { modifiers, loc } = dir
   const arg = dir.arg! // 指令参数节点， ts 排除null/undefined
+  // 指令值、
+  let { exp } = dir
 
   // 属性名 内容处理
 
   // ast 默认生成 NodeTypes.SIMPLE_EXPRESSION
+
+  // handle empty expression
+  if (exp && exp.type === NodeTypes.SIMPLE_EXPRESSION && !exp.content.trim()) {
+    if (!__BROWSER__) {
+      // #10280 only error against empty expression in non-browser build
+      // because :foo in in-DOM templates will be parsed into :foo="" by the
+      // browser
+      context.onError(
+        createCompilerError(ErrorCodes.X_V_BIND_NO_EXPRESSION, loc),
+      )
+      return {
+        props: [
+          createObjectProperty(arg, createSimpleExpression('', true, loc)),
+        ],
+      }
+    } else {
+      exp = undefined
+    }
+  }
+
+  // same-name shorthand - :arg is expanded to :arg="arg"
+  if (!exp) {
+    if (arg.type !== NodeTypes.SIMPLE_EXPRESSION || !arg.isStatic) {
+      // only simple expression is allowed for same-name shorthand
+      context.onError(
+        createCompilerError(
+          ErrorCodes.X_V_BIND_INVALID_SAME_NAME_ARGUMENT,
+          arg.loc,
+        ),
+      )
+      return {
+        props: [
+          createObjectProperty(arg, createSimpleExpression('', true, loc)),
+        ],
+      }
+    }
+
+    transformBindShorthand(dir, context)
+    exp = dir.exp!
+  }
+
   if (arg.type !== NodeTypes.SIMPLE_EXPRESSION) {
     arg.children.unshift(`(`)
     arg.children.push(`) || ""`)
@@ -66,18 +112,21 @@ export const transformBind: DirectiveTransform = (dir, _node, context) => {
     }
   }
 
-  if (
-    !exp || // 属性值不存在
-    (exp.type === NodeTypes.SIMPLE_EXPRESSION && !exp.content.trim()) // 属性值为空白
-  ) {
-    context.onError(createCompilerError(ErrorCodes.X_V_BIND_NO_EXPRESSION, loc)) // 需要设置属性值
-    return {
-      props: [createObjectProperty(arg, createSimpleExpression('', true, loc))] // 临时创建节点，属性值内容为空
-    }
-  }
-
   return {
-    props: [createObjectProperty(arg, exp)] // 返回转换后的属性列表
+    props: [createObjectProperty(arg, exp)], // 返回转换后的属性列表
+  }
+}
+
+export const transformBindShorthand = (
+  dir: DirectiveNode,
+  context: TransformContext,
+) => {
+  const arg = dir.arg!
+
+  const propName = camelize((arg as SimpleExpressionNode).content)
+  dir.exp = createSimpleExpression(propName, false, arg.loc)
+  if (!__BROWSER__) {
+    dir.exp = processExpression(dir.exp, context)
   }
 }
 

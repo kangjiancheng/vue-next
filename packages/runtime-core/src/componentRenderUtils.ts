@@ -1,31 +1,32 @@
 import {
-  ComponentInternalInstance,
-  FunctionalComponent,
-  Data,
-  getComponentName
+  type ComponentInternalInstance,
+  type Data,
+  type FunctionalComponent,
+  getComponentName,
 } from './component'
 import {
-  VNode,
-  normalizeVNode,
-  createVNode,
   Comment,
+  type VNode,
+  type VNodeArrayChildren,
+  blockStack,
   cloneVNode,
-  VNodeArrayChildren,
+  createVNode,
   isVNode,
-  blockStack
+  normalizeVNode,
 } from './vnode'
-import { handleError, ErrorCodes } from './errorHandling'
-import { PatchFlags, ShapeFlags, isOn, isModelListener } from '@vue/shared'
+import { ErrorCodes, handleError } from './errorHandling'
+import { PatchFlags, ShapeFlags, isModelListener, isOn } from '@vue/shared'
 import { warn } from './warning'
 import { isHmrUpdating } from './hmr'
-import { NormalizedProps } from './componentProps'
+import type { NormalizedProps } from './componentProps'
 import { isEmitListener } from './componentEmits'
 import { setCurrentRenderingInstance } from './componentRenderContext'
 import {
   DeprecationTypes,
   isCompatEnabled,
-  warnDeprecation
+  warnDeprecation,
 } from './compat/compatConfig'
+import { shallowReadonly } from '@vue/reactivity'
 
 /**
  * dev only flag to track whether $attrs was used during render.
@@ -41,31 +42,31 @@ export function markAttrsAccessed() {
 type SetRootFn = ((root: VNode) => void) | undefined
 
 export function renderComponentRoot(
-  instance: ComponentInternalInstance
+  instance: ComponentInternalInstance,
 ): VNode {
   const {
     type: Component,
     vnode,
     proxy, // ctx proxy
     withProxy, // ctx render with proxy
-    props, // 组件节点 props 属性
     propsOptions: [propsOptions], // 组件 props 选项属性
     slots,
     attrs,
     emit,
     render, // 渲染函数
     renderCache,
+    props, // 组件节点 props 属性
     data,
     setupState, // setup() 返回值
     ctx,
-    inheritAttrs
+    inheritAttrs,
   } = instance
+  const prev = setCurrentRenderingInstance(instance)
 
   // 返回结果
   let result
   // 执行渲染生成vnode期间的组件实例
   let fallthroughAttrs
-  const prev = setCurrentRenderingInstance(instance)
   if (__DEV__) {
     accessedAttrs = false
   }
@@ -85,11 +86,11 @@ export function renderComponentRoot(
               get(target, key, receiver) {
                 warn(
                   `Property '${String(
-                    key
-                  )}' was accessed via 'this'. Avoid using 'this' in templates.`
+                    key,
+                  )}' was accessed via 'this'. Avoid using 'this' in templates.`,
                 )
                 return Reflect.get(target, key, receiver)
-              }
+              },
             })
           : proxyToUse
       result = normalizeVNode(
@@ -122,11 +123,11 @@ export function renderComponentRoot(
           thisProxy,
           proxyToUse!, // instance.ctx 的代理 proxy： RuntimeCompiledPublicInstanceProxyHandlers
           renderCache,
-          props,
+          __DEV__ ? shallowReadonly(props) : props,
           setupState,
           data,
-          ctx
-        )
+          ctx,
+        ),
       )
       fallthroughAttrs = attrs
     } else {
@@ -139,19 +140,22 @@ export function renderComponentRoot(
       result = normalizeVNode(
         render.length > 1
           ? render(
-              props,
+              __DEV__ ? shallowReadonly(props) : props,
               __DEV__
                 ? {
                     get attrs() {
                       markAttrsAccessed()
-                      return attrs
+                      return shallowReadonly(attrs)
                     },
                     slots,
-                    emit
+                    emit,
                   }
-                : { attrs, slots, emit }
+                : { attrs, slots, emit },
             )
-          : render(props, null as any /* we know it doesn't need it */)
+          : render(
+              __DEV__ ? shallowReadonly(props) : props,
+              null as any /* we know it doesn't need it */,
+            ),
       )
       fallthroughAttrs = Component.props
         ? attrs
@@ -192,10 +196,10 @@ export function renderComponentRoot(
           // 过滤掉onUpdate:modelValue即 v-model属性事件
           fallthroughAttrs = filterModelListeners(
             fallthroughAttrs,
-            propsOptions
+            propsOptions,
           )
         }
-        root = cloneVNode(root, fallthroughAttrs)
+        root = cloneVNode(root, fallthroughAttrs, false, true)
       } else if (__DEV__ && !accessedAttrs && root.type !== Comment) {
         const allAttrs = Object.keys(attrs)
         const eventAttrs: string[] = []
@@ -218,7 +222,7 @@ export function renderComponentRoot(
             `Extraneous non-props attributes (` +
               `${extraAttrs.join(', ')}) ` +
               `were passed to component but could not be automatically inherited ` +
-              `because component renders fragment or text root nodes.`
+              `because component renders fragment or text root nodes.`,
           )
         }
         if (eventAttrs.length) {
@@ -228,7 +232,7 @@ export function renderComponentRoot(
               `were passed to component but could not be automatically inherited ` +
               `because component renders fragment or text root nodes. ` +
               `If the listener is intended to be a component custom event listener only, ` +
-              `declare it using the "emits" option.`
+              `declare it using the "emits" option.`,
           )
         }
       }
@@ -247,13 +251,18 @@ export function renderComponentRoot(
         warnDeprecation(
           DeprecationTypes.INSTANCE_ATTRS_CLASS_STYLE,
           instance,
-          getComponentName(instance.type)
+          getComponentName(instance.type),
         )
       }
-      root = cloneVNode(root, {
-        class: cls,
-        style: style
-      })
+      root = cloneVNode(
+        root,
+        {
+          class: cls,
+          style: style,
+        },
+        false,
+        true,
+      )
     }
   }
 
@@ -262,11 +271,11 @@ export function renderComponentRoot(
     if (__DEV__ && !isElementRoot(root)) {
       warn(
         `Runtime directive used on component with non-element root node. ` +
-          `The directives will not function as intended.`
+          `The directives will not function as intended.`,
       )
     }
     // clone before mutating since the root may be a hoisted vnode
-    root = cloneVNode(root)
+    root = cloneVNode(root, null, false, true)
     root.dirs = root.dirs ? root.dirs.concat(vnode.dirs) : vnode.dirs
   }
   // inherit transition data
@@ -274,7 +283,7 @@ export function renderComponentRoot(
     if (__DEV__ && !isElementRoot(root)) {
       warn(
         `Component inside <Transition> renders non-element root node ` +
-          `that cannot be animated.`
+          `that cannot be animated.`,
       )
     }
     root.transition = vnode.transition
@@ -302,10 +311,17 @@ export function renderComponentRoot(
 const getChildRoot = (vnode: VNode): [VNode, SetRootFn] => {
   const rawChildren = vnode.children as VNodeArrayChildren
   const dynamicChildren = vnode.dynamicChildren
-  const childRoot = filterSingleRoot(rawChildren)
+  const childRoot = filterSingleRoot(rawChildren, false)
   if (!childRoot) {
     return [vnode, undefined]
+  } else if (
+    __DEV__ &&
+    childRoot.patchFlag > 0 &&
+    childRoot.patchFlag & PatchFlags.DEV_ROOT_FRAGMENT
+  ) {
+    return getChildRoot(childRoot)
   }
+
   const index = rawChildren.indexOf(childRoot)
   const dynamicIndex = dynamicChildren ? dynamicChildren.indexOf(childRoot) : -1
   const setRoot: SetRootFn = (updatedRoot: VNode) => {
@@ -322,7 +338,8 @@ const getChildRoot = (vnode: VNode): [VNode, SetRootFn] => {
 }
 
 export function filterSingleRoot(
-  children: VNodeArrayChildren
+  children: VNodeArrayChildren,
+  recurse = true,
 ): VNode | undefined {
   let singleRoot
   for (let i = 0; i < children.length; i++) {
@@ -335,6 +352,14 @@ export function filterSingleRoot(
           return
         } else {
           singleRoot = child
+          if (
+            __DEV__ &&
+            recurse &&
+            singleRoot.patchFlag > 0 &&
+            singleRoot.patchFlag & PatchFlags.DEV_ROOT_FRAGMENT
+          ) {
+            return filterSingleRoot(singleRoot.children as VNodeArrayChildren)
+          }
         }
       }
     } else {
@@ -377,7 +402,7 @@ const isElementRoot = (vnode: VNode) => {
 export function shouldUpdateComponent(
   prevVNode: VNode, // 组件渲染模版vnode
   nextVNode: VNode, // 组件渲染模版vnode
-  optimized?: boolean
+  optimized?: boolean,
 ): boolean {
   const { props: prevProps, children: prevChildren, component } = prevVNode // 渲染模版vnode
   const { props: nextProps, children: nextChildren, patchFlag } = nextVNode
@@ -457,7 +482,7 @@ export function shouldUpdateComponent(
 function hasPropsChanged(
   prevProps: Data,
   nextProps: Data,
-  emitsOptions: ComponentInternalInstance['emitsOptions']
+  emitsOptions: ComponentInternalInstance['emitsOptions'],
 ): boolean {
   const nextKeys = Object.keys(nextProps)
   if (nextKeys.length !== Object.keys(prevProps).length) {
@@ -478,10 +503,18 @@ function hasPropsChanged(
 
 export function updateHOCHostEl(
   { vnode, parent }: ComponentInternalInstance,
-  el: typeof vnode.el // HostNode
+  el: typeof vnode.el, // HostNode
 ) {
-  while (parent && parent.subTree === vnode) {
-    ;(vnode = parent.vnode).el = el
-    parent = parent.parent
+  while (parent) {
+    const root = parent.subTree
+    if (root.suspense && root.suspense.activeBranch === vnode) {
+      root.el = vnode.el
+    }
+    if (root === vnode) {
+      ;(vnode = parent.vnode).el = el
+      parent = parent.parent
+    } else {
+      break
+    }
   }
 }
